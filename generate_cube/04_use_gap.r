@@ -8,7 +8,7 @@
 ## 
 ##############################################################################################################
 
-# dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-64 --logging gs://map_data_z/users/amelia/logs --input-recursive input_dir=gs://map_data_z/users/amelia/itn_cube/results/20190606_replicate_sam func_dir=gs://map_data_z/users/amelia/itn_cube/code/amelia_refactor --input CODE=gs://map_data_z/users/amelia/itn_cube/code/amelia_refactor/04_use_gap.r --output-recursive output_dir=gs://map_data_z/users/amelia/itn_cube/results/20190606_replicate_sam/ --command 'Rscript ${CODE}'
+# dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-64 --logging gs://map_data_z/users/amelia/logs --input-recursive input_dir=gs://map_data_z/users/amelia/itn_cube/results/20190608_rename_cols func_dir=gs://map_data_z/users/amelia/itn_cube/code/generate_cube --input CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/04_use_gap.r --output-recursive output_dir=gs://map_data_z/users/amelia/itn_cube/results/20190608_rename_cols/ --command 'Rscript ${CODE}'
 
 
 rm(list=ls())
@@ -25,7 +25,7 @@ package_load(c("zoo","raster", "doParallel", "data.table", "rgdal", "INLA", "RCo
 if(Sys.getenv("input_dir")=="") {
   input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190606_replicate_sam//"
   output_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190606_replicate_sam//"
-  func_dir <- "/Users/bertozzivill/repos/malaria-atlas-project/itn_cube/generate_results/amelia_refactor/"
+  func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
 } else {
   input_dir <- Sys.getenv("input_dir")
   output_dir <- Sys.getenv("output_dir") 
@@ -36,6 +36,8 @@ if(Sys.getenv("input_dir")=="") {
 source(file.path(func_dir, "03_05_general_functions.r"))
 
 set.seed(212)
+start_year <- 2000
+end_year <- 2015 # why?
 
 output_fname <- file.path(output_dir, "04_use_gap.Rdata")
 
@@ -70,16 +72,16 @@ if (nrow(high_collin)>0){
 
 ## BUG?: here, year is capped at 2014 instead of 2015 (but temporal mesh goes through 2015)
 # adjust timing of data? this feels important****
-data[, yearqtr:=pmin(yearqtr, 2013.75)]
+data[, yearqtr:=pmin(yearqtr, end_year-1.25)]
 
 
 # calculate use gap for data points (USING GAP2 FROM DATABASE CREATION), 
 # transform via empirical logit and inverse hyperbolic sine
 
-theta<-optimise(ihs_loglik, lower=0.001, upper=50, x=data$gap2, maximum=TRUE) 
+theta<-optimise(ihs_loglik, lower=0.001, upper=50, x=data$gap_2, maximum=TRUE) 
 theta_use<-theta$maximum
 
-data[, ihs_gap2:=ihs(gap2, theta_use)] 
+data[, ihs_gap2:=ihs(gap_2, theta_use)] 
 
 # transform data from latlong to cartesian coordinates
 xyz<-ll_to_xyz(data[, list(row_id, longitude=lon, latitude=lat)])
@@ -107,7 +109,7 @@ print(paste("New mesh constructed:", spatial_mesh_use$n, "vertices"))
 spde_matern =inla.spde2.matern(spatial_mesh_use,alpha=2) # formerly spde
 
 # generate temporal mesh
-temporal_mesh=inla.mesh.1d(seq(2000,2015,by=2),interval=c(2000,2015),degree=2) # formerly mesh1d
+temporal_mesh=inla.mesh.1d(seq(start_year,end_year,by=2),interval=c(start_year,end_year),degree=2) # formerly mesh1d
 
 # prep data for model fitting
 cov_list<-data_est[, cov_names, with=F]

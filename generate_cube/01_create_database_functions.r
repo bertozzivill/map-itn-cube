@@ -21,11 +21,11 @@ emplogit2<-function(Y,N){
 
 calc_access <- function(hh_props, max_nets=40, return_mean=F){
   
-  # Find the probability of a household of size hh_size having 1:max_nets nets, 
+  # Find the probabilities of a household of sizes 1:10 having 1:max_nets nets, 
   # assuming a zero-truncated poisson distribution with mean equal to the stock and flow mean. 
   # Multiply this by the weighted probability of having a net to get the weighted probability 
   # of an hh_sized household having a given number of nets. This is the same as the proportion of hh-sized households
-  # expected to have a given number of nets
+  # expected to have a given number of nets-- e.g., as the access within that household size. 
   
   net_dist <- lapply(hh_props$hh_size, function(this_hh_size){
     
@@ -83,12 +83,12 @@ aggregate_data<-function(nat_raster, data){
   data[, lon:=cexy[,1]]
   data[, lat:=cexy[,2]]
   
-  # within each cell: update P and N to the sum of clusters within the cell
-  data[, P:= sum(P), by=list(cellnumber, yearqtr)] # sum those with access to a net
-  data[, N:= sum(N), by=list(cellnumber, yearqtr)] # sum those who slept in house the night before 
+  # within each cell: update access_count and hh_size to the sum of clusters within the cell
+  data[, access_count:= sum(access_count), by=list(cellnumber, yearqtr)] # sum those with access to a net
+  data[, hh_size:= sum(hh_size), by=list(cellnumber, yearqtr)] # sum those who slept in house the night before 
   
   # Keep only the first cluster in each cell. 
-  # TODO: update this so that instead all columns, not just P and N, get updated before dropping other rows.
+  # TODO: update this so that instead all columns, not just access_count and hh_size, get updated before dropping other rows.
   data[, groupid:= seq_len(.N), by=list(cellnumber, yearqtr)]
   data <- data[groupid==1]
   data[, groupid:=NULL]

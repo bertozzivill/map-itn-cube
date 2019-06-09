@@ -8,7 +8,7 @@
 ## 
 ##############################################################################################################
 
-# dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --logging gs://map_data_z/users/amelia/logs --input-recursive new_dir=gs://map_data_z/users/amelia/itn_cube/results/20190606_replicate_sam func_dir=gs://map_data_z/users/amelia/itn_cube/code/amelia_refactor old_dir=gs://map_data_z/users/amelia/itn_cube/results/20190521_replicate_prediction --input CODE=gs://map_data_z/users/amelia/itn_cube/code/amelia_refactor/compare_new_format.r --output compare_out_path=gs://map_data_z/users/amelia/itn_cube/results/20190606_replicate_sam/05_predictions/compare_newformat_tifs.pdf --command 'Rscript ${CODE}'
+# dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --logging gs://map_data_z/users/amelia/logs --input-recursive new_dir=gs://map_data_z/users/amelia/itn_cube/results/20190608_rename_cols func_dir=gs://map_data_z/users/amelia/itn_cube/code/generate_cube old_dir=gs://map_data_z/users/amelia/itn_cube/results/20190606_replicate_sam --input CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/compare_new_format.r --output compare_out_path=gs://map_data_z/users/amelia/itn_cube/results/20190608_rename_cols/05_predictions/compare_newcolname_tifs.pdf --command 'Rscript ${CODE}'
 
 rm(list=ls())
 
