@@ -51,27 +51,28 @@ names(net_probs_and_means) <- stock_and_flow_isos
 
 # format and name stock and flow data 
 print("formatting stock and flow outputs")
-stock_and_flow_outputs <- lapply(stock_and_flow_isos, function(iso){
-  country_list <- net_probs_and_means[[iso]]
+stock_and_flow_outputs <- lapply(stock_and_flow_isos, function(this_iso){
+  country_list <- net_probs_and_means[[this_iso]]
   
   # interpolate  from quarterly to monthly values
   quarterly_times <- as.numeric(rownames(country_list))
   start_year <- ceiling(min(quarterly_times))
-  end_year <- floor(max(quarterly_times))
+  end_year <- floor(max(quarterly_times)-1)
   # get your desired monthly outputs as decimal dates
   # TODO: change from year divided equally by 12 to beginning/middle of month when you properly account for months in hh data
   # monthly_times <- decimal_date(seq(as.Date(paste0(start_year, "/1/1")), by = "month", length.out = (end_year-start_year)*12))
   monthly_times <- expand.grid(1:12, start_year:end_year)
   monthly_times <- as.numeric(as.yearmon(paste(monthly_times[,2], monthly_times[,1], sep="-")))
   
+  # interpolate to monthly prob_no_nets and mean_nets_per_hh
   country_subset <- lapply(1:2, function(layer){
-    data.table(sapply(colnames(country_list), function(col){approx(quarterly_times, country_list[,col,layer], monthly_times)$y}))
+    data.table(sapply(colnames(country_list), function(col){approx(quarterly_times, country_list[,col,layer], monthly_times)$y})) 
     })
   country_subset <- rbindlist(country_subset)
   
   # add identifying information
   country_subset[, year:=rep(monthly_times, 2)]
-  country_subset[, iso3:=iso]
+  country_subset[, iso3:=this_iso]
   country_subset[, metric:=c(rep("SF_prob_no_nets", length(monthly_times)), rep("SF_mean_nets_per_hh", length(monthly_times)))]
   country_subset <- data.table::melt(country_subset, id.vars=c("iso3", "metric", "year"), variable.name="hh_size")
   country_subset <- dcast.data.table(country_subset, iso3 + year + hh_size ~ metric)

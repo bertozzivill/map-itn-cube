@@ -22,8 +22,8 @@ package_load <- function(package_list){
 package_load(c("zoo", "VGAM", "raster", "doParallel", "data.table", "rgdal", "INLA", "RColorBrewer", "cvTools", "boot", "stringr", "dismo", "gbm"))
 
 if(Sys.getenv("input_dir")=="") {
-  input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190606_replicate_sam//"
-  output_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190606_replicate_sam/05_predictions/"
+  input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190608_rename_cols//"
+  output_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190608_rename_cols/05_predictions/"
   joint_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
   func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
   cov_dir <- "/Volumes/GoogleDrive/Shared drives/cubes/5km incomplete/"
@@ -103,7 +103,6 @@ for (this_year in prediction_years){
   prediction_cells <- merge(prediction_cells, iso_gaul_map, by="gaul", all.x=T)
   
   # load household size distributions for each survey
-  # TODO: rename this to "stock and flow", move national use vals to this folder
   hh_sizes<-fread(file.path(joint_dir, "stock_and_flow/HHsize.csv"))
   survey_key=fread(file.path(joint_dir, "stock_and_flow/hh_surveys_key.csv"))
   
@@ -111,9 +110,6 @@ for (this_year in prediction_years){
   hh_sizes[, V1:=NULL]
   hh_sizes <- melt.data.table(hh_sizes, id.vars="HHSurvey", variable.name="hh_size", value.name="prop")
   hh_sizes[, hh_size:=as.integer(hh_size)]
-  
-  # BUG: The original script seems like it subsets on country-specific survey, 
-  # but I think it always uses the entire dataset to calculate home distributions because it filters on ISO instead of full country name
   
   # update country names to fit with iso_gaul_map (for use when you actually DO calculate props by country name)
   survey_key[, Status:=NULL]
@@ -127,20 +123,38 @@ for (this_year in prediction_years){
   survey_key <- merge(survey_key, iso_gaul_map, by="country", all.x=T)
   hh_sizes <- merge(hh_sizes, survey_key, by="HHSurvey", all.x=T)
   
-  # find size distribution across full dataset (make country-specific later);
+  # find size distribution;
   # collapse such that the final bin is 10+
-  denominator <- sum(hh_sizes$prop)
-  hh_dist <- hh_sizes[, list(hh_size_prop=sum(prop)/denominator), by="hh_size"]
-  ten_plus <- sum(hh_dist[hh_size>=10]$hh_size_prop)
-  hh_dist <- hh_dist[hh_size<=10]
-  hh_dist[hh_size==10, hh_size_prop:=ten_plus]
   
-  if (sum(hh_dist$hh_size_prop)!=1){
-    warning("Household size distribution improperly computed!")
+  find_hh_distribution <- function(props, cap_hh_size=10){
+    # where 'props' is a data.table with columns ('hh_size' and 'prop')
+    denominator <- sum(props$prop)
+    hh_dist <- props[, list(hh_size_prop=sum(prop)/denominator), by="hh_size"]
+    final_bin <- sum(hh_dist[hh_size>=cap_hh_size]$hh_size_prop)
+    hh_dist <- hh_dist[hh_size<=cap_hh_size]
+    hh_dist[hh_size==cap_hh_size, hh_size_prop:=final_bin]
+    
+    if (abs(sum(hh_dist$hh_size_prop)-1) > 1e-15){
+      warning("Household size distribution improperly computed!")
+    }
+    
+    return(hh_dist)
   }
   
-  # merge onto stock and flow values
-  stock_and_flow <- merge(stock_and_flow, hh_dist, by="hh_size", all=T)
+  hh_dist_all <- find_hh_distribution(hh_sizes)
+  
+  hh_distributions <- lapply(unique(stock_and_flow$iso3), function(this_iso){
+    if (this_iso %in% unique(hh_sizes$iso3)){
+      this_hh_dist <- find_hh_distribution(hh_sizes[iso3==this_iso])
+    }else{
+      this_hh_dist <- copy(hh_dist_all)
+    }
+    this_hh_dist[, iso3:=this_iso]
+    return(this_hh_dist)
+  })
+  hh_distributions <- rbindlist(hh_distributions)
+  
+  stock_and_flow <- merge(stock_and_flow, hh_distributions, by=c("iso3", "hh_size"), all=T)
   
   # weight stock and flow values by household propotions 
   stock_and_flow[, weighted_prob_no_nets:=hh_size_prop*SF_prob_no_nets]
@@ -160,8 +174,8 @@ for (this_year in prediction_years){
     })
     return(rbindlist(country_access))
   })
-  
   stock_and_flow_access <- rbindlist(stock_and_flow_access)
+  
   stock_and_flow_access[, emplogit_nat_access:=emplogit(nat_access, 1000)] # todo: still don't understand this emplogit calc
   stock_and_flow_access <- merge(stock_and_flow_access, data.table(year=sort(unique(stock_and_flow_access$year)),
                                                                    month=1:12),
