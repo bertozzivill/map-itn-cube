@@ -83,12 +83,12 @@ aggregate_data<-function(nat_raster, data){
   data[, lon:=cexy[,1]]
   data[, lat:=cexy[,2]]
   
-  # within each cell: update access_count and hh_size to the sum of clusters within the cell
+  # within each cell: update access_count and cluster_pop to the sum of clusters within the cell
   data[, access_count:= sum(access_count), by=list(cellnumber, yearqtr)] # sum those with access to a net
-  data[, hh_size:= sum(hh_size), by=list(cellnumber, yearqtr)] # sum those who slept in house the night before 
+  data[, cluster_pop:= sum(cluster_pop), by=list(cellnumber, yearqtr)] # sum those who slept in house the night before 
   
   # Keep only the first cluster in each cell. 
-  # TODO: update this so that instead all columns, not just access_count and hh_size, get updated before dropping other rows.
+  # TODO: update this so that instead all columns, not just access_count and cluster_pop, get updated before dropping other rows.
   data[, groupid:= seq_len(.N), by=list(cellnumber, yearqtr)]
   data <- data[groupid==1]
   data[, groupid:=NULL]

@@ -83,8 +83,23 @@ stock_and_flow_outputs[, hh_size:=as.integer(hh_size)]
 
 # load household data and survey-to-country key, keep only those in country list
 HH<-fread(file.path(input_dir, "database/ALL_HH_Data_20112017.csv")) # todo: come back and delete cols we don't need. also rename this
-HH<-HH[ISO3 %in% stock_and_flow_isos]
+
+# keep only the years and  columns we use
+HH<-HH[ISO3 %in% stock_and_flow_isos, list(Survey.hh, 
+                                           Country,
+                                           iso3=ISO3,
+                                           Cluster.hh,
+                                           latitude,
+                                           longitude,
+                                           year,
+                                           month,
+                                           sample.w,
+                                           n.individuals.that.slept.in.surveyed.hhs,
+                                           n.individuals.that.slept.under.ITN,
+                                           n.ITN.per.hh)]
+
 # TODO: remove missing values up here instead of at the end
+
 
 # Remove households with size zero or NA
 HH <- HH[!is.na(n.individuals.that.slept.in.surveyed.hhs) & n.individuals.that.slept.in.surveyed.hhs>0]
@@ -95,12 +110,12 @@ unique_surveys <- unique(HH$Survey.hh)
 # find access (# with a net available) and use (# sleeping under net) per household 
 HH[, n.with.access.to.ITN:=pmin(n.ITN.per.hh*2, n.individuals.that.slept.in.surveyed.hhs)]
 
- #test locally
-if(Sys.getenv("input_dir")=="") {
-  orig_unique_surveys <- copy(unique_surveys)
-  unique_surveys <- c("TZ2015DHS")
-  i <- 1
-}
+#  #test locally
+# if(Sys.getenv("input_dir")=="") {
+#   orig_unique_surveys <- copy(unique_surveys)
+#   unique_surveys <- c("TZ2015DHS")
+#   i <- 1
+# }
 
 # Main loop: calculating access/gap for each household cluster  ------------------------------------------------------------
 
@@ -124,7 +139,7 @@ cluster_stats<-foreach(i=1:length(unique_surveys),.combine=rbind) %dopar% { #sur
   these_years <- unique(this_survey_data$year)
   household_props <- rbindlist(replicate(length(these_years), household_props, simplify=F))
   household_props[, year:=sort(rep(these_years, 10))]
-  household_props[, iso3:=unique(this_survey_data$ISO3)]
+  household_props[, iso3:=unique(this_survey_data$iso3)]
   setnames(household_props, "capped.n.sleeping.in.hhs", "hh_size")
   
   # merge on stock and flow values
@@ -157,16 +172,16 @@ cluster_stats<-foreach(i=1:length(unique_surveys),.combine=rbind) %dopar% { #sur
                                                 lat=mean(latitude),
                                                 lon=mean(longitude),
                                                 access_count=sum(n.with.access.to.ITN), # formerly P
-                                                hh_size=sum(n.individuals.that.slept.in.surveyed.hhs), # formerly N
+                                                cluster_pop=sum(n.individuals.that.slept.in.surveyed.hhs), # formerly N
                                                 year=mean(year), # TODO: won't always be a round year! 
                                                 use_count=sum(n.individuals.that.slept.under.ITN), # formerly Pu
-                                                nets_per_hh=sum(n.ITN.per.hh), # formerly T
+                                                net_count=sum(n.ITN.per.hh), # formerly T
                                                 gap_3=mean(1-n.individuals.that.slept.under.ITN/n.with.access.to.ITN, na.rm=T), # formerly gap3
                                                 national_access=mean(stock_and_flow_access) # formerly Amean
                                                 ),
                                          by=list(Cluster.hh)]
-  summary_by_cluster[, gap_1:=( (access_count/hh_size)-(use_count/hh_size) ) / (access_count/hh_size)] # (access-use)/access
-  summary_by_cluster[, gap_2:=emplogit2(access_count,hh_size) - emplogit2(use_count, hh_size)] # emplogit difference of access-use
+  summary_by_cluster[, gap_1:=( (access_count/cluster_pop)-(use_count/cluster_pop) ) / (access_count/cluster_pop)] # (access-use)/access
+  summary_by_cluster[, gap_2:=emplogit2(access_count,cluster_pop) - emplogit2(use_count, cluster_pop)] # emplogit difference of access-use
   summary_by_cluster <- summary_by_cluster[order(Cluster.hh)]
   summary_by_cluster[, Cluster.hh:=NULL]
   

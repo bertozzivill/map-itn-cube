@@ -74,7 +74,7 @@ data[, yearqtr:=pmin(yearqtr, end_year-0.25)]
 # calculate access deviation for data points, 
 # TODO: move this to 01_create_database after your aggregation has been done properly
 # transform via empirical logit and inverse hyperbolic sine
-data[, emp_access_dev:= emplogit2(access_count, hh_size) - emplogit(national_access, 1000)]
+data[, emp_access_dev:= emplogit2(access_count, cluster_pop) - emplogit(national_access, 1000)]
 
 theta<-optimise(ihs_loglik, lower=0.001, upper=50, x=data$emp_access_dev, maximum=TRUE) # 2.0407
 theta_acc<-theta$maximum
