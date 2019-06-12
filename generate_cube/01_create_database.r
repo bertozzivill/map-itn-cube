@@ -41,52 +41,14 @@ if(Sys.getenv("input_dir")=="") {
 source(func_fname)
 out_fname <- file.path(output_dir, "01_database.csv")
 
-# p0 & p1-- from stock & flow, nat'l time series of p0=p(hh has 0 nets) and p1=avg # of nets
-# 40 countries (list length), houshold size 1-10 (columns)
-load(file.path(input_dir, "stock_and_flow/net_probs_and_means.rData")) # contains "out" (list of stock and flow time series) and "Cout" (country names)
-net_probs_and_means <- out # rename for clarity
-stock_and_flow_isos<-Cout # Cout is a vector of ISOs in net_probs_and_means.rData
-rm(out, Cout)
-names(net_probs_and_means) <- stock_and_flow_isos
-
-# format and name stock and flow data 
-print("formatting stock and flow outputs")
-stock_and_flow_outputs <- lapply(stock_and_flow_isos, function(this_iso){
-  country_list <- net_probs_and_means[[this_iso]]
-  
-  # interpolate  from quarterly to monthly values
-  quarterly_times <- as.numeric(rownames(country_list))
-  start_year <- ceiling(min(quarterly_times))
-  end_year <- floor(max(quarterly_times)-1)
-  # get your desired monthly outputs as decimal dates
-  # TODO: change from year divided equally by 12 to beginning/middle of month when you properly account for months in hh data
-  # monthly_times <- decimal_date(seq(as.Date(paste0(start_year, "/1/1")), by = "month", length.out = (end_year-start_year)*12))
-  monthly_times <- expand.grid(1:12, start_year:end_year)
-  monthly_times <- as.numeric(as.yearmon(paste(monthly_times[,2], monthly_times[,1], sep="-")))
-  
-  # interpolate to monthly prob_no_nets and mean_nets_per_hh
-  country_subset <- lapply(1:2, function(layer){
-    data.table(sapply(colnames(country_list), function(col){approx(quarterly_times, country_list[,col,layer], monthly_times)$y})) 
-    })
-  country_subset <- rbindlist(country_subset)
-  
-  # add identifying information
-  country_subset[, year:=rep(monthly_times, 2)]
-  country_subset[, iso3:=this_iso]
-  country_subset[, metric:=c(rep("SF_prob_no_nets", length(monthly_times)), rep("SF_mean_nets_per_hh", length(monthly_times)))]
-  country_subset <- data.table::melt(country_subset, id.vars=c("iso3", "metric", "year"), variable.name="hh_size")
-  country_subset <- dcast.data.table(country_subset, iso3 + year + hh_size ~ metric)
-
-  return(country_subset)
-})
-stock_and_flow_outputs <- rbindlist(stock_and_flow_outputs)
-stock_and_flow_outputs[, hh_size:=as.integer(hh_size)]
+# TODO: update directories such that you can read from 'output' dir
+stock_and_flow_outputs <- fread(file.path(output_dir, "01_stock_and_flow_prepped.csv")) 
 
 # load household data and survey-to-country key, keep only those in country list
 HH<-fread(file.path(input_dir, "database/ALL_HH_Data_20112017.csv")) # todo: come back and delete cols we don't need. also rename this
 
 # keep only the years and  columns we use
-HH<-HH[ISO3 %in% stock_and_flow_isos, list(Survey.hh, 
+HH<-HH[ISO3 %in% unique(stock_and_flow_outputs$iso3), list(Survey.hh, 
                                            Country,
                                            iso3=ISO3,
                                            Cluster.hh,
@@ -146,13 +108,13 @@ cluster_stats<-foreach(i=1:length(unique_surveys),.combine=rbind) %dopar% { #sur
   # merge on stock and flow values
   household_props <- merge(household_props, stock_and_flow_outputs, by=c("iso3", "hh_size", "year"), all.x=T)
   
-  if (nrow(household_props[is.na(SF_mean_nets_per_hh)])>0 | nrow(household_props[is.na(SF_prob_no_nets)])>0){
+  if (nrow(household_props[is.na(stockflow_mean_nets_per_hh)])>0 | nrow(household_props[is.na(stockflow_prob_no_nets)])>0){
     warning("Your stock and flow values did not merge properly")
   }
   
   # weight stock and flow values by survey propotions to calculate survey-based access
-  household_props[, weighted_prob_no_nets:=hh_size_prop*SF_prob_no_nets]
-  household_props[, weighted_prob_any_net:=hh_size_prop*(1-SF_prob_no_nets)]
+  household_props[, weighted_prob_no_nets:=hh_size_prop*stockflow_prob_no_nets]
+  household_props[, weighted_prob_any_net:=hh_size_prop*(1-stockflow_prob_no_nets)]
   
   # TODO: fix such that access stats are actually calculated at their *month* of collection, not just year
   household_props <- lapply(unique(household_props$year), function(this_year){
@@ -222,7 +184,6 @@ final_data$flooryear<-floor(final_data$year)
 
 print(paste("--> Writing to", out_fname))
 write.csv(final_data, out_fname, row.names=FALSE)
-write.csv(stock_and_flow_outputs, file=file.path(output_dir, "01_stock_and_flow_prepped.csv"), row.names=F)
 
 toc <- Sys.time()
 elapsed <- toc-tic

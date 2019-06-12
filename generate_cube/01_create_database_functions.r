@@ -17,7 +17,15 @@ emplogit2<-function(Y,N){
   top=Y+0.5
   bottom=N-Y+0.5
   return(log(top/bottom))
-  }
+}
+
+emplogit<-function(Y,tol){
+  # Y: value to transform
+  # tol: tolerance value to prevent zeros
+  top=Y*tol+0.5
+  bottom=tol*(1-Y)+0.5
+  return(log(top/bottom))
+}
 
 calc_access <- function(hh_props, max_nets=40, return_mean=F){
   
@@ -38,7 +46,7 @@ calc_access <- function(hh_props, max_nets=40, return_mean=F){
     net_hh_subset <- data.table(hh_size=this_hh_size,
                                 net_count=1:max_nets,
                                 weighted_net_prob=dpospois(1:max_nets, 
-                                                           these_net_stats$SF_mean_nets_per_hh) * these_net_stats$weighted_prob_any_net
+                                                           these_net_stats$stockflow_mean_nets_per_hh) * these_net_stats$weighted_prob_any_net
     )
     
     return(rbind(no_hh_subset, net_hh_subset))

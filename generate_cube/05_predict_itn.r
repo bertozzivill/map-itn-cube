@@ -89,98 +89,14 @@ for (this_year in prediction_years){
   prediction_xyz <- ll_to_xyz(prediction_cells)
   
   
-  
-  ## Get national access means from stock and flow  ## ---------------------------------------------------------
-  
-  print("loading and calculating national access from stock and flow")
-  # TODO: move all of this to prep_database, it doesn't need to be here
-  orig_stock_and_flow <- fread(file.path(input_dir, "01_stock_and_flow_prepped.csv"))
-  stock_and_flow <- orig_stock_and_flow[year>=this_year & year<(this_year+1)] # keep only the years we want to predict
+  ## TODO: load access stats from stock and flow  ## ---------------------------------------------------------
   
   iso_gaul_map<-fread(file.path(joint_dir, "general/iso_gaul_map.csv")) # load table to match gaul codes to country names
   setnames(iso_gaul_map, c("GAUL_CODE", "COUNTRY_ID", "NAME"), c("gaul", "iso3", "country"))
-
+  
   prediction_cells <- merge(prediction_cells, iso_gaul_map, by="gaul", all.x=T)
   
-  # load household size distributions for each survey
-  hh_sizes<-fread(file.path(joint_dir, "stock_and_flow/HHsize.csv"))
-  survey_key=fread(file.path(joint_dir, "stock_and_flow/hh_surveys_key.csv"))
   
-  # format hh_sizes
-  hh_sizes[, V1:=NULL]
-  hh_sizes <- melt.data.table(hh_sizes, id.vars="HHSurvey", variable.name="hh_size", value.name="prop")
-  hh_sizes[, hh_size:=as.integer(hh_size)]
-  
-  # update country names to fit with iso_gaul_map (for use when you actually DO calculate props by country name)
-  survey_key[, Status:=NULL]
-  setnames(survey_key, c("Svy Name", "Name"), c("HHSurvey", "country"))
-  
-  # add two surveys not present in key
-  survey_key <- rbind(survey_key, data.table(HHSurvey=c("Kenya 2007", "Rwanda 2013"),
-                                             country=c("Kenya", "Rwanda")))
-  
-  # merge with name map and survey distribution
-  survey_key <- merge(survey_key, iso_gaul_map, by="country", all.x=T)
-  hh_sizes <- merge(hh_sizes, survey_key, by="HHSurvey", all.x=T)
-  
-  # find size distribution;
-  # collapse such that the final bin is 10+
-  
-  find_hh_distribution <- function(props, cap_hh_size=10){
-    # where 'props' is a data.table with columns ('hh_size' and 'prop')
-    denominator <- sum(props$prop)
-    hh_dist <- props[, list(hh_size_prop=sum(prop)/denominator), by="hh_size"]
-    final_bin <- sum(hh_dist[hh_size>=cap_hh_size]$hh_size_prop)
-    hh_dist <- hh_dist[hh_size<=cap_hh_size]
-    hh_dist[hh_size==cap_hh_size, hh_size_prop:=final_bin]
-    
-    if (abs(sum(hh_dist$hh_size_prop)-1) > 1e-15){
-      warning("Household size distribution improperly computed!")
-    }
-    
-    return(hh_dist)
-  }
-  
-  hh_dist_all <- find_hh_distribution(hh_sizes)
-  
-  hh_distributions <- lapply(unique(stock_and_flow$iso3), function(this_iso){
-    if (this_iso %in% unique(hh_sizes$iso3)){
-      this_hh_dist <- find_hh_distribution(hh_sizes[iso3==this_iso])
-    }else{
-      this_hh_dist <- copy(hh_dist_all)
-    }
-    this_hh_dist[, iso3:=this_iso]
-    return(this_hh_dist)
-  })
-  hh_distributions <- rbindlist(hh_distributions)
-  
-  stock_and_flow <- merge(stock_and_flow, hh_distributions, by=c("iso3", "hh_size"), all=T)
-  
-  # weight stock and flow values by household propotions 
-  stock_and_flow[, weighted_prob_no_nets:=hh_size_prop*SF_prob_no_nets]
-  stock_and_flow[, weighted_prob_any_net:=hh_size_prop*(1-SF_prob_no_nets)]
-  
-  # calculate year-month-country access
-  
-  stock_and_flow_access <- lapply(unique(stock_and_flow$iso3), function(this_iso){
-    country_access <- lapply(unique(stock_and_flow$year), function(this_time){
-      # print(paste(this_iso, ":", this_time))
-      subset <- stock_and_flow[iso3==this_iso & year==this_time]
-      access <- calc_access(subset, return_mean = T)
-      return(data.table(iso3=this_iso, 
-                        year=this_time,
-                        nat_access=access)
-      )
-    })
-    return(rbindlist(country_access))
-  })
-  stock_and_flow_access <- rbindlist(stock_and_flow_access)
-  
-  stock_and_flow_access[, emplogit_nat_access:=emplogit(nat_access, 1000)] # todo: still don't understand this emplogit calc
-  stock_and_flow_access <- merge(stock_and_flow_access, data.table(year=sort(unique(stock_and_flow_access$year)),
-                                                                   month=1:12),
-                                 by="year", all=T)
-  stock_and_flow_access <- stock_and_flow_access[, list(iso3, year=this_year, month, nat_access, emplogit_nat_access)]
   
   ## Create INLA Prediction objects  ## ---------------------------------------------------------
   
