@@ -7,7 +7,7 @@
 ## 
 ##############################################################################################################
 
-# dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-64 --logging gs://map_data_z/users/amelia/logs --input-recursive input_dir=gs://map_data_z/cubes_5km func_dir=gs://map_data_z/users/amelia/itn_cube/code/generate_cube joint_dir=gs://map_data_z/users/amelia/itn_cube/input_data/ --input database_fname=gs://map_data_z/users/amelia/itn_cube/results/20190608_rename_cols/01_database.csv CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/02_prep_covariates.r --output-recursive output_dir=gs://map_data_z/users/amelia/itn_cube/results/20190608_rename_cols/ --command 'Rscript ${CODE}'
+# dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-64 --logging gs://map_data_z/users/amelia/logs --input-recursive input_dir=gs://map_data_z/cubes_5km func_dir=gs://map_data_z/users/amelia/itn_cube/code/generate_cube joint_dir=gs://map_data_z/users/amelia/itn_cube/input_data/ --input database_fname=gs://map_data_z/users/amelia/itn_cube/results/20190613_move_stockandflow/01_database.csv CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/02_prep_covariates.r --output-recursive output_dir=gs://map_data_z/users/amelia/itn_cube/results/20190613_move_stockandflow/ --command 'Rscript ${CODE}'
 
 rm(list=ls())
 
@@ -21,11 +21,11 @@ package_load <- function(package_list){
 package_load(c("zoo","raster", "doParallel", "data.table", "rgdal", "INLA", "RColorBrewer", "cvTools", "boot", "stringr", "dismo", "gbm"))
 
 if(Sys.getenv("input_dir")=="") {
-  database_fname <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190608_rename_cols/01_database.csv"
+  database_fname <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190613_move_stockandflow/01_database.csv"
   input_dir <- "/Volumes/GoogleDrive/Shared drives/cubes/5km incomplete/"
   joint_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
   func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
-  output_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190608_rename_cols/"
+  output_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190613_move_stockandflow/"
 } else {
   database_fname <- Sys.getenv("database_fname") # location of output file from generate_database_refactored.r
   input_dir <- Sys.getenv("input_dir") # here, location of covariate data 
@@ -178,10 +178,9 @@ setnames(all_dynamic, "flooryear", "year")
 # save dynamic covariates(by year)
 print("saving dynamic covariates by year")
 for (this_year in prediction_years){
+  print(this_year)
   write.csv(all_dynamic[year==this_year], file.path(dynamic_outdir, paste0("dynamic_", this_year,".csv")), row.names=F)
 }
-
-# write.csv(all_dynamic, file.path(output_dir, "02_dynamic_covariates.csv"), row.names=F)
 
 # reorder
 data <- data[order(row_id)]

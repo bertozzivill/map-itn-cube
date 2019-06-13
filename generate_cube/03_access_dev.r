@@ -8,7 +8,7 @@
 ## 
 ##############################################################################################################
 
-# dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-64 --logging gs://map_data_z/users/amelia/logs --input-recursive input_dir=gs://map_data_z/users/amelia/itn_cube/results/20190608_rename_cols func_dir=gs://map_data_z/users/amelia/itn_cube/code/generate_cube --input CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/03_access_dev.r --output-recursive output_dir=gs://map_data_z/users/amelia/itn_cube/results/20190608_rename_cols/ --command 'Rscript ${CODE}'
+# dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-64 --logging gs://map_data_z/users/amelia/logs --input-recursive input_dir=gs://map_data_z/users/amelia/itn_cube/results/20190613_move_stockandflow func_dir=gs://map_data_z/users/amelia/itn_cube/code/generate_cube --input CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/03_access_dev.r --output-recursive output_dir=gs://map_data_z/users/amelia/itn_cube/results/20190613_move_stockandflow/ --command 'Rscript ${CODE}'
 
 
 rm(list=ls())
@@ -23,8 +23,8 @@ package_load <- function(package_list){
 package_load(c("zoo","raster", "doParallel", "data.table", "rgdal", "INLA", "RColorBrewer", "cvTools", "boot", "stringr", "dismo", "gbm"))
 
 if(Sys.getenv("input_dir")=="") {
-  input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190608_rename_cols//"
-  output_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190608_rename_cols//"
+  input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190613_move_stockandflow//"
+  output_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190613_move_stockandflow//"
   func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
 } else {
   input_dir <- Sys.getenv("input_dir")

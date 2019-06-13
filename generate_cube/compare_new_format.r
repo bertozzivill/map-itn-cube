@@ -8,7 +8,7 @@
 ## 
 ##############################################################################################################
 
-# dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --logging gs://map_data_z/users/amelia/logs --input-recursive new_dir=gs://map_data_z/users/amelia/itn_cube/results/20190608_rename_cols func_dir=gs://map_data_z/users/amelia/itn_cube/code/generate_cube old_dir=gs://map_data_z/users/amelia/itn_cube/results/20190606_replicate_sam --input CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/compare_new_format.r --output compare_out_path=gs://map_data_z/users/amelia/itn_cube/results/20190608_rename_cols/05_predictions/compare_newcolname_tifs.pdf --command 'Rscript ${CODE}'
+# dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --logging gs://map_data_z/users/amelia/logs --input-recursive new_dir=gs://map_data_z/users/amelia/itn_cube/results/20190613_move_stockandflow func_dir=gs://map_data_z/users/amelia/itn_cube/code/generate_cube old_dir=gs://map_data_z/users/amelia/itn_cube/results/20190608_rename_cols --input CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/compare_new_format.r --output compare_out_path=gs://map_data_z/users/amelia/itn_cube/results/20190613_move_stockandflow/05_predictions/compare_changehousedist_tifs.pdf --command 'Rscript ${CODE}'
 
 rm(list=ls())
 
@@ -41,12 +41,17 @@ print("comparing old and new data files")
 new_db <- fread(file.path(new_dir, "01_database.csv"))
 old_db <- fread(file.path(old_dir, "01_database.csv"))
 
+setnames(old_db, c("hh_size", "nets_per_hh"), c("cluster_pop", "net_count"))
+
 check_sameness(old_db, new_db)
 
 ## 02: check covariates
 print("comparing old and new data covariate files")
 new_covs <- fread(file.path(new_dir, "02_data_covariates.csv"))
 old_covs <- fread(file.path(old_dir, "02_data_covariates.csv"))
+
+setnames(old_covs, c("hh_size", "nets_per_hh"), c("cluster_pop", "net_count"))
+
 check_sameness(old_covs, new_covs)
 
 
