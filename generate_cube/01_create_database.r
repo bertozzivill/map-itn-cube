@@ -21,7 +21,7 @@ package_load <- function(package_list){
 package_load(c("zoo","raster","VGAM", "doParallel", "data.table", "lubridate"))
 
 # current dsub:
-# dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-4 --logging gs://map_data_z/users/amelia/logs --input-recursive input_dir=gs://map_data_z/users/amelia/itn_cube/input_data --input func_fname=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/01_create_database_functions.r CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/01_create_database.r --output-recursive output_dir=gs://map_data_z/users/amelia/itn_cube/results/20190608_rename_cols/ --command 'Rscript ${CODE}'
+# dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-4 --logging gs://map_data_z/users/amelia/logs --input-recursive input_dir=gs://map_data_z/users/amelia/itn_cube/input_data --input func_fname=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/01_create_database_functions.r stock_and_flow_fname=gs://map_data_z/users/amelia/itn_cube/results/20190613_move_stockandflow/01_stock_and_flow_probs_means.csv CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/01_create_database.r --output-recursive output_dir=gs://map_data_z/users/amelia/itn_cube/results/20190613_move_stockandflow/ --command 'Rscript ${CODE}'
 
 # Data loading, household-level access/use stats  ------------------------------------------------------------
 
@@ -30,10 +30,12 @@ if(Sys.getenv("input_dir")=="") {
   # input_dir <- "/Users/bertozzivill/Desktop/zdrive_mount/users/amelia/itn_cube/joint_data"
   # output_dir <- "/Users/bertozzivill/Desktop/zdrive_mount/users/amelia/itn_cube/create_database/output"
   input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
-  output_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190608_rename_cols/"
+  stock_and_flow_fname <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190613_move_stockandflow/01_stock_and_flow_probs_means.csv"
+  output_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190613_move_stockandflow/"
   func_fname <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/01_create_database_functions.r"
 } else {
   input_dir <- Sys.getenv("input_dir")
+  stock_and_flow_fname <- Sys.getenv("stock_and_flow_fname")
   output_dir <- Sys.getenv("output_dir")
   func_fname <- Sys.getenv("func_fname")
 }
@@ -41,8 +43,7 @@ if(Sys.getenv("input_dir")=="") {
 source(func_fname)
 out_fname <- file.path(output_dir, "01_database.csv")
 
-# TODO: update directories such that you can read from 'output' dir
-stock_and_flow_outputs <- fread(file.path(output_dir, "01_stock_and_flow_prepped.csv")) 
+stock_and_flow_outputs <- fread(stock_and_flow_fname) 
 
 # load household data and survey-to-country key, keep only those in country list
 HH<-fread(file.path(input_dir, "database/ALL_HH_Data_20112017.csv")) # todo: come back and delete cols we don't need. also rename this

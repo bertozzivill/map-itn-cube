@@ -8,7 +8,7 @@
 ## 
 ##############################################################################################################
 
-# dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-64 --logging gs://map_data_z/users/amelia/logs --input-recursive input_dir=gs://map_data_z/users/amelia/itn_cube/results/20190608_rename_cols func_dir=gs://map_data_z/users/amelia/itn_cube/code/generate_cube joint_dir=gs://map_data_z/users/amelia/itn_cube/input_data/ --input CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/05_predict_itn.r --output-recursive output_dir=gs://map_data_z/users/amelia/itn_cube/results/20190608_rename_cols/05_predictions --command 'Rscript ${CODE}'
+# dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-64 --logging gs://map_data_z/users/amelia/logs --input-recursive input_dir=gs://map_data_z/users/amelia/itn_cube/results/20190613_move_stockandflow func_dir=gs://map_data_z/users/amelia/itn_cube/code/generate_cube joint_dir=gs://map_data_z/users/amelia/itn_cube/input_data/ --input CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/05_predict_itn.r --output-recursive output_dir=gs://map_data_z/users/amelia/itn_cube/results/20190613_move_stockandflow/05_predictions --command 'Rscript ${CODE}'
 
 rm(list=ls())
 
@@ -22,8 +22,8 @@ package_load <- function(package_list){
 package_load(c("zoo", "VGAM", "raster", "doParallel", "data.table", "rgdal", "INLA", "RColorBrewer", "cvTools", "boot", "stringr", "dismo", "gbm"))
 
 if(Sys.getenv("input_dir")=="") {
-  input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190608_rename_cols//"
-  output_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190608_rename_cols/05_predictions/"
+  input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190613_move_stockandflow//"
+  output_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190613_move_stockandflow/05_predictions/"
   joint_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
   func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
   cov_dir <- "/Volumes/GoogleDrive/Shared drives/cubes/5km incomplete/"
@@ -50,6 +50,11 @@ source(file.path(func_dir, "03_05_general_functions.r"))
 
 # why does *this* go to 2016 when our inla only goes to 2014/15?
 prediction_years <- 2000:2016
+
+# load name maps and stock and flow outputs
+iso_gaul_map<-fread(file.path(joint_dir, "general/iso_gaul_map.csv")) # load table to match gaul codes to country names
+setnames(iso_gaul_map, c("GAUL_CODE", "COUNTRY_ID", "NAME"), c("gaul", "iso3", "country"))
+stock_and_flow_access <- fread(file.path(input_dir, "01_stock_and_flow_access_continent_dist.csv"))
 
 ## Load Covariates  ## ---------------------------------------------------------
 
@@ -87,16 +92,7 @@ for (this_year in prediction_years){
   prediction_cells <- cbind(prediction_cells, data.table(xyFromCell(national_raster, prediction_indices)))
   setnames(prediction_cells, c("x", "y"), c("longitude", "latitude"))
   prediction_xyz <- ll_to_xyz(prediction_cells)
-  
-  
-  ## TODO: load access stats from stock and flow  ## ---------------------------------------------------------
-  
-  iso_gaul_map<-fread(file.path(joint_dir, "general/iso_gaul_map.csv")) # load table to match gaul codes to country names
-  setnames(iso_gaul_map, c("GAUL_CODE", "COUNTRY_ID", "NAME"), c("gaul", "iso3", "country"))
-  
   prediction_cells <- merge(prediction_cells, iso_gaul_map, by="gaul", all.x=T)
-  
-  
   
   ## Create INLA Prediction objects  ## ---------------------------------------------------------
   

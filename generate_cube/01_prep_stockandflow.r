@@ -19,10 +19,10 @@ package_load <- function(package_list){
   lapply(package_list, library, character.only=T)
 }
 
-package_load(c("zoo","raster","VGAM", "doParallel", "data.table", "lubridate"))
+package_load(c("zoo","raster","VGAM", "doParallel", "data.table", "lubridate", "ggplot2"))
 
 # current dsub:
-# dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-4 --logging gs://map_data_z/users/amelia/logs --input-recursive input_dir=gs://map_data_z/users/amelia/itn_cube/input_data --input func_fname=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/01_create_database_functions.r CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/01_prep_stockandflow.r --output-recursive output_dir=gs://map_data_z/users/amelia/itn_cube/results/20190613_move_stockandflow/ --command 'Rscript ${CODE}'
+# dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-1 --logging gs://map_data_z/users/amelia/logs --input-recursive input_dir=gs://map_data_z/users/amelia/itn_cube/input_data --input func_fname=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/01_create_database_functions.r CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/01_prep_stockandflow.r --output-recursive output_dir=gs://map_data_z/users/amelia/itn_cube/results/20190613_move_stockandflow/ --command 'Rscript ${CODE}'
 
 # Environment prep  ------------------------------------------------------------
 
@@ -41,6 +41,7 @@ if(Sys.getenv("input_dir")=="") {
 
 main_dir <- file.path(input_dir, "stock_and_flow")
 source(func_fname)
+use_nats_dists <- F
 
 # Interpolate initial stock and flow probabilities and means  ------------------------------------------------------------
 
@@ -138,20 +139,27 @@ find_hh_distribution <- function(props, cap_hh_size=10){
 
 hh_dist_all <- find_hh_distribution(hh_sizes)
 
-hh_distributions <- lapply(unique(stock_and_flow$iso3), function(this_iso){
-  if (this_iso %in% unique(hh_sizes$iso3)){
-    this_hh_dist <- find_hh_distribution(hh_sizes[iso3==this_iso])
-  }else{
-    this_hh_dist <- copy(hh_dist_all)
-  }
-  this_hh_dist[, iso3:=this_iso]
-  return(this_hh_dist)
-})
-hh_distributions <- rbindlist(hh_distributions)
+if (use_nats_dists){
+  
+  hh_distributions <- lapply(unique(stock_and_flow$iso3), function(this_iso){
+    if (this_iso %in% unique(hh_sizes$iso3)){
+      this_hh_dist <- find_hh_distribution(hh_sizes[iso3==this_iso])
+    }else{
+      this_hh_dist <- copy(hh_dist_all)
+    }
+    this_hh_dist[, iso3:=this_iso]
+    return(this_hh_dist)
+  })
+  hh_distributions <- rbindlist(hh_distributions)
+  
+  stock_and_flow <- merge(stock_and_flow, hh_distributions, by=c("iso3", "hh_size"), all=T)
+  access_outdir <- file.path(output_dir, "01_stock_and_flow_access.csv")
+}else{
+  stock_and_flow <- merge(stock_and_flow, hh_dist_all, by=c("hh_size"), all=T)
+  access_outdir <- file.path(output_dir, "01_stock_and_flow_access_continent_dist.csv")
+}
 
 print("finding year-month-country access across household sizes")
-
-stock_and_flow <- merge(stock_and_flow, hh_distributions, by=c("iso3", "hh_size"), all=T)
 
 # weight stock and flow values by household propotions 
 stock_and_flow[, weighted_prob_no_nets:=hh_size_prop*stockflow_prob_no_nets]
@@ -172,6 +180,7 @@ stock_and_flow_access <- lapply(unique(stock_and_flow$iso3), function(this_iso){
 })
 stock_and_flow_access <- rbindlist(stock_and_flow_access)
 
+
 ggplot(stock_and_flow_access, aes(x=year, y=nat_access)) +
   geom_line() +
   facet_wrap(~iso3)
@@ -179,7 +188,12 @@ ggplot(stock_and_flow_access, aes(x=year, y=nat_access)) +
 
 stock_and_flow_access[, emplogit_nat_access:=emplogit(nat_access, 1000)] # todo: still don't understand this emplogit calc
 stock_and_flow_access <- merge(stock_and_flow_access, data.table(year=sort(unique(stock_and_flow_access$year)), month=1:12),  by="year", all=T) # add calendar month back
-stock_and_flow_access <- stock_and_flow_access[, list(iso3, year, month, nat_access, emplogit_nat_access)]
+stock_and_flow_access <- stock_and_flow_access[, list(iso3, year=floor(year), month, nat_access, emplogit_nat_access)]
 
-write.csv(stock_and_flow_access, file=file.path(output_dir, "01_stock_and_flow_access.csv"), row.names=F)
+write.csv(stock_and_flow_access, file=access_outdir, row.names=F)
+
+
+
+
+
 
