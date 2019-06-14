@@ -41,8 +41,7 @@ set.seed(212)
 # TODO: load shapefiles and templates only when you're actually plotting (objects named World, Africa, Water, img)
 print("loading inla outputs and relevant functions")
 # Load access and gap INLA outputs
-load(file.path(input_dir, "03_access_deviation.Rdata"))
-load(file.path(input_dir, "04_use_gap.Rdata"))
+load(file.path(input_dir, "03_inla_acc_use.Rdata"))
 
 # load function script
 source(file.path(func_dir, "01_create_database_functions.r")) # for calc_access
@@ -101,7 +100,7 @@ for (this_year in prediction_years){
   INLA:::inla.dynload.workaround() 
   
   # todo: why the capping at 2015?
-  spatial_mesh <-  copy(spatial_mesh_acc) # should be identical to spatial_mesh_use
+  spatial_mesh <-  copy(inla_outputs[["access_dev"]][["spatial_mesh"]])
   temporal_mesh <- inla.mesh.1d(seq(2000,2015,by=2),interval=c(2000,2015),degree=2)
   
   A_matrix <-inla.spde.make.A(spatial_mesh, 
@@ -143,8 +142,8 @@ for (this_year in prediction_years){
   }
   
   print("predicting access deviation")
-  acc_dev_predictions <- predict_inla(model=mod_pred_acc, 
-                                      theta=theta_acc)
+  acc_dev_predictions <- predict_inla(model=inla_outputs[["access_dev"]][["model_output"]], 
+                                      theta=inla_outputs[["access_dev"]][["theta"]])
   
   print("finding and plotting access")
   setnames(acc_dev_predictions, "final_prediction", "access_deviation")
@@ -188,8 +187,8 @@ for (this_year in prediction_years){
   
   
   print("predicting use gap")
-  use_gap_predictions <- predict_inla(model=mod_pred_use, 
-                                      theta=theta_use)
+  use_gap_predictions <- predict_inla(model=inla_outputs[["use_gap"]][["model_output"]], 
+                                      theta=inla_outputs[["use_gap"]][["theta"]])
   
   print("finding and plotting use")
   setnames(use_gap_predictions, "final_prediction", "use_gap")

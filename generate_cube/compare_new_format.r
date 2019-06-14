@@ -8,7 +8,7 @@
 ## 
 ##############################################################################################################
 
-# dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --logging gs://map_data_z/users/amelia/logs --input-recursive new_dir=gs://map_data_z/users/amelia/itn_cube/results/20190613_move_stockandflow func_dir=gs://map_data_z/users/amelia/itn_cube/code/generate_cube old_dir=gs://map_data_z/users/amelia/itn_cube/results/20190608_rename_cols --input CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/compare_new_format.r --output compare_out_path=gs://map_data_z/users/amelia/itn_cube/results/20190613_move_stockandflow/05_predictions/compare_changehousedist_tifs.pdf --command 'Rscript ${CODE}'
+# dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --logging gs://map_data_z/users/amelia/logs --input-recursive new_dir=gs://map_data_z/users/amelia/itn_cube/results/20190613_move_stockandflow func_dir=gs://map_data_z/users/amelia/itn_cube/code/generate_cube old_dir=gs://map_data_z/users/amelia/itn_cube/results/20190608_rename_cols --input CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/compare_new_format.r --output compare_out_path=gs://map_data_z/users/amelia/itn_cube/results/20190613_move_stockandflow/05_predictions/compare_newinla.pdf --command 'Rscript ${CODE}'
 
 rm(list=ls())
 
@@ -57,14 +57,14 @@ check_sameness(old_covs, new_covs)
 
 ## 03: Access deviation
 print("comparing old and new access deviation files")
-load(file.path(new_dir, "03_access_deviation.Rdata"))
+load(file.path(new_dir, "03_inla_acc_use.Rdata"))
 
-new_acc_fixed <- mod_pred_acc$summary.fixed
+new_acc_fixed <- inla_outputs[["access_dev"]][[1]]$summary.fixed
 new_acc_fixed$cov<-rownames(new_acc_fixed)
 new_acc_fixed <- data.table(new_acc_fixed)
 new_acc_fixed <- new_acc_fixed[order(cov)]
 
-new_hyperpar <- mod_pred_acc$summary.hyperpar
+new_hyperpar <- inla_outputs[["access_dev"]][[1]]$summary.hyperpar
 new_hyperpar$metric<-rownames(new_hyperpar)
 new_hyperpar <- data.table(new_hyperpar)
 
@@ -85,18 +85,17 @@ check_sameness(old_hyperpar, new_hyperpar, sameness_cutoff = 1e-04)
 
 ## 04: Use gap
 print("comparing old and new use gap files")
-load(file.path(new_dir, "04_use_gap.Rdata"))
 
-new_use_fixed <- mod_pred_use$summary.fixed
+new_use_fixed <- inla_outputs[["use_gap"]][[1]]$summary.fixed
 new_use_fixed$cov<-rownames(new_use_fixed)
 new_use_fixed <- data.table(new_use_fixed)
 new_use_fixed <- new_use_fixed[order(cov)]
 
-new_hyperpar <- mod_pred_use$summary.hyperpar
+new_hyperpar <- inla_outputs[["use_gap"]][[1]]$summary.hyperpar
 new_hyperpar$metric<-rownames(new_hyperpar)
 new_hyperpar <- data.table(new_hyperpar)
 
-load(file.path(new_dir, "04_use_gap.Rdata"))
+load(file.path(old_dir, "04_use_gap.Rdata"))
 old_use_fixed <- mod_pred_use$summary.fixed
 old_use_fixed$cov<-rownames(old_use_fixed)
 old_use_fixed <- data.table(old_use_fixed)
