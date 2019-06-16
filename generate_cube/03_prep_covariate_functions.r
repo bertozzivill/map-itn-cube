@@ -1,5 +1,5 @@
 ###############################################################################################################
-## 02_prep_covariates_functions.r
+## 03_prep_covariates_functions.r
 ## Amelia Bertozzi-Villa
 ## May 2019
 ## 
@@ -19,14 +19,14 @@ which_non_null <- function(raster_fname){
 
 # function for extracting a raster stack and applying it to data
 extract_values <- function(raster_fname_list, extraction_indices, names=c()){
-  
   cov_stack <- stack(raster_fname_list)
+  print(object_size(cov_stack))
   NAvalue(cov_stack)=-9999
   extracted_covs <- data.table(cov_stack[extraction_indices])
   if (length(names)>0){
     names(extracted_covs) <- names
   }
-  
+  rm(cov_stack); gc()
   return(extracted_covs)
 }
 

@@ -1,5 +1,5 @@
 ###############################################################################################################
-## 03_05_general_functions.r
+## 04_inla_functions.r
 ## Amelia Bertozzi-Villa
 ## May 2019
 ## 
@@ -76,7 +76,7 @@ ll_to_xyz<-function(ll){
 }
 
 
-run_inla <- function(data, outcome_var, start_year, end_year){
+run_inla <- function(data, outcome_var, cov_vars, start_year, end_year){
   
   # initialize inla
   INLA:::inla.dynload.workaround() 
@@ -96,7 +96,7 @@ run_inla <- function(data, outcome_var, start_year, end_year){
   temporal_mesh=inla.mesh.1d(seq(start_year,end_year,by=2),interval=c(start_year,end_year),degree=2) 
   
   # prep data for model fitting
-  cov_list<-data[, cov_names, with=F]
+  cov_list<-data[, cov_vars, with=F]
   cov_list$year <- data$yearqtr
   cov_list <-as.list(cov_list)
   
@@ -121,7 +121,7 @@ run_inla <- function(data, outcome_var, start_year, end_year){
   model_formula<- as.formula(paste(
     paste("response ~ -1 + Intercept  + "),
     paste("f(field, model=spde_matern, group=field.group, control.group=list(model='ar1')) + ",sep=""),
-    paste(cov_names,collapse="+"),
+    paste(cov_vars,collapse="+"),
     sep=""))
   
   #-- Call INLA and get results --#
@@ -144,6 +144,33 @@ run_inla <- function(data, outcome_var, start_year, end_year){
   
 }
 
-
+predict_inla <- function(model, A_matrix, covs, prediction_cells){
+  fixed_effects <- model[["model_output"]]$summary.fixed
+  random_effects <- model[["model_output"]]$summary.random$field
+  predicted_random <- drop(A_matrix %*% random_effects$mean)
+  
+  all_predictions <- lapply(1:12, function(this_month){
+    print(paste("predicting for month", this_month))
+    these_covs <- covs[month==this_month]
+    these_covs[, "Intercept":=1]
+    
+    predictions <- data.table(year=this_year,
+                              month=this_month,
+                              cellnumber=these_covs$cellnumber)
+    
+    predictions[, fixed:= as.matrix(these_covs[, rownames(fixed_effects), with=F]) %*% fixed_effects$mean]
+    predictions[, random:= predicted_random]
+    predictions[, full:= fixed + random]
+    predictions[, final_prediction := inv_ihs(full, theta=model[["theta"]])] # TODO: confirm the inverse ihs function is correct
+    
+    predictions <- merge(predictions, prediction_cells[, list(cellnumber=row_id, iso3)], by="cellnumber", all=T)
+    
+    return(predictions)
+  })
+  
+  all_predictions <- rbindlist(all_predictions)
+  
+  return(all_predictions)
+}
 
 
