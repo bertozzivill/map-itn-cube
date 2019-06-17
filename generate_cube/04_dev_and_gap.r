@@ -77,8 +77,7 @@ run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, sta
     
     inla_results <- run_inla(data, outcome_var, cov_names, start_year, end_year)
     
-    inla_results[[3]] <- ifelse(outcome_var=="ihs_emp_access_dev", theta_acc, theta_use)
-    names(inla_results) <- c("model_output", "spatial_mesh", "theta")
+    inla_results <- c(inla_results, theta=ifelse(outcome_var=="ihs_emp_access_dev", theta_acc, theta_use))
     
     return(inla_results)
   }
@@ -92,7 +91,7 @@ run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, sta
 
 if (Sys.getenv("run_individually")!=""){
   
-  # dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-64 --logging gs://map_data_z/users/amelia/logs --input-recursive input_dir=gs://map_data_z/users/amelia/itn_cube/input_data/ main_indir=gs://map_data_z/users/amelia/itn_cube/results/20190614_rearrange_scripts func_dir=gs://map_data_z/users/amelia/itn_cube/code/generate_cube --input run_individually=TRUE CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/04_dev_and_gap.r --output-recursive main_outdir=gs://map_data_z/users/amelia/itn_cube/results/20190614_rearrange_scripts/ --command 'Rscript ${CODE}'
+  # dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-64 --logging gs://map_data_z/users/amelia/logs --input-recursive input_dir=gs://map_data_z/users/amelia/itn_cube/input_data/ main_indir=gs://map_data_z/users/amelia/itn_cube/results/20190614_rearrange_scripts func_dir=gs://map_data_z/users/amelia/itn_cube/code/generate_cube --input run_individually=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/run_individually.txt CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/04_dev_and_gap.r --output-recursive main_outdir=gs://map_data_z/users/amelia/itn_cube/results/20190614_rearrange_scripts/ --command 'Rscript ${CODE}'
   
   package_load <- function(package_list){
     # package installation/loading

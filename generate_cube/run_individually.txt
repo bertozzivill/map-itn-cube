@@ -1,0 +1,1 @@
+Include this file as an input file to the dsub command when you want an ITN cube script to run individually-- this file doesn't do anything, but the dsub command needs a file as an input, not e.g. a variable name.
