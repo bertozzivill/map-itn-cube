@@ -140,7 +140,7 @@ run_inla <- function(data, outcome_var, cov_vars, start_year, end_year){
   
   print(summary(inla_model))
   
-  return(list(inla_model, spatial_mesh))
+  return(list(model_output=inla_model, spatial_mesh=spatial_mesh, temporal_mesh=temporal_mesh))
   
 }
 
@@ -150,12 +150,11 @@ predict_inla <- function(model, A_matrix, covs, prediction_cells){
   predicted_random <- drop(A_matrix %*% random_effects$mean)
   
   all_predictions <- lapply(1:12, function(this_month){
-    print(paste("predicting for month", this_month))
+    # print(paste("predicting for month", this_month))
     these_covs <- covs[month==this_month]
     these_covs[, "Intercept":=1]
     
-    predictions <- data.table(year=this_year,
-                              month=this_month,
+    predictions <- data.table(month=this_month,
                               cellnumber=these_covs$cellnumber)
     
     predictions[, fixed:= as.matrix(these_covs[, rownames(fixed_effects), with=F]) %*% fixed_effects$mean]

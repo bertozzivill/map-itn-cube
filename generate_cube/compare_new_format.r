@@ -8,7 +8,7 @@
 ## 
 ##############################################################################################################
 
-# dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --logging gs://map_data_z/users/amelia/logs --input-recursive new_dir=gs://map_data_z/users/amelia/itn_cube/results/20190613_move_stockandflow func_dir=gs://map_data_z/users/amelia/itn_cube/code/generate_cube old_dir=gs://map_data_z/users/amelia/itn_cube/results/20190608_rename_cols --input CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/compare_new_format.r --output compare_out_path=gs://map_data_z/users/amelia/itn_cube/results/20190613_move_stockandflow/05_predictions/compare_newinla.pdf --command 'Rscript ${CODE}'
+# dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --logging gs://map_data_z/users/amelia/logs --input-recursive new_dir=gs://map_data_z/users/amelia/itn_cube/results/20190614_rearrange_scripts func_dir=gs://map_data_z/users/amelia/itn_cube/code/generate_cube old_dir=gs://map_data_z/users/amelia/itn_cube/results/20190613_move_stockandflow --input CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/compare_new_format.r --output compare_out_path=gs://map_data_z/users/amelia/itn_cube/results/20190614_rearrange_scripts/05_predictions/compare_neworder.pdf --command 'Rscript ${CODE}'
 
 rm(list=ls())
 
@@ -36,78 +36,73 @@ if(Sys.getenv("func_dir")=="") {
 
 source(file.path(func_dir, "check_file_similarity.r"))
 
-## 01: check database
+## 02: check survey data
 print("comparing old and new data files")
-new_db <- fread(file.path(new_dir, "01_database.csv"))
+new_db <- fread(file.path(new_dir, "02_survey_data.csv"))
 old_db <- fread(file.path(old_dir, "01_database.csv"))
-
-setnames(old_db, c("hh_size", "nets_per_hh"), c("cluster_pop", "net_count"))
 
 check_sameness(old_db, new_db)
 
-## 02: check covariates
+## 03: check covariates
 print("comparing old and new data covariate files")
-new_covs <- fread(file.path(new_dir, "02_data_covariates.csv"))
+new_covs <- fread(file.path(new_dir, "03_data_covariates.csv"))
 old_covs <- fread(file.path(old_dir, "02_data_covariates.csv"))
-
-setnames(old_covs, c("hh_size", "nets_per_hh"), c("cluster_pop", "net_count"))
 
 check_sameness(old_covs, new_covs)
 
 
-## 03: Access deviation
-print("comparing old and new access deviation files")
-load(file.path(new_dir, "03_inla_acc_use.Rdata"))
+## 04: inla models
+print("comparing old and new inla files")
+load(file.path(new_dir, "04_inla_dev_gap.Rdata"))
 
 new_acc_fixed <- inla_outputs[["access_dev"]][[1]]$summary.fixed
 new_acc_fixed$cov<-rownames(new_acc_fixed)
 new_acc_fixed <- data.table(new_acc_fixed)
 new_acc_fixed <- new_acc_fixed[order(cov)]
 
-new_hyperpar <- inla_outputs[["access_dev"]][[1]]$summary.hyperpar
-new_hyperpar$metric<-rownames(new_hyperpar)
-new_hyperpar <- data.table(new_hyperpar)
-
-load(file.path(old_dir, "03_access_deviation.Rdata"))
-old_acc_fixed <- mod_pred_acc$summary.fixed
-old_acc_fixed$cov<-rownames(old_acc_fixed)
-old_acc_fixed <- data.table(old_acc_fixed)
-old_acc_fixed <- old_acc_fixed[order(cov)]
-
-old_hyperpar <- mod_pred_acc$summary.hyperpar
-old_hyperpar$metric<-rownames(old_hyperpar)
-old_hyperpar <- data.table(old_hyperpar)
-
-print("fixed effects")
-check_sameness(old_acc_fixed, new_acc_fixed, sameness_cutoff = 1e-04)
-print("hyperparameters")
-check_sameness(old_hyperpar, new_hyperpar, sameness_cutoff = 1e-04)
-
-## 04: Use gap
-print("comparing old and new use gap files")
+new_acc_hyperpar <- inla_outputs[["access_dev"]][[1]]$summary.hyperpar
+new_acc_hyperpar$metric<-rownames(new_acc_hyperpar)
+new_acc_hyperpar <- data.table(new_acc_hyperpar)
 
 new_use_fixed <- inla_outputs[["use_gap"]][[1]]$summary.fixed
 new_use_fixed$cov<-rownames(new_use_fixed)
 new_use_fixed <- data.table(new_use_fixed)
 new_use_fixed <- new_use_fixed[order(cov)]
 
-new_hyperpar <- inla_outputs[["use_gap"]][[1]]$summary.hyperpar
-new_hyperpar$metric<-rownames(new_hyperpar)
-new_hyperpar <- data.table(new_hyperpar)
+new_use_hyperpar <- inla_outputs[["use_gap"]][[1]]$summary.hyperpar
+new_use_hyperpar$metric<-rownames(new_use_hyperpar)
+new_use_hyperpar <- data.table(new_use_hyperpar)
 
-load(file.path(old_dir, "04_use_gap.Rdata"))
-old_use_fixed <- mod_pred_use$summary.fixed
+load(file.path(old_dir, "03_inla_acc_use.Rdata"))
+old_acc_fixed <- inla_outputs[["access_dev"]][[1]]$summary.fixed
+old_acc_fixed$cov<-rownames(old_acc_fixed)
+old_acc_fixed <- data.table(old_acc_fixed)
+old_acc_fixed <- old_acc_fixed[order(cov)]
+
+old_acc_hyperpar <- inla_outputs[["access_dev"]][[1]]$summary.hyperpar
+old_acc_hyperpar$metric<-rownames(old_acc_hyperpar)
+old_acc_hyperpar <- data.table(old_acc_hyperpar)
+
+old_use_fixed <- inla_outputs[["use_gap"]][[1]]$summary.fixed
 old_use_fixed$cov<-rownames(old_use_fixed)
 old_use_fixed <- data.table(old_use_fixed)
 old_use_fixed <- old_use_fixed[order(cov)]
 
-old_hyperpar <- mod_pred_use$summary.hyperpar
-old_hyperpar$metric<-rownames(old_hyperpar)
-old_hyperpar <- data.table(old_hyperpar)
+old_use_hyperpar <- inla_outputs[["use_gap"]][[1]]$summary.hyperpar
+old_use_hyperpar$metric<-rownames(old_use_hyperpar)
+old_use_hyperpar <- data.table(old_use_hyperpar)
+
+print("Access Dev")
+print("fixed effects")
+check_sameness(old_acc_fixed, new_acc_fixed, sameness_cutoff = 1e-04)
+print("hyperparameters")
+check_sameness(old_acc_hyperpar, new_acc_hyperpar, sameness_cutoff = 1e-04)
+
+print("Use gap")
 print("fixed effects")
 check_sameness(old_use_fixed, new_use_fixed, sameness_cutoff = 1e-04)
 print("hyperparameters")
-check_sameness(old_hyperpar, new_hyperpar, sameness_cutoff = 1e-04)
+check_sameness(old_use_hyperpar, new_use_hyperpar, sameness_cutoff = 1e-04)
 
 
 # 05: .tifs
@@ -186,19 +181,3 @@ for (this_year in 2000:2016){
 }
 graphics.off()
 
-
-
-
-
-## Archival from covariate discrepancy:
-
-# test <- data[evy!=compare_data$evy]
-# compare_test <- compare_data[evy!=data$evy]
-# 
-# incorrect_points <- data.table(cellnumber=c(901138, 1027886, 1603132, 2141192),
-#                                flooryear=c(2008, 2014, 2014, 2004),
-#                                month=c(12, 2, 10, 12),
-#                                sub_cellnumber=c(896098, 1026206, 1591372, 2137832))
-# 
-# dyn_data <- merge(compare_data, incorrect_points, by=c("cellnumber", "flooryear", "month"), all.x=T)
-# dyn_data[is.na(sub_cellnumber), sub_cellnumber:=cellnumber]

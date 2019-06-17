@@ -12,6 +12,7 @@ predict_rasters <- function(input_dir, cov_dir, func_dir, main_indir, main_outdi
   
   set.seed(212)
   out_dir <- file.path(main_outdir, "05_predictions")
+  if (!dir.exists(out_dir)){dir.create(out_dir)}
   
   # TODO: load shapefiles and templates only when you're actually plotting (objects named World, Africa, Water, img)
   print("loading inla outputs and relevant functions")
@@ -50,17 +51,42 @@ predict_rasters <- function(input_dir, cov_dir, func_dir, main_indir, main_outdi
   
   INLA:::inla.dynload.workaround() 
   
-  # todo: why the capping at 2015?
+  # note: the mesh objects from access dev or use gap should be the same-- we just pick the access dev ones here.
   spatial_mesh <-  copy(inla_outputs[["access_dev"]][["spatial_mesh"]])
   temporal_mesh <- inla.mesh.1d(seq(2000,2015,by=2),interval=c(2000,2015),degree=2)
   
-  A_matrix <-inla.spde.make.A(spatial_mesh, 
-                              loc=as.matrix(prediction_xyz[, list(x,y,z)]), 
-                              group=rep(min(this_year, 2015), length(prediction_indices)),
-                              group.mesh=temporal_mesh)
+  # to replace: temporal_mesh <- copy(inla_outputs[["access_dev"]][["spatial_mesh"]])
   
-
+  ## Find early years to 'squash'  ## ---------------------------------------------------------
+  print("Finding years to squash")
+  stock_and_flow_use <- fread(file.path(input_dir, "stock_and_flow/quarterly_use.csv"))
+  stock_and_flow_use <- stock_and_flow_use[2:nrow(stock_and_flow_use)]
+  names(stock_and_flow_use) <- c("country", seq(2000, 2018, 0.25))
+  stock_and_flow_use <- melt(stock_and_flow_use, id.vars = "country", variable.name="year", value.name="use")
+  stock_and_flow_use[, year:=floor(as.numeric(as.character(year)))]
   
+  annual_use <- stock_and_flow_use[year<=max(prediction_years), list(use=mean(use)), by=list(country, year)]
+  annual_use[, to_squash:=as.integer(use<0.02)]
+  squash_map <- dcast.data.table(annual_use, country~year, value.var="to_squash")
+  
+  restrict_indicator <- function(prior_val, current_val){
+    return(ifelse(prior_val==0, 0, current_val))
+  }
+  
+  for (year in prediction_years[2:length(prediction_years)]){
+    squash_map[[as.character(year)]] <- restrict_indicator(squash_map[[as.character(year-1)]], squash_map[[as.character(year)]])
+  }
+  
+  squash_map <- melt(squash_map, id.vars = "country", value.name="to_squash", variable.name="year")
+  squash_map[, year:=as.integer(as.character(year))]
+  squash_map <- merge(squash_map, iso_gaul_map, by="country", all.x=T)
+  
+  # find the country-years for which to 'squash' use to zero
+  squash_map[, country_count:= sum(to_squash), by=list(year)] 
+  years_to_squash <- unique(squash_map[country_count>0]$year)
+  
+  
+  ## Predict and make rasters by year  ## ---------------------------------------------------------
   ncores <- detectCores()
   print(paste("--> Machine has", ncores, "cores available"))
   registerDoParallel(ncores-2)
@@ -68,9 +94,16 @@ predict_rasters <- function(input_dir, cov_dir, func_dir, main_indir, main_outdi
     
     print(paste("predicting for year", this_year))
     
+    ## Year-specific inla matrix  ## --------------------------------------------------------- 
+    A_matrix <-inla.spde.make.A(spatial_mesh, 
+                                loc=as.matrix(prediction_xyz[, list(x,y,z)]), 
+                                group=rep(min(this_year, max(temporal_mesh$interval)), length(prediction_indices)),
+                                group.mesh=temporal_mesh)
+    
+    
     ## Load year-specific covaraites  ## ---------------------------------------------------------
     
-    print("Loading temporal covariates")
+    print(paste(this_year, "Loading dynamic covariates"))
     # TEMP TO COINCIDE WITH SAM: restrict the covariate year to 2001-2013
     cov_year <- min(2013, max(this_year, 2001))
     
@@ -78,18 +111,20 @@ predict_rasters <- function(input_dir, cov_dir, func_dir, main_indir, main_outdi
     dynamic_covs <- fread(file.path(main_indir, paste0("03_dynamic_covariates/dynamic_", cov_year, ".csv")))
     
     # more temp ---
-    annual_covs[, year:= this_year]
+    thisyear_covs[, year:= this_year]
     dynamic_covs[, year:= this_year]
     # ----
     
     thisyear_covs <- merge(static_covs, thisyear_covs, by="cellnumber", all=T)
     thisyear_covs <- merge(thisyear_covs, dynamic_covs, by=c("cellnumber", "year"), all=T)
+    rm(dynamic_covs); gc()
     
     ## Predict access  ## ---------------------------------------------------------
-    print("predicting access deviation")
+    print(paste(this_year, "predicting access deviation"))
     acc_dev_predictions <- predict_inla(model=inla_outputs[["access_dev"]], A_matrix, thisyear_covs, prediction_cells)
+    acc_dev_predictions[, year:=this_year]
     
-    print("finding and plotting access")
+    print(paste(this_year, "calculating access"))
     setnames(acc_dev_predictions, "final_prediction", "access_deviation")
     acc_dev_predictions <- merge(acc_dev_predictions, stock_and_flow_access, by=c("iso3", "year", "month"), all.x=T)
     acc_dev_predictions[, emplogit_access:= emplogit_nat_access + access_deviation]
@@ -121,17 +156,20 @@ predict_rasters <- function(input_dir, cov_dir, func_dir, main_indir, main_outdi
     nat_mean_map[!is.na(national_raster) & is.na(nat_mean_map)] <- 0
     
     # write files
-    print("writing access tifs")
+    print(paste(this_year, "writing access tifs"))
     writeRaster(access_map, file.path(out_dir, paste0("ITN_",this_year,".ACC.tif")),NAflag=-9999,overwrite=TRUE)
     writeRaster(deviation_map, file.path(out_dir, paste0("ITN_",this_year,".DEV.tif")),NAflag=-9999,overwrite=TRUE)
     writeRaster(nat_mean_map, file.path(out_dir, paste0("ITN_", this_year,".MEAN.tif")),NAflag=-9999,overwrite=TRUE)
     
+    rm(acc_dev_predictions_transformed, summary_access, access_map, deviation_map, nat_mean_map)
+    
     
     ## Predict use  ## ---------------------------------------------------------
-    print("predicting use gap")
+    print(paste(this_year, "predicting use gap"))
     use_gap_predictions <- predict_inla(model=inla_outputs[["use_gap"]], A_matrix, thisyear_covs, prediction_cells)
+    use_gap_predictions[, year:=this_year]
     
-    print("finding and plotting use")
+    print(paste(this_year, "calculating use"))
     setnames(use_gap_predictions, "final_prediction", "use_gap")
     
     use_gap_predictions <- merge(use_gap_predictions, acc_dev_predictions, by=c("iso3", "year", "month", "cellnumber"), all=T)
@@ -155,63 +193,29 @@ predict_rasters <- function(input_dir, cov_dir, func_dir, main_indir, main_outdi
     use_gap_map[!is.na(national_raster) & is.na(use_gap_map)] <- 0
     
     # write files
-    print("writing use tifs")
+    print(paste(this_year, "writing use tifs"))
     writeRaster(use_map, file.path(out_dir, paste0("ITN_",this_year,".USE.tif")),NAflag=-9999,overwrite=TRUE)
     writeRaster(use_gap_map, file.path(out_dir, paste0("ITN_",this_year,".GAP.tif")),NAflag=-9999,overwrite=TRUE)
     
-    return(paste(this_year, "Success"))
-    
-  }
-  
-  ## "squash" certain years to zero  ## ---------------------------------------------------------
-  
-  if (2016 %in% prediction_years){
-    print("Squashing early years")
-    stock_and_flow_use <- fread(file.path(input_dir, "stock_and_flow/quarterly_use.csv"))
-    stock_and_flow_use <- stock_and_flow_use[2:nrow(stock_and_flow_use)]
-    names(stock_and_flow_use) <- c("country", seq(2000, 2018, 0.25))
-    stock_and_flow_use <- melt(stock_and_flow_use, id.vars = "country", variable.name="year", value.name="use")
-    stock_and_flow_use[, year:=floor(as.numeric(as.character(year)))]
-    
-    annual_use <- stock_and_flow_use[year<=max(prediction_years), list(use=mean(use)), by=list(country, year)]
-    annual_use[, to_squash:=as.integer(use<0.02)]
-    squash_map <- dcast.data.table(annual_use, country~year, value.var="to_squash")
-    
-    restrict_indicator <- function(prior_val, current_val){
-      return(ifelse(prior_val==0, 0, current_val))
-    }
-    
-    for (year in prediction_years[2:length(prediction_years)]){
-      squash_map[[as.character(year)]] <- restrict_indicator(squash_map[[as.character(year-1)]], squash_map[[as.character(year)]])
-    }
-    
-    squash_map <- melt(squash_map, id.vars = "country", value.name="to_squash", variable.name="year")
-    squash_map[, year:=as.integer(as.character(year))]
-    squash_map <- merge(squash_map, iso_gaul_map, by="country", all.x=T)
-    
-    
-    # for all the country-years where "indicator" equals 1, set use to 0
-    squash_map[, country_count:= sum(to_squash), by=list(year)] 
-    
-    years_to_squash <- unique(squash_map[country_count>0]$year)
-    for (this_year in years_to_squash){
-      
-      orig_use <- raster(file.path(out_dir, paste0("ITN_", this_year, ".USE.tif")))
-      
-      new_use <- copy(orig_use)
+    if (this_year %in% years_to_squash){
+      print(paste(this_year, "squashing some countries to zero"))
+      new_use <- copy(use_map)
       gauls_to_squash <- squash_map[year==this_year & to_squash==1]$gaul
       new_use[national_raster %in% gauls_to_squash] <- 0
       
       writeRaster(new_use, file.path(out_dir, paste0("ITN_",this_year,".RAKED_USE.tif")),NAflag=-9999,overwrite=TRUE)
-      }
     }
+    
+    return(paste(this_year, "Success"))
+    
+  }
   
 }
 
 
 if (Sys.getenv("run_individually")!=""){
   
-  # dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-64 --logging gs://map_data_z/users/amelia/logs --input-recursive input_dir=gs://map_data_z/users/amelia/itn_cube/input_data/ main_indir=gs://map_data_z/users/amelia/itn_cube/results/20190614_rearrange_scripts func_dir=gs://map_data_z/users/amelia/itn_cube/code/generate_cube cov_dir=gs://map_data_z/cubes_5k --input run_individually=TRUE CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/05_predict_rasters.r --output-recursive main_outdir=gs://map_data_z/users/amelia/itn_cube/results/20190614_rearrange_scripts/ --command 'Rscript ${CODE}'
+  # dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-highmem-64 --logging gs://map_data_z/users/amelia/logs --input-recursive input_dir=gs://map_data_z/users/amelia/itn_cube/input_data/ main_indir=gs://map_data_z/users/amelia/itn_cube/results/20190614_rearrange_scripts func_dir=gs://map_data_z/users/amelia/itn_cube/code/generate_cube cov_dir=gs://map_data_z/cubes_5k --input run_individually=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/run_individually.txt CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/05_predict_rasters.r --output-recursive main_outdir=gs://map_data_z/users/amelia/itn_cube/results/20190614_rearrange_scripts/ --command 'Rscript ${CODE}'
 
   package_load <- function(package_list){
     # package installation/loading
