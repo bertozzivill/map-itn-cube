@@ -65,15 +65,7 @@ run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, sta
   registerDoParallel(ncores-2)
   inla_outputs<-foreach(outcome_var=c("ihs_emp_access_dev", "ihs_gap2")) %dopar% {
     
-    # preserve this bug for now
-    if (outcome_var=="ihs_emp_access_dev"){
-      # adjust timing of data? this feels important****
-      data[, yearqtr:=pmin(yearqtr, end_year-0.25)]
-    }else if (outcome_var=="ihs_gap2"){
-      data[, yearqtr:=pmin(yearqtr, end_year-1.25)]
-    }else{
-      stop(paste("Unknown outcome variable", outcome_var))
-    }
+    data[, yearqtr:=pmin(yearqtr, end_year-0.25)]
     
     inla_results <- run_inla(data, outcome_var, cov_names, start_year, end_year)
     
