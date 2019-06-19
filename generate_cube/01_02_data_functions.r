@@ -10,20 +10,17 @@
 ## -calc_access: calculate access metrics by household size from stock and flow outputs
 ##############################################################################################################
 
-emplogit2<-function(Y,N){
-  # approximation of a log odds
-  # Y: # of occurrences of interest
-  # N: # of tries
-  top=Y+0.5
-  bottom=N-Y+0.5
-  return(log(top/bottom))
-}
+# lifted from the docs of the empLogit function from the binomTools package
+emplogit <- function (y, eps = 1e-3){
+  log((eps + y)/(1 - y + eps))
+} 
 
-emplogit<-function(Y,tol){
-  # Y: value to transform
-  # tol: tolerance value to prevent zeros
-  top=Y*tol+0.5
-  bottom=tol*(1-Y)+0.5
+emplogit2<-function(y, n){
+  # approximation of a log odds
+  # y: # of occurrences of interest
+  # n: # of tries
+  top=y+0.5
+  bottom=n-Y+0.5
   return(log(top/bottom))
 }
 

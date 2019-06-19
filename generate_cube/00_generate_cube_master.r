@@ -28,7 +28,7 @@ package_load(c("zoo","raster","VGAM", "doParallel", "data.table", "lubridate", "
 
 
 # current dsub:
-# dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-highmem-64 --logging gs://map_data_z/users/amelia/logs --input-recursive input_dir=gs://map_data_z/users/amelia/itn_cube/input_data cov_dir=gs://map_data_z/cubes_5km func_dir=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/ --input CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/00_generate_cube_master.r --output-recursive main_dir=gs://map_data_z/users/amelia/itn_cube/results/20190618_fix_use_year/ --command 'Rscript ${CODE}'
+# dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-highmem-64 --logging gs://map_data_z/users/amelia/logs --input-recursive input_dir=gs://map_data_z/users/amelia/itn_cube/input_data cov_dir=gs://map_data_z/cubes_5km func_dir=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/ --input CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/00_generate_cube_master.r --output-recursive main_dir=gs://map_data_z/users/amelia/itn_cube/results/20190619_new_emplogit/ --command 'Rscript ${CODE}'
 
 ##  Environment Prep  ------------------------------------------------------------
 input_dir <- Sys.getenv("input_dir")
@@ -43,7 +43,7 @@ end_year <- 2016
 print("STEP 1: Formatting stock and flow estimates")
 tic <- Sys.time()
 source(file.path(func_dir, "01_prep_stockandflow.r"))
-prep_stockandflow(input_dir, func_dir, main_outdir=main_dir, use_nat_dists=F)
+prep_stockandflow(input_dir, func_dir, main_outdir=main_dir, use_nat_dists=T)
 toc <- Sys.time()
 time_passed(tic, toc)
 

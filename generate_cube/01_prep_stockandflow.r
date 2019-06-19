@@ -152,7 +152,7 @@ prep_stockandflow <- function(input_dir, func_dir, main_outdir, use_nat_dists=T)
     geom_line() +
     facet_wrap(~iso3)
   
-  stock_and_flow_access[, emplogit_nat_access:=emplogit(nat_access, 1000)] # todo: still don't understand this emplogit calc
+  stock_and_flow_access[, emplogit_nat_access:=emplogit(nat_access)] 
   stock_and_flow_access <- merge(stock_and_flow_access, data.table(year=sort(unique(stock_and_flow_access$year)), month=1:12),  by="year", all=T) # add calendar month back
   stock_and_flow_access <- stock_and_flow_access[, list(iso3, year=floor(year), month, nat_access, emplogit_nat_access)]
   
