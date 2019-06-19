@@ -42,7 +42,7 @@ run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, sta
   # TODO: move this to 01_create_database after your aggregation has been done properly
   # transform via empirical logit and inverse hyperbolic sine
   # OR: bring the use gap transform here too?
-  data[, emp_access_dev:= emplogit2(access_count, cluster_pop) - emplogit(national_access, 1000)]
+  data[, emp_access_dev:= emplogit2(access_count, cluster_pop) - emplogit(national_access)]
   
   theta_acc <- optimise(ihs_loglik, lower=0.001, upper=50, x=data$emp_access_dev, maximum=TRUE)$maximum
   data[, ihs_emp_access_dev:=ihs(emp_access_dev, theta_acc)]
