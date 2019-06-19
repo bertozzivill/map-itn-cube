@@ -18,7 +18,7 @@ predict_rasters <- function(input_dir, cov_dir, func_dir, main_indir, main_outdi
   print("loading inla outputs and relevant functions")
   
   # Load relevant outputs
-  stock_and_flow_access <- fread(file.path(main_indir, "01_stock_and_flow_access_continent_dist.csv"))
+  stock_and_flow_access <- fread(file.path(main_indir, "01_stock_and_flow_access.csv"))
   load(file.path(main_indir, "04_inla_dev_gap.Rdata"))
   
   # load function script
