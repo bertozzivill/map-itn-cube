@@ -121,10 +121,8 @@ prep_stockandflow <- function(input_dir, func_dir, main_outdir, use_nat_dists=T)
     hh_distributions <- rbindlist(hh_distributions)
     
     stock_and_flow <- merge(stock_and_flow, hh_distributions, by=c("iso3", "hh_size"), all=T)
-    access_outdir <- file.path(main_outdir, "01_stock_and_flow_access.csv")
   }else{
     stock_and_flow <- merge(stock_and_flow, hh_dist_all, by=c("hh_size"), all=T)
-    access_outdir <- file.path(main_outdir, "01_stock_and_flow_access_continent_dist.csv")
   }
   
   print("finding year-month-country access across household sizes")
@@ -156,12 +154,13 @@ prep_stockandflow <- function(input_dir, func_dir, main_outdir, use_nat_dists=T)
   stock_and_flow_access <- merge(stock_and_flow_access, data.table(year=sort(unique(stock_and_flow_access$year)), month=1:12),  by="year", all=T) # add calendar month back
   stock_and_flow_access <- stock_and_flow_access[, list(iso3, year=floor(year), month, nat_access, emplogit_nat_access)]
   
-  write.csv(stock_and_flow_access, file=access_outdir, row.names=F)
+  write.csv(stock_and_flow_access, file=file.path(main_outdir, "01_stock_and_flow_access.csv"), row.names=F)
   
 }
 
-
-if (Sys.getenv("run_individually")!=""){
+# to get this to run on your desktop, create a variable in your environment called "run_locally" that has some value.
+# DO NOT set run_locally as an object that exists in this script, that defeats the purpose. 
+if (Sys.getenv("run_individually")!="" | exists("run_locally")){
   
   print("RUNNING SCRIPT INDIVIDUALLY")
   
@@ -178,7 +177,7 @@ if (Sys.getenv("run_individually")!=""){
   
   if(Sys.getenv("input_dir")=="") {
     input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
-    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190614_rearrange_scripts/"
+    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190619_new_emplogit/"
     func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
   } else {
     input_dir <- Sys.getenv("input_dir")
@@ -186,7 +185,7 @@ if (Sys.getenv("run_individually")!=""){
     func_dir <- Sys.getenv("func_dir") 
   }
   
-  prep_stockandflow(input_dir, func_dir, main_outdir, use_nat_dists=F)
+  prep_stockandflow(input_dir, func_dir, main_outdir, use_nat_dists=T)
   
 }
 

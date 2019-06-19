@@ -25,7 +25,7 @@ emplogit2<-function(y, n){
   # y: # of occurrences of interest
   # n: # of tries
   top=y+0.5
-  bottom=n-Y+0.5
+  bottom=n-y+0.5
   return(log(top/bottom))
 }
 

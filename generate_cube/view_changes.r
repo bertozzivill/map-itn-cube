@@ -8,7 +8,7 @@
 ## 
 ##############################################################################################################
 
-# dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --logging gs://map_data_z/users/amelia/logs --input-recursive new_dir=gs://map_data_z/users/amelia/itn_cube/results/20190618_fix_use_year func_dir=gs://map_data_z/users/amelia/itn_cube/code/generate_cube old_dir=gs://map_data_z/users/amelia/itn_cube/results/20190614_rearrange_scripts --input CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/view_changes.r --output out_path=gs://map_data_z/users/amelia/itn_cube/results/20190618_fix_use_year/05_predictions/compare_changes.pdf --command 'Rscript ${CODE}'
+# dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --logging gs://map_data_z/users/amelia/logs --input-recursive new_dir=gs://map_data_z/users/amelia/itn_cube/results/20190619_new_emplogit func_dir=gs://map_data_z/users/amelia/itn_cube/code/generate_cube old_dir=gs://map_data_z/users/amelia/itn_cube/results/20190614_rearrange_scripts --input CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/view_changes.r --output out_path=gs://map_data_z/users/amelia/itn_cube/results/20190619_new_emplogit/05_predictions/compare_changes.pdf --command 'Rscript ${CODE}'
 
 rm(list=ls())
 
@@ -22,9 +22,9 @@ package_load <- function(package_list){
 package_load(c( "raster", "data.table", "rasterVis", "stats", "RColorBrewer", "gridExtra", "ggplot2"))
 
 if(Sys.getenv("func_dir")=="") {
-  new_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190618_fix_use_year/"
+  new_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190619_new_emplogit/"
   old_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190614_rearrange_scripts/"
-  out_path <- file.path(new_dir, "05_predictions/compare_tifs.pdf")
+  out_path <- file.path(new_dir, "05_predictions/view_changes.pdf")
   func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
 } else {
   new_dir <- Sys.getenv("new_dir")
@@ -35,15 +35,78 @@ if(Sys.getenv("func_dir")=="") {
 
 source(file.path(func_dir, "check_file_similarity.r"))
 
+append_dts <- function(old, new){
+  old[, type:="Old"]
+  new[, type:="New"]
+  return(rbind(old, new))
+}
+
+
 pdf(out_path, width=11, height=7)
-# TODO: 01 check stock and flow
+
+## 01: check stock and flow
+
+new_stockflow_means <- fread(file.path(new_dir, "01_stock_and_flow_probs_means.csv"))
+old_stockflow_means <- fread(file.path(old_dir, "01_stock_and_flow_probs_means.csv"))
+all_means <- append_dts(old_stockflow_means, new_stockflow_means)
+all_means[, hh_size:=factor(hh_size)]
+all_means[, prob_any_net:=1-stockflow_prob_no_nets]
+
+means_plot <- ggplot(all_means, aes(x=year, y=stockflow_mean_nets_per_hh, color=hh_size)) +
+              geom_line(aes(linetype=type)) +
+              facet_wrap(~iso3) +
+              labs(title="Stock and Flow: Mean Nets Per HH",
+                   y="Mean Nets")
+print(means_plot)
+
+probs_plot <- ggplot(all_means, aes(x=year, y=prob_any_net, color=hh_size)) +
+              geom_line(aes(linetype=type)) +
+              facet_wrap(~iso3) +
+              labs(title="Stock and Flow: Prob(Any Nets)",
+                   y="Prob(Any Nets)")
+print(probs_plot)
+
+new_stockflow_access <- fread(file.path(new_dir, "01_stock_and_flow_access.csv") )
+old_stockflow_access <- fread(file.path(old_dir, "01_stock_and_flow_access_continent_dist.csv"))
+all_stockflow_access <- append_dts(old_stockflow_access, new_stockflow_access)
+
+all_stockflow_access[, time:=year + (month-1)/12] # temp until you get a "time" var throughout
+stockflow_access_plot <- ggplot(all_stockflow_access, aes(x=time, y=nat_access, color=type)) +
+                          geom_line() +
+                          facet_wrap(~iso3) +
+                          labs(title="Stock and Flow Access",
+                               y="National Access")
+
 
 ## 02: check survey data --TODO plots
 print("comparing old and new data files")
-new_db <- fread(file.path(new_dir, "02_survey_data.csv"))
-old_db <- fread(file.path(old_dir, "02_survey_data.csv"))
+new_data <- fread(file.path(new_dir, "02_survey_data.csv"))
+old_data <- fread(file.path(old_dir, "02_survey_data.csv"))
+all_data <- append_dts(old_data, new_data)
+toplot_data <- melt(all_data, id.vars=c("type", "flooryear", "Survey", "cellnumber"), measure.vars = c("national_access", "gap_2"))
 
-check_sameness(old_db, new_db)
+year_plot <- ggplot(toplot_data, aes(x=factor(flooryear), y=value)) +
+              geom_boxplot(aes(color=type)) +
+              facet_grid(variable ~., scales="free") +
+              theme(legend.position="bottom",
+                    legend.title = element_blank(),
+                    axis.text.x = element_text(angle=45, hjust=1)) +
+              labs(title="Data value by Year",
+                   y="",
+                   x="")
+print(year_plot)
+
+surv_plot <- ggplot(toplot_data, aes(x=Survey, y=value)) +
+              geom_boxplot(aes(color=type)) +
+              facet_grid(variable ~., scales="free") +
+              theme(legend.position="bottom",
+                    legend.title = element_blank(),
+                    axis.text.x = element_text(angle=45, hjust=1)) +
+              labs(title="Data value by Survey",
+                   y="",
+                   x="")
+print(surv_plot)
+
 
 ## 03: check covariates -- TODO plots
 print("comparing old and new data covariate files")
@@ -135,13 +198,23 @@ for (var_name in c("\\.MEAN", "\\.DEV", "\\.ACC", "\\.GAP", "\\.USE", "\\.RAKED_
   print(paste("predicting for", var_name))
   new_stack <- stack(file.path(new_raster_dir, new_files[grepl(var_name, new_files)]))
   old_stack <- stack(file.path(old_raster_dir, old_files[grepl(var_name, old_files)]))
-  stack_diff <- abs(new_stack - old_stack)
+  stack_diff <- new_stack - old_stack
   
+  plot_idx <- 1
   for (this_stack in c(new_stack, old_stack, stack_diff)){
-    stackplot <- levelplot(this_stack,
-                           par.settings=rasterTheme(region=brewer.pal(8, "RdYlGn")),
-                           xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F)
+    
+    if (plot_idx==3){
+      stackplot <- levelplot(this_stack,
+                             par.settings=rasterTheme(region=brewer.pal(8, "PRGn")), at=seq(-1,1,1/4),
+                             xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F)
+    }else{
+      stackplot <- levelplot(this_stack,
+                             par.settings=rasterTheme(region=brewer.pal(8, "RdYlGn")),
+                             xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F)
+    }
+    
     print(stackplot)
+    plot_idx <- plot_idx+1
   }
   
   

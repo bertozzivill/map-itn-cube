@@ -98,6 +98,7 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
     summary_by_cluster <- this_survey_data[, list(Survey=svy,
                                                   lat=mean(latitude),
                                                   lon=mean(longitude),
+                                                  iso3=unique(iso3),
                                                   access_count=sum(n.with.access.to.ITN), # formerly P
                                                   cluster_pop=sum(n.individuals.that.slept.in.surveyed.hhs), # formerly N
                                                   year=mean(year), # TODO: won't always be a round year! 
@@ -150,8 +151,9 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
   
 }
 
-
-if (Sys.getenv("run_individually")!=""){
+# to get this to run on your desktop, create a variable in your environment called "run_locally" that has some value.
+# DO NOT set run_locally as an object that exists in this script, that defeats the purpose. 
+if (Sys.getenv("run_individually")!="" | exists("run_locally")){
   
   print("RUNNING SCRIPT INDIVIDUALLY")
   
@@ -168,8 +170,8 @@ if (Sys.getenv("run_individually")!=""){
   
   if(Sys.getenv("input_dir")=="") {
     input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
-    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190614_rearrange_scripts/"
-    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190614_rearrange_scripts/"
+    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190619_new_emplogit/"
+    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190619_new_emplogit/"
     func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
   } else {
     input_dir <- Sys.getenv("input_dir")
