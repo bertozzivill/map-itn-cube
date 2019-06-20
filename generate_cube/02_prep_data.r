@@ -105,7 +105,7 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
                                                   use_count=sum(n.individuals.that.slept.under.ITN), # formerly Pu
                                                   net_count=sum(n.ITN.per.hh), # formerly T
                                                   # gap_3=mean(1-n.individuals.that.slept.under.ITN/n.with.access.to.ITN, na.rm=T), # formerly gap3
-                                                  national_access=mean(stock_and_flow_access) # formerly Amean
+                                                  national_access=weighted.mean(stock_and_flow_access, n.individuals.that.slept.in.surveyed.hhs) # formerly Amean
     ),
     by=list(Cluster.hh)]
     # summary_by_cluster[, gap_1:=( (access_count/cluster_pop)-(use_count/cluster_pop) ) / (access_count/cluster_pop)] # (access-use)/access
