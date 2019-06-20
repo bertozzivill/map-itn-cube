@@ -104,11 +104,11 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
                                                   year=mean(year), # TODO: won't always be a round year! 
                                                   use_count=sum(n.individuals.that.slept.under.ITN), # formerly Pu
                                                   net_count=sum(n.ITN.per.hh), # formerly T
-                                                  gap_3=mean(1-n.individuals.that.slept.under.ITN/n.with.access.to.ITN, na.rm=T), # formerly gap3
+                                                  # gap_3=mean(1-n.individuals.that.slept.under.ITN/n.with.access.to.ITN, na.rm=T), # formerly gap3
                                                   national_access=mean(stock_and_flow_access) # formerly Amean
     ),
     by=list(Cluster.hh)]
-    summary_by_cluster[, gap_1:=( (access_count/cluster_pop)-(use_count/cluster_pop) ) / (access_count/cluster_pop)] # (access-use)/access
+    # summary_by_cluster[, gap_1:=( (access_count/cluster_pop)-(use_count/cluster_pop) ) / (access_count/cluster_pop)] # (access-use)/access
     summary_by_cluster[, gap_2:=emplogit2(access_count,cluster_pop) - emplogit2(use_count, cluster_pop)] # emplogit difference of access-use
     summary_by_cluster <- summary_by_cluster[order(Cluster.hh)]
     summary_by_cluster[, Cluster.hh:=NULL]
@@ -170,8 +170,8 @@ if (Sys.getenv("run_individually")!="" | exists("run_locally")){
   
   if(Sys.getenv("input_dir")=="") {
     input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
-    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190619_new_emplogit/"
-    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190619_new_emplogit/"
+    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190620_drop_gaps/"
+    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190620_drop_gaps/"
     func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
   } else {
     input_dir <- Sys.getenv("input_dir")

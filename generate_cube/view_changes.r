@@ -22,8 +22,8 @@ package_load <- function(package_list){
 package_load(c( "raster", "data.table", "rasterVis", "stats", "RColorBrewer", "gridExtra", "ggplot2"))
 
 if(Sys.getenv("func_dir")=="") {
-  new_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190619_new_emplogit/"
-  old_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190614_rearrange_scripts/"
+  new_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190620_drop_gaps/"
+  old_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190619_new_emplogit/"
   out_path <- file.path(new_dir, "05_predictions/view_changes.pdf")
   func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
 } else {
@@ -81,7 +81,9 @@ stockflow_access_plot <- ggplot(all_stockflow_access, aes(x=time, y=nat_access, 
 ## 02: check survey data --TODO plots
 print("comparing old and new data files")
 new_data <- fread(file.path(new_dir, "02_survey_data.csv"))
+new_data[, iso3:=NULL]
 old_data <- fread(file.path(old_dir, "02_survey_data.csv"))
+old_data[, c("gap_1", "gap_3"):=NULL]
 all_data <- append_dts(old_data, new_data)
 toplot_data <- melt(all_data, id.vars=c("type", "flooryear", "Survey", "cellnumber"), measure.vars = c("national_access", "gap_2"))
 
