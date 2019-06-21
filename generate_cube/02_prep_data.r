@@ -104,12 +104,10 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
                                                   year=mean(year), # TODO: won't always be a round year! 
                                                   use_count=sum(n.individuals.that.slept.under.ITN), # formerly Pu
                                                   net_count=sum(n.ITN.per.hh), # formerly T
-                                                  # gap_3=mean(1-n.individuals.that.slept.under.ITN/n.with.access.to.ITN, na.rm=T), # formerly gap3
                                                   national_access=weighted.mean(stock_and_flow_access, n.individuals.that.slept.in.surveyed.hhs) # formerly Amean
     ),
     by=list(Cluster.hh)]
-    # summary_by_cluster[, gap_1:=( (access_count/cluster_pop)-(use_count/cluster_pop) ) / (access_count/cluster_pop)] # (access-use)/access
-    summary_by_cluster[, gap_2:=emplogit2(access_count,cluster_pop) - emplogit2(use_count, cluster_pop)] # emplogit difference of access-use
+    # 
     summary_by_cluster <- summary_by_cluster[order(Cluster.hh)]
     summary_by_cluster[, Cluster.hh:=NULL]
     
@@ -119,10 +117,10 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
   # renaming
   final_data<-copy(cluster_stats)
   
-  # Cleanup: remove flawed points, print summary messages, save ------------------------------------------------------------
+  # Cleanup: remove flawed points, print summary messages, aggregate to pixel level, save ------------------------------------------------------------
   
   #print(paste('**OUTPUT MESSAGE** remove points with no cooridnates: there are - ',nrow(data[!complete.cases(data),])))
-  final_data<-final_data[complete.cases(final_data),] # TODO: do you want to be getting rid of cases where the only NA's are in the "gap" values?
+  final_data<-final_data[complete.cases(final_data),]
   
   print(paste("**OUTPUT MESSAGE** remove points with 0 lat 0 lon: there are - ", nrow(final_data[lat==0 & lon==0])))
   final_data<-final_data[lat!=0 & lon!=0]
@@ -141,7 +139,33 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
   print(paste("--> Total number of surveys", length(unique(HH$Survey.hh))))
   
   print(paste("**OUTPUT MESSAGE** Aggregating data at same pixel-quarter"))
-  final_data<-aggregate_data(national_raster, final_data)
+  
+  # snap points in each 5km pixel to centroid
+  cellnumbers<-cellFromXY(national_raster, final_data[, list(lon, lat)])  
+  final_data$cellnumber<-cellnumbers 
+  centroid_latlongs<-xyFromCell(national_raster, cellnumbers)
+  
+  # TODO: check for data points that are duplicates of each other from different sources
+  
+  # update lat/long values
+  final_data[, lon:=centroid_latlongs[,1]]
+  final_data[, lat:=centroid_latlongs[,2]]
+  
+  # TODO: what to do about multiple surveys within a single pixel-quarter? What about pixels that span national boundaries?
+  final_data[, pixel_count:=.N, by=list(yearqtr, cellnumber)]
+  multi_pixel <- final_data[pixel_count>1]
+  final_data[, pixel_count:=NULL]
+  
+  # aggregate to pixel level
+  final_data <- final_data[, list(access_count=sum(access_count),
+                            pixel_pop=sum(cluster_pop),
+                            use_count=sum(use_count),
+                            net_count=sum(net_count),
+                            national_access=weighted.mean(national_access, cluster_pop)),
+                     by=list(cellnumber, lat, lon, year, yearqtr)]
+  
+  final_data[use_count>pixel_pop, use_count:=pixel_pop] # TODO: ask Harry about this discrepancy
+  # TODO: re-associate these values with iso3's (and surveys?)
   
   print(paste("**OUTPUT MESSAGE** get floored year "))
   final_data$flooryear<-floor(final_data$year)
