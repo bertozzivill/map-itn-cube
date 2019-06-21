@@ -74,35 +74,6 @@ calc_access <- function(hh_props, max_nets=40, return_mean=F){
 }
 
 
-aggregate_data<-function(nat_raster, data){
-  
-  # snap points in each 5km pixel to centroid and then aggregate number with access and number in household
-  # TODO: why only aggregate those two numbers?
-  # nat_raster: raster layer of country boundaries
-  # data: data.table to aggregate
-  
-  ce<-cellFromXY(nat_raster, data[, list(lon, lat)])  # get cell numbers
-  data$cellnumber<-ce # update the cell numbers
-  cexy<-xyFromCell(nat_raster, ce)	# get xy from cells
-  # update lat/long values
-  data[, lon:=cexy[,1]]
-  data[, lat:=cexy[,2]]
-  
-  # within each cell: update access_count and cluster_pop to the sum of clusters within the cell
-  data[, access_count:= sum(access_count), by=list(cellnumber, yearqtr)] # sum those with access to a net
-  data[, cluster_pop:= sum(cluster_pop), by=list(cellnumber, yearqtr)] # sum those who slept in house the night before 
-  
-  # Keep only the first cluster in each cell. 
-  # TODO: update this so that instead all columns, not just access_count and cluster_pop, get updated before dropping other rows.
-  data[, groupid:= seq_len(.N), by=list(cellnumber, yearqtr)]
-  data <- data[groupid==1]
-  data[, groupid:=NULL]
-  
-  return(data)
-  
-}
-
-
 reposition_points<-function(nat_raster, points, radius=4){
   
   # nat_raster: raster layer of country boundaries
