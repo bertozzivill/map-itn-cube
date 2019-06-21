@@ -8,7 +8,7 @@
 ## 
 ##############################################################################################################
 
-# dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --logging gs://map_data_z/users/amelia/logs --input-recursive new_dir=gs://map_data_z/users/amelia/itn_cube/results/20190619_new_emplogit func_dir=gs://map_data_z/users/amelia/itn_cube/code/generate_cube old_dir=gs://map_data_z/users/amelia/itn_cube/results/20190614_rearrange_scripts --input CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/view_changes.r --output out_path=gs://map_data_z/users/amelia/itn_cube/results/20190619_new_emplogit/05_predictions/compare_changes.pdf --command 'Rscript ${CODE}'
+# dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --logging gs://map_data_z/users/amelia/logs --input-recursive new_dir=gs://map_data_z/users/amelia/itn_cube/results/20190621_weight_acc_means func_dir=gs://map_data_z/users/amelia/itn_cube/code/generate_cube old_dir=gs://map_data_z/users/amelia/itn_cube/results/20190614_rearrange_scripts --input CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/view_changes.r --output out_path=gs://map_data_z/users/amelia/itn_cube/results/20190621_weight_acc_means/05_predictions/compare_changes.pdf --command 'Rscript ${CODE}'
 
 rm(list=ls())
 
@@ -23,7 +23,7 @@ package_load(c( "raster", "data.table", "rasterVis", "stats", "RColorBrewer", "g
 
 if(Sys.getenv("func_dir")=="") {
   new_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190620_drop_gaps/"
-  old_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190619_new_emplogit/"
+  old_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190614_rearrange_scripts/"
   out_path <- file.path(new_dir, "05_predictions/view_changes.pdf")
   func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
 } else {
@@ -78,14 +78,33 @@ stockflow_access_plot <- ggplot(all_stockflow_access, aes(x=time, y=nat_access, 
                                y="National Access")
 
 
-## 02: check survey data --TODO plots
+## 02: check survey data
 print("comparing old and new data files")
 new_data <- fread(file.path(new_dir, "02_survey_data.csv"))
-new_data[, iso3:=NULL]
 old_data <- fread(file.path(old_dir, "02_survey_data.csv"))
-old_data[, c("gap_1", "gap_3"):=NULL]
+
+if ("gap_1" %in% names(old_data)){
+  old_data[, c("gap_1", "gap_3"):=NULL]
+}
+
+if (!"iso3" %in% names(old_data)){
+  iso_key <- unique(new_data[, list(Survey, iso3)])
+  old_data <- merge(old_data, iso_key, by="Survey", all.x=T)
+}
+
 all_data <- append_dts(old_data, new_data)
-toplot_data <- melt(all_data, id.vars=c("type", "flooryear", "Survey", "cellnumber"), measure.vars = c("national_access", "gap_2"))
+toplot_data <- melt(all_data, id.vars=c("type", "flooryear", "iso3", "Survey", "cellnumber"), measure.vars = c("national_access", "gap_2"))
+
+nat_plot <- ggplot(toplot_data, aes(x=iso3, y=value)) +
+  geom_boxplot(aes(color=type)) +
+  facet_grid(variable ~ ., scales="free") +
+  theme(legend.position="bottom",
+        legend.title = element_blank(),
+        axis.text.x = element_text(angle=45, hjust=1)) +
+  labs(title="Data value by Country",
+       y="",
+       x="")
+print(nat_plot)
 
 year_plot <- ggplot(toplot_data, aes(x=factor(flooryear), y=value)) +
               geom_boxplot(aes(color=type)) +
@@ -110,12 +129,35 @@ surv_plot <- ggplot(toplot_data, aes(x=Survey, y=value)) +
 print(surv_plot)
 
 
-## 03: check covariates -- TODO plots
+## 03: check covariates
 print("comparing old and new data covariate files")
 new_covs <- fread(file.path(new_dir, "03_data_covariates.csv"))
 old_covs <- fread(file.path(old_dir, "03_data_covariates.csv"))
 
-check_sameness(old_covs, new_covs)
+if ("gap_1" %in% names(old_covs)){
+  old_covs[, c("gap_1", "gap_3"):=NULL]
+}
+
+if (!"iso3" %in% names(old_covs)){
+  iso_key <- unique(new_data[, list(Survey, iso3)])
+  old_covs <- merge(old_covs, iso_key, by="Survey", all.x=T)
+}
+
+all_covs <- append_dts(old_covs, new_covs)
+cov_names <- names(new_covs)
+cov_names <- cov_names[!cov_names %in% c(names(new_data), "month", "fulldate", "row_id")]
+toplot_covs <- melt(all_covs, id.vars=c("type", "flooryear", "iso3", "Survey", "cellnumber"), measure.vars = cov_names)
+
+cov_plot <- ggplot(toplot_covs, aes(x=variable, y=value)) +
+              geom_boxplot(aes(color=type)) +
+              facet_wrap( ~ variable, scales="free") +
+              theme(legend.position="bottom",
+                    legend.title = element_blank(),
+                    axis.text.x = element_blank()) +
+              labs(title="Covariate Comparison",
+                   y="",
+                   x="")
+print(cov_plot)
 
 
 ## 04: inla models
@@ -207,7 +249,7 @@ for (var_name in c("\\.MEAN", "\\.DEV", "\\.ACC", "\\.GAP", "\\.USE", "\\.RAKED_
     
     if (plot_idx==3){
       stackplot <- levelplot(this_stack,
-                             par.settings=rasterTheme(region=brewer.pal(8, "PRGn")), at=seq(-1,1,1/4),
+                             par.settings=rasterTheme(region=brewer.pal(8, "PRGn")), at=seq(-1,1,1/8),
                              xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F)
     }else{
       stackplot <- levelplot(this_stack,
