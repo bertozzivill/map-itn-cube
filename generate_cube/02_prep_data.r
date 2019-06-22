@@ -14,6 +14,8 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
   source(file.path(func_dir, "01_02_data_functions.r"))
   
   stock_and_flow_outputs <- fread(file.path(main_indir, "01_stock_and_flow_probs_means.csv"))
+  iso_gaul_map<-fread(file.path(input_dir, "general/iso_gaul_map.csv"))
+  setnames(iso_gaul_map, c("GAUL_CODE", "COUNTRY_ID", "NAME"), c("gaul", "iso3", "country"))
   
   # load household data and survey-to-country key, keep only those in country list
   HH<-fread(file.path(input_dir, "database/ALL_HH_Data_20112017.csv")) # todo: come back and delete cols we don't need. also rename this
@@ -152,9 +154,12 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
   final_data[, lat:=centroid_latlongs[,2]]
   
   # TODO: what to do about multiple surveys within a single pixel-quarter? What about pixels that span national boundaries?
-  final_data[, pixel_count:=.N, by=list(yearqtr, cellnumber)]
-  multi_pixel <- final_data[pixel_count>1]
-  final_data[, pixel_count:=NULL]
+  # ALSO: why are we doing this via the "yearqtr" metric? it should be year-month
+  survey_map <- final_data[, list(Survey, cellnumber, yearqtr)]
+  survey_map[, survey_count:=length(unique(Survey)), by=list(cellnumber, yearqtr)]
+  print(paste(length(unique(survey_map[survey_count>1]$cellnumber)), "pixel-quarters have more than one survey! Keeping all data, but naming with the first survey for now."))
+  survey_map[, survey_idx:=seq_len(.N), by=list(cellnumber, yearqtr)]
+  survey_map <- survey_map[survey_idx==1, list(cellnumber, yearqtr, Survey)]
   
   # aggregate to pixel level
   final_data <- final_data[, list(access_count=sum(access_count),
@@ -165,7 +170,14 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
                      by=list(cellnumber, lat, lon, year, yearqtr)]
   
   final_data[use_count>pixel_pop, use_count:=pixel_pop] # TODO: ask Harry about this discrepancy
-  # TODO: re-associate these values with iso3's (and surveys?)
+  
+  # re-associate with surveys
+  final_data <- merge(final_data, survey_map, by=c("cellnumber", "yearqtr"), all.x=T)
+  
+  # re-associate these values with iso3s
+  final_data[, gaul:=national_raster[cellnumber]]
+  final_data <- merge(final_data, iso_gaul_map[, list(gaul, iso3)], by="gaul", all.x=T)
+  final_data[, gaul:=NULL]
   
   print(paste("**OUTPUT MESSAGE** get floored year "))
   final_data$flooryear<-floor(final_data$year)
