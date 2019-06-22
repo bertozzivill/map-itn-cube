@@ -8,7 +8,7 @@
 ## 
 ##############################################################################################################
 
-# dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --logging gs://map_data_z/users/amelia/logs --input-recursive new_dir=gs://map_data_z/users/amelia/itn_cube/results/20190621_weight_acc_means func_dir=gs://map_data_z/users/amelia/itn_cube/code/generate_cube old_dir=gs://map_data_z/users/amelia/itn_cube/results/20190614_rearrange_scripts --input CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/view_changes.r --output out_path=gs://map_data_z/users/amelia/itn_cube/results/20190621_weight_acc_means/05_predictions/compare_changes.pdf --command 'Rscript ${CODE}'
+# dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --logging gs://map_data_z/users/amelia/logs --input-recursive new_dir=gs://map_data_z/users/amelia/itn_cube/results/20190622_pixel_aggregation func_dir=gs://map_data_z/users/amelia/itn_cube/code/generate_cube old_dir=gs://map_data_z/users/amelia/itn_cube/results/20190614_rearrange_scripts --input CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/view_changes.r --output out_path=gs://map_data_z/users/amelia/itn_cube/results/20190622_pixel_aggregation/05_predictions/compare_changes.pdf --command 'Rscript ${CODE}'
 
 rm(list=ls())
 
@@ -22,7 +22,7 @@ package_load <- function(package_list){
 package_load(c( "raster", "data.table", "rasterVis", "stats", "RColorBrewer", "gridExtra", "ggplot2"))
 
 if(Sys.getenv("func_dir")=="") {
-  new_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190620_drop_gaps/"
+  new_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190622_pixel_aggregation/"
   old_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190614_rearrange_scripts/"
   out_path <- file.path(new_dir, "05_predictions/view_changes.pdf")
   func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
@@ -84,19 +84,29 @@ new_data <- fread(file.path(new_dir, "02_survey_data.csv"))
 old_data <- fread(file.path(old_dir, "02_survey_data.csv"))
 
 if ("gap_1" %in% names(old_data)){
-  old_data[, c("gap_1", "gap_3"):=NULL]
+  old_data[, c("gap_1", "gap_2", "gap_3"):=NULL]
 }
 
 if (!"iso3" %in% names(old_data)){
-  iso_key <- unique(new_data[, list(Survey, iso3)])
-  old_data <- merge(old_data, iso_key, by="Survey", all.x=T)
+  iso_key <- unique(new_data[, list(cellnumber, iso3)])
+  old_data <- merge(old_data, iso_key, by="cellnumber", all.x=T)
+}
+
+if ("cluster_pop" %in% names(old_data)){
+  setnames(old_data, "cluster_pop", "pixel_pop")
 }
 
 all_data <- append_dts(old_data, new_data)
-toplot_data <- melt(all_data, id.vars=c("type", "flooryear", "iso3", "Survey", "cellnumber"), measure.vars = c("national_access", "gap_2"))
+
+all_data[, access:=access_count/pixel_pop]
+all_data[, access_dev:=national_access-access]
+all_data[, use:=use_count/pixel_pop]
+all_data[, use_gap:=access-use]
+
+toplot_data <- melt(all_data, id.vars=c("type", "flooryear", "iso3", "Survey", "cellnumber"), measure.vars = c("national_access", "access", "access_dev", "use", "use_gap"))
 
 nat_plot <- ggplot(toplot_data, aes(x=iso3, y=value)) +
-  geom_boxplot(aes(color=type)) +
+  geom_boxplot(aes(color=type, fill=type), alpha=0.25) +
   facet_grid(variable ~ ., scales="free") +
   theme(legend.position="bottom",
         legend.title = element_blank(),
@@ -107,7 +117,7 @@ nat_plot <- ggplot(toplot_data, aes(x=iso3, y=value)) +
 print(nat_plot)
 
 year_plot <- ggplot(toplot_data, aes(x=factor(flooryear), y=value)) +
-              geom_boxplot(aes(color=type)) +
+              geom_boxplot(aes(color=type, fill=type), alpha=0.25) +
               facet_grid(variable ~., scales="free") +
               theme(legend.position="bottom",
                     legend.title = element_blank(),
@@ -118,7 +128,7 @@ year_plot <- ggplot(toplot_data, aes(x=factor(flooryear), y=value)) +
 print(year_plot)
 
 surv_plot <- ggplot(toplot_data, aes(x=Survey, y=value)) +
-              geom_boxplot(aes(color=type)) +
+              geom_boxplot(aes(color=type, fill=type), alpha=0.25) +
               facet_grid(variable ~., scales="free") +
               theme(legend.position="bottom",
                     legend.title = element_blank(),
@@ -135,12 +145,16 @@ new_covs <- fread(file.path(new_dir, "03_data_covariates.csv"))
 old_covs <- fread(file.path(old_dir, "03_data_covariates.csv"))
 
 if ("gap_1" %in% names(old_covs)){
-  old_covs[, c("gap_1", "gap_3"):=NULL]
+  old_covs[, c("gap_1", "gap_2", "gap_3"):=NULL]
 }
 
 if (!"iso3" %in% names(old_covs)){
-  iso_key <- unique(new_data[, list(Survey, iso3)])
-  old_covs <- merge(old_covs, iso_key, by="Survey", all.x=T)
+  iso_key <- unique(new_covs[, list(cellnumber, iso3)])
+  old_covs <- merge(old_covs, iso_key, by="cellnumber", all.x=T)
+}
+
+if ("cluster_pop" %in% names(old_covs)){
+  setnames(old_covs, "cluster_pop", "pixel_pop")
 }
 
 all_covs <- append_dts(old_covs, new_covs)
@@ -149,7 +163,7 @@ cov_names <- cov_names[!cov_names %in% c(names(new_data), "month", "fulldate", "
 toplot_covs <- melt(all_covs, id.vars=c("type", "flooryear", "iso3", "Survey", "cellnumber"), measure.vars = cov_names)
 
 cov_plot <- ggplot(toplot_covs, aes(x=variable, y=value)) +
-              geom_boxplot(aes(color=type)) +
+              geom_boxplot(aes(color=type, fill=type), alpha=0.25) +
               facet_wrap( ~ variable, scales="free") +
               theme(legend.position="bottom",
                     legend.title = element_blank(),
