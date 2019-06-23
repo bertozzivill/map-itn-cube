@@ -56,9 +56,8 @@ run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, sta
   # shuffle row order (why?)
   data <- data[sample(1:nrow(data),replace=F),]
   
-  # transform time to quarterly values (why?); limit data to chosen "end year"
-  data[, yearqtr:= as.numeric(as.yearqtr(time))]
-  data[, yearqtr:=pmin(yearqtr, end_year-0.25)]
+  # limit data to chosen "end year"
+  data[, capped_time:=pmin(time, end_year-0.046)]
   
   ## Run model ##-------------------------------------------------------------
   
