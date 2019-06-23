@@ -62,8 +62,8 @@ predict_rasters <- function(input_dir, cov_dir, func_dir, main_indir, main_outdi
   stock_and_flow_use <- fread(file.path(input_dir, "stock_and_flow/quarterly_use.csv"))
   stock_and_flow_use <- stock_and_flow_use[2:nrow(stock_and_flow_use)]
   names(stock_and_flow_use) <- c("country", seq(2000, 2018, 0.25))
-  stock_and_flow_use <- melt(stock_and_flow_use, id.vars = "country", variable.name="year", value.name="use")
-  stock_and_flow_use[, year:=floor(as.numeric(as.character(year)))]
+  stock_and_flow_use <- melt(stock_and_flow_use, id.vars = "country", variable.name="time", value.name="use")
+  stock_and_flow_use[, year:=floor(as.numeric(as.character(time)))]
   
   annual_use <- stock_and_flow_use[year<=max(prediction_years), list(use=mean(use)), by=list(country, year)]
   annual_use[, to_squash:=as.integer(use<0.02)]

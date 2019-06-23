@@ -13,8 +13,6 @@ prep_covariates <- function(input_dir, cov_dir, func_dir, main_indir, main_outdi
   
   # Load data from create_database.r, and list of covariates  ------------------------------------------------------------
   data<-fread(file.path(main_indir, "02_survey_data.csv"))
-  data[, fulldate:=as.Date(as.yearmon(year))] # todo: move this to a "time" column
-  data[, month:=month(fulldate)]
   data[, row_id:=as.integer(row.names(data))]
   
   # load covariates, keep only those used by sam in the most recent code
@@ -74,9 +72,7 @@ prep_covariates <- function(input_dir, cov_dir, func_dir, main_indir, main_outdi
   all_annual <- rbindlist(all_annual)
   
   # isolate values for data
-  setnames(all_annual, "year", "flooryear")
-  data <- merge(data, all_annual, by=c("flooryear", "cellnumber"), all.x=T)
-  setnames(all_annual, "flooryear", "year")
+  data <- merge(data, all_annual, by=c("year", "cellnumber"), all.x=T)
   write.csv(all_annual, file.path(main_outdir, "03_annual_covariates.csv"), row.names = F)
   
   rm(all_annual); gc()
@@ -126,26 +122,21 @@ prep_covariates <- function(input_dir, cov_dir, func_dir, main_indir, main_outdi
   all_dynamic <- rbindlist(all_dynamic)
   
   # isolate values for data
-  setnames(all_dynamic, "year", "flooryear")
-  
-  
   # -------TEMP: for the four cell values that are mis-extracted, preserve the bug for now by replacing the correct with the incorrect values 
   incorrect_points <- data.table(cellnumber=c(901138, 1027886, 1603132, 2141192),
-                                 flooryear=c(2008, 2014, 2014, 2004),
+                                 year=c(2008, 2014, 2014, 2004),
                                  month=c(12, 2, 10, 12),
                                  sub_cellnumber=c(896098, 1026206, 1591372, 2137832))
   
-  data <- merge(data, incorrect_points, by=c("cellnumber", "flooryear", "month"), all.x=T)
+  data <- merge(data, incorrect_points, by=c("cellnumber", "year", "month"), all.x=T)
   data[is.na(sub_cellnumber), sub_cellnumber:=cellnumber]
   
   setnames(all_dynamic, "cellnumber", "sub_cellnumber")
-  data <- merge(data, all_dynamic, by=c("flooryear", "month", "sub_cellnumber"), all.x=T)
+  data <- merge(data, all_dynamic, by=c("year", "month", "sub_cellnumber"), all.x=T)
   data[, sub_cellnumber:=NULL]
   setnames(all_dynamic, "sub_cellnumber", "cellnumber")
   
   ### -----------------------------------
-  
-  setnames(all_dynamic, "flooryear", "year")
   
   # save dynamic covariates(by year)
   print("saving dynamic covariates by year")

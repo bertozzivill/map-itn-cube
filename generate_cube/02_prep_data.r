@@ -34,7 +34,7 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
                                                              n.individuals.that.slept.under.ITN,
                                                              n.ITN.per.hh)]
   
-  # TODO: remove missing values up here instead of at the end
+  # TODO: data checks
   
   
   # Remove households with size zero or NA
@@ -53,9 +53,8 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
   registerDoParallel(ncores-2)
   cluster_stats<-foreach(i=1:length(unique_surveys),.combine=rbind) %dopar% { #survey loop
     
-    svy<-unique_surveys[i] # store survey
-    
-    this_survey_data=HH[Survey.hh==svy,] # keep only household data for the survey in question
+    this_survey<-unique_surveys[i]
+    this_survey_data=HH[Survey.hh==this_survey,] # keep only household data for the survey in question
     un<-unique(this_survey_data$Cluster.hh) # get unique cluster IDs for that household survey
     
     ## find distribution of household sizes in this survey as measured by the number of people sleeping under a net the night before
@@ -64,15 +63,17 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
     household_props <- this_survey_data[, list(hh_size_prop=sum(sample.prop)), by=list(Survey.hh, capped.n.sleeping.in.hhs)]
     
     household_props <- household_props[order(Survey.hh, capped.n.sleeping.in.hhs)]
-    
-    these_years <- unique(this_survey_data$year)
-    household_props <- rbindlist(replicate(length(these_years), household_props, simplify=F))
-    household_props[, year:=sort(rep(these_years, 10))]
-    household_props[, iso3:=unique(this_survey_data$iso3)]
     setnames(household_props, "capped.n.sleeping.in.hhs", "hh_size")
     
+    unique_times <- unique(this_survey_data[, list(year, month)])
+    reps <- nrow(unique_times)
+    unique_times <- rbindlist(replicate(10, unique_times, simplify = F))
+    unique_times[, hh_size:=sort(rep(1:10, reps))]
+    household_props <- merge(household_props, unique_times, by="hh_size", all=T)
+    household_props[, iso3:=unique(this_survey_data$iso3)]
+    
     # merge on stock and flow values
-    household_props <- merge(household_props, stock_and_flow_outputs, by=c("iso3", "hh_size", "year"), all.x=T)
+    household_props <- merge(household_props, stock_and_flow_outputs, by=c("iso3", "hh_size", "year", "month"), all.x=T)
     
     if (nrow(household_props[is.na(stockflow_mean_nets_per_hh)])>0 | nrow(household_props[is.na(stockflow_prob_no_nets)])>0){
       warning("Your stock and flow values did not merge properly")
@@ -82,9 +83,9 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
     household_props[, weighted_prob_no_nets:=hh_size_prop*stockflow_prob_no_nets]
     household_props[, weighted_prob_any_net:=hh_size_prop*(1-stockflow_prob_no_nets)]
     
-    # TODO: fix such that access stats are actually calculated at their *month* of collection, not just year
-    household_props <- lapply(unique(household_props$year), function(this_year){
-      subset <- household_props[year==this_year]
+    # calculate national access for each household size and month
+    household_props <- lapply(unique(household_props$time), function(this_time){
+      subset <- household_props[time==this_time]
       access_stats <- calc_access(subset)
       subset <- merge(subset, access_stats, by="hh_size", all=T)
       return(subset)
@@ -92,26 +93,24 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
     
     household_props <- rbindlist(household_props)
     
-    this_survey_data <- merge(this_survey_data, household_props[, list(year, capped.n.sleeping.in.hhs=hh_size, stock_and_flow_access)],
-                              by=c("year", "capped.n.sleeping.in.hhs"), all.x=T)
+    this_survey_data <- merge(this_survey_data, household_props[, list(time, year, month, capped.n.sleeping.in.hhs=hh_size, stock_and_flow_access)],
+                              by=c("year", "month", "capped.n.sleeping.in.hhs"), all.x=T)
     
     
     # aggregate to cluster level
-    summary_by_cluster <- this_survey_data[, list(Survey=svy,
+    summary_by_cluster <- this_survey_data[, list(survey=this_survey,
                                                   lat=mean(latitude),
                                                   lon=mean(longitude),
-                                                  iso3=unique(iso3),
                                                   access_count=sum(n.with.access.to.ITN), # formerly P
                                                   cluster_pop=sum(n.individuals.that.slept.in.surveyed.hhs), # formerly N
-                                                  year=mean(year), # TODO: won't always be a round year! 
                                                   use_count=sum(n.individuals.that.slept.under.ITN), # formerly Pu
                                                   net_count=sum(n.ITN.per.hh), # formerly T
                                                   national_access=weighted.mean(stock_and_flow_access, n.individuals.that.slept.in.surveyed.hhs) # formerly Amean
     ),
-    by=list(Cluster.hh)]
-    # 
+    by=list(iso3, Cluster.hh, time, year, month)]
+     
     summary_by_cluster <- summary_by_cluster[order(Cluster.hh)]
-    summary_by_cluster[, Cluster.hh:=NULL]
+    setnames(summary_by_cluster, "Cluster.hh", "cluster")
     
     return(summary_by_cluster)
   }
@@ -130,7 +129,6 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
   # Check for invalid points, and attempt to reposition them
   national_raster<-raster(file.path(input_dir, "general/african_cn5km_2013_no_disputes.tif")) # master country layer
   NAvalue(national_raster)=-9999
-  final_data$yearqtr<-as.numeric(as.yearqtr(final_data$year))
   
   print(paste("**OUTPUT MESSAGE** Attempting to reposition points"))
   final_data<-reposition_points(national_raster, final_data, 4)
@@ -140,7 +138,7 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
   print(paste("--> Total number countries", length(unique(HH$Country))))
   print(paste("--> Total number of surveys", length(unique(HH$Survey.hh))))
   
-  print(paste("**OUTPUT MESSAGE** Aggregating data at same pixel-quarter"))
+  print(paste("**OUTPUT MESSAGE** Aggregating data at same pixel-month"))
   
   # snap points in each 5km pixel to centroid
   cellnumbers<-cellFromXY(national_raster, final_data[, list(lon, lat)])  
@@ -154,12 +152,11 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
   final_data[, lat:=centroid_latlongs[,2]]
   
   # TODO: what to do about multiple surveys within a single pixel-quarter? What about pixels that span national boundaries?
-  # ALSO: why are we doing this via the "yearqtr" metric? it should be year-month
-  survey_map <- final_data[, list(Survey, cellnumber, yearqtr)]
-  survey_map[, survey_count:=length(unique(Survey)), by=list(cellnumber, yearqtr)]
+  survey_map <- final_data[, list(survey, cellnumber, time)]
+  survey_map[, survey_count:=length(unique(survey)), by=list(cellnumber, time)]
   print(paste(length(unique(survey_map[survey_count>1]$cellnumber)), "pixel-quarters have more than one survey! Keeping all data, but naming with the first survey for now."))
-  survey_map[, survey_idx:=seq_len(.N), by=list(cellnumber, yearqtr)]
-  survey_map <- survey_map[survey_idx==1, list(cellnumber, yearqtr, Survey)]
+  survey_map[, survey_idx:=seq_len(.N), by=list(cellnumber, time)]
+  survey_map <- survey_map[survey_idx==1, list(cellnumber, time, survey)]
   
   # aggregate to pixel level
   final_data <- final_data[, list(access_count=sum(access_count),
@@ -167,20 +164,19 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
                             use_count=sum(use_count),
                             net_count=sum(net_count),
                             national_access=weighted.mean(national_access, cluster_pop)),
-                     by=list(cellnumber, lat, lon, year, yearqtr)]
+                     by=list(cellnumber, lat, lon, time, year, month)]
   
   final_data[use_count>pixel_pop, use_count:=pixel_pop] # TODO: ask Harry about this discrepancy
   
   # re-associate with surveys
-  final_data <- merge(final_data, survey_map, by=c("cellnumber", "yearqtr"), all.x=T)
+  final_data <- merge(final_data, survey_map, by=c("cellnumber", "time"), all.x=T)
   
   # re-associate these values with iso3s
   final_data[, gaul:=national_raster[cellnumber]]
   final_data <- merge(final_data, iso_gaul_map[, list(gaul, iso3)], by="gaul", all.x=T)
   final_data[, gaul:=NULL]
-  
-  print(paste("**OUTPUT MESSAGE** get floored year "))
-  final_data$flooryear<-floor(final_data$year)
+
+  setcolorder(final_data, c("survey", "iso3", "cellnumber", "lat", "lon", "time", "year", "month", "access_count", "use_count", "net_count", "pixel_pop", "national_access"))
   
   print(paste("--> Writing to", out_fname))
   write.csv(final_data, out_fname, row.names=FALSE)
@@ -206,8 +202,8 @@ if (Sys.getenv("run_individually")!="" | exists("run_locally")){
   
   if(Sys.getenv("input_dir")=="") {
     input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
-    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190622_pixel_aggregation/"
-    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190622_pixel_aggregation/"
+    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190622_restructure_time/"
+    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190622_restructure_time/"
     func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
   } else {
     input_dir <- Sys.getenv("input_dir")

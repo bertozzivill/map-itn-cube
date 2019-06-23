@@ -36,9 +36,8 @@ prep_stockandflow <- function(input_dir, func_dir, main_outdir, use_nat_dists=T)
     end_year <- floor(max(quarterly_times)-1)
     # get your desired monthly outputs as decimal dates
     # TODO: change from year divided equally by 12 to beginning/middle of month when you properly account for months in hh data
-    # monthly_times <- decimal_date(seq(as.Date(paste0(start_year, "/1/1")), by = "month", length.out = (end_year-start_year)*12))
-    monthly_times <- expand.grid(1:12, start_year:end_year)
-    monthly_times <- as.numeric(as.yearmon(paste(monthly_times[,2], monthly_times[,1], sep="-")))
+    full_times <- seq(as.Date(paste0(start_year, "/1/15")), by = "month", length.out = (end_year-start_year)*12)
+    monthly_times <- decimal_date(full_times)
     
     # for p0 and p1, interpolate to monthly prob_no_nets and mean_nets_per_hh
     country_subset <- lapply(1:2, function(layer){
@@ -47,11 +46,14 @@ prep_stockandflow <- function(input_dir, func_dir, main_outdir, use_nat_dists=T)
     country_subset <- rbindlist(country_subset)
     
     # add identifying information
-    country_subset[, year:=rep(monthly_times, 2)]
+    country_subset[, time:=rep(full_times, 2)]
+    country_subset[, year:=year(time)]
+    country_subset[, month:=month(time)]
+    country_subset[, time:=decimal_date(time)]
     country_subset[, iso3:=this_iso]
     country_subset[, metric:=c(rep("stockflow_prob_no_nets", length(monthly_times)), rep("stockflow_mean_nets_per_hh", length(monthly_times)))]
-    country_subset <- data.table::melt(country_subset, id.vars=c("iso3", "metric", "year"), variable.name="hh_size")
-    country_subset <- dcast.data.table(country_subset, iso3 + year + hh_size ~ metric)
+    country_subset <- data.table::melt(country_subset, id.vars=c("iso3", "metric", "time", "year", "month"), variable.name="hh_size")
+    country_subset <- dcast.data.table(country_subset, iso3 + time + year + month + hh_size ~ metric)
     
     return(country_subset)
   })
@@ -131,28 +133,26 @@ prep_stockandflow <- function(input_dir, func_dir, main_outdir, use_nat_dists=T)
   stock_and_flow[, weighted_prob_no_nets:=hh_size_prop*stockflow_prob_no_nets]
   stock_and_flow[, weighted_prob_any_net:=hh_size_prop*(1-stockflow_prob_no_nets)]
   
+  time_map <- unique(stock_and_flow[, list(time, year, month)])
+  
   # calculate year-month-country access
   stock_and_flow_access <- lapply(unique(stock_and_flow$iso3), function(this_iso){
     print(this_iso)
-    country_access <- lapply(unique(stock_and_flow$year), function(this_time){
-      subset <- stock_and_flow[iso3==this_iso & year==this_time]
+    country_access <- lapply(unique(stock_and_flow$time), function(this_time){
+      subset <- stock_and_flow[iso3==this_iso & time==this_time]
       access <- calc_access(subset, return_mean = T)
       return(data.table(iso3=this_iso, 
-                        year=this_time,
+                        time=this_time,
                         nat_access=access)
       )
     })
     return(rbindlist(country_access))
   })
   stock_and_flow_access <- rbindlist(stock_and_flow_access)
+  stock_and_flow_access[, emplogit_nat_access:=emplogit(nat_access)]
   
-  ggplot(stock_and_flow_access, aes(x=year, y=nat_access)) +
-    geom_line() +
-    facet_wrap(~iso3)
-  
-  stock_and_flow_access[, emplogit_nat_access:=emplogit(nat_access)] 
-  stock_and_flow_access <- merge(stock_and_flow_access, data.table(year=sort(unique(stock_and_flow_access$year)), month=1:12),  by="year", all=T) # add calendar month back
-  stock_and_flow_access <- stock_and_flow_access[, list(iso3, year=floor(year), month, nat_access, emplogit_nat_access)]
+  stock_and_flow_access <- merge(stock_and_flow_access, time_map,  by="time", all=T)
+  stock_and_flow_access <- stock_and_flow_access[, list(iso3, time, year, month, nat_access, emplogit_nat_access)]
   
   write.csv(stock_and_flow_access, file=file.path(main_outdir, "01_stock_and_flow_access.csv"), row.names=F)
   
@@ -177,7 +177,7 @@ if (Sys.getenv("run_individually")!="" | exists("run_locally")){
   
   if(Sys.getenv("input_dir")=="") {
     input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
-    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190622_pixel_aggregation/"
+    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190622_restructure_time/"
     func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
   } else {
     input_dir <- Sys.getenv("input_dir")
