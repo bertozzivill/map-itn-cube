@@ -278,11 +278,11 @@ for (var_name in c("\\.MEAN", "\\.DEV", "\\.ACC", "\\.GAP", "\\.USE", "\\.RAKED_
     
     if (plot_idx==3){
       stackplot <- levelplot(this_stack,
-                             par.settings=rasterTheme(region=brewer.pal(8, "PRGn")), at=seq(-1,1,1/8),
+                             par.settings=rasterTheme(region=brewer.pal(10, "RdBu")), at=seq(-1,1,0.5),
                              xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F)
     }else{
       stackplot <- levelplot(this_stack,
-                             par.settings=rasterTheme(region=brewer.pal(8, "RdYlGn")),
+                             par.settings=rasterTheme(region=brewer.pal(9, "YlGn")),
                              xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F)
     }
     
