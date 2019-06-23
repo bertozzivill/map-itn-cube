@@ -56,14 +56,16 @@ run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, sta
   # shuffle row order (why?)
   data <- data[sample(1:nrow(data),replace=F),]
   
+  # transform time to quarterly values (why?); limit data to chosen "end year"
+  data[, yearqtr:= as.numeric(as.yearqtr(time))]
+  data[, yearqtr:=pmin(yearqtr, end_year-0.25)]
+  
   ## Run model ##-------------------------------------------------------------
   
   ncores <- detectCores()
   print(paste("--> Machine has", ncores, "cores available"))
   registerDoParallel(ncores-2)
   inla_outputs<-foreach(outcome_var=c("ihs_emp_access_dev", "ihs_gap2")) %dopar% {
-    
-    data[, yearqtr:=pmin(yearqtr, end_year-0.25)]
     
     inla_results <- run_inla(data, outcome_var, cov_names, start_year, end_year)
     
