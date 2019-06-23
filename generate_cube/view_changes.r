@@ -8,7 +8,7 @@
 ## 
 ##############################################################################################################
 
-# dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --logging gs://map_data_z/users/amelia/logs --input-recursive new_dir=gs://map_data_z/users/amelia/itn_cube/results/20190622_pixel_aggregation func_dir=gs://map_data_z/users/amelia/itn_cube/code/generate_cube old_dir=gs://map_data_z/users/amelia/itn_cube/results/20190614_rearrange_scripts --input CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/view_changes.r --output out_path=gs://map_data_z/users/amelia/itn_cube/results/20190622_pixel_aggregation/05_predictions/compare_changes.pdf --command 'Rscript ${CODE}'
+# dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --logging gs://map_data_z/users/amelia/logs --input-recursive new_dir=gs://map_data_z/users/amelia/itn_cube/results/20190622_restructure_time func_dir=gs://map_data_z/users/amelia/itn_cube/code/generate_cube old_dir=gs://map_data_z/users/amelia/itn_cube/results/20190614_rearrange_scripts --input CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/view_changes.r --output out_path=gs://map_data_z/users/amelia/itn_cube/results/20190622_restructure_time/05_predictions/compare_changes.pdf --command 'Rscript ${CODE}'
 
 rm(list=ls())
 
@@ -22,7 +22,7 @@ package_load <- function(package_list){
 package_load(c( "raster", "data.table", "rasterVis", "stats", "RColorBrewer", "gridExtra", "ggplot2"))
 
 if(Sys.getenv("func_dir")=="") {
-  new_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190622_pixel_aggregation/"
+  new_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190622_restructure_time/"
   old_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190614_rearrange_scripts/"
   out_path <- file.path(new_dir, "05_predictions/view_changes.pdf")
   func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
@@ -45,21 +45,27 @@ append_dts <- function(old, new){
 pdf(out_path, width=11, height=7)
 
 ## 01: check stock and flow
-
+print("comparing old and new stock and flow files")
 new_stockflow_means <- fread(file.path(new_dir, "01_stock_and_flow_probs_means.csv"))
 old_stockflow_means <- fread(file.path(old_dir, "01_stock_and_flow_probs_means.csv"))
+
+if (!"time" %in% names(old_stockflow_means)){
+  setnames(old_stockflow_means, "year", "time")
+  new_stockflow_means[, c("year", "month") := NULL]
+}
+
 all_means <- append_dts(old_stockflow_means, new_stockflow_means)
 all_means[, hh_size:=factor(hh_size)]
 all_means[, prob_any_net:=1-stockflow_prob_no_nets]
 
-means_plot <- ggplot(all_means, aes(x=year, y=stockflow_mean_nets_per_hh, color=hh_size)) +
+means_plot <- ggplot(all_means, aes(x=time, y=stockflow_mean_nets_per_hh, color=hh_size)) +
               geom_line(aes(linetype=type)) +
               facet_wrap(~iso3) +
               labs(title="Stock and Flow: Mean Nets Per HH",
                    y="Mean Nets")
 print(means_plot)
 
-probs_plot <- ggplot(all_means, aes(x=year, y=prob_any_net, color=hh_size)) +
+probs_plot <- ggplot(all_means, aes(x=time, y=prob_any_net, color=hh_size)) +
               geom_line(aes(linetype=type)) +
               facet_wrap(~iso3) +
               labs(title="Stock and Flow: Prob(Any Nets)",
@@ -68,15 +74,21 @@ print(probs_plot)
 
 new_stockflow_access <- fread(file.path(new_dir, "01_stock_and_flow_access.csv") )
 old_stockflow_access <- fread(file.path(old_dir, "01_stock_and_flow_access_continent_dist.csv"))
+
+if (!"time" %in% names(old_stockflow_access)){
+  time_map <- unique(new_stockflow_access[, list(time, year, month)])
+  old_stockflow_access <- merge(old_stockflow_access, time_map, by=c("year", "month")) # will sometimes drop last year of old stock and flow, that's fine
+}
+
 all_stockflow_access <- append_dts(old_stockflow_access, new_stockflow_access)
 
-all_stockflow_access[, time:=year + (month-1)/12] # temp until you get a "time" var throughout
 stockflow_access_plot <- ggplot(all_stockflow_access, aes(x=time, y=nat_access, color=type)) +
                           geom_line() +
                           facet_wrap(~iso3) +
                           labs(title="Stock and Flow Access",
                                y="National Access")
 
+print(stockflow_access_plot)
 
 ## 02: check survey data
 print("comparing old and new data files")
@@ -93,7 +105,9 @@ if (!"iso3" %in% names(old_data)){
 }
 
 if ("cluster_pop" %in% names(old_data)){
-  setnames(old_data, "cluster_pop", "pixel_pop")
+  setnames(old_data, c("cluster_pop", "Survey", "flooryear", "year"), c("pixel_pop", "survey", "year", "time"))
+  old_data[, yearqtr:=NULL]
+  new_data[, month:=NULL]
 }
 
 all_data <- append_dts(old_data, new_data)
@@ -103,7 +117,7 @@ all_data[, access_dev:=national_access-access]
 all_data[, use:=use_count/pixel_pop]
 all_data[, use_gap:=access-use]
 
-toplot_data <- melt(all_data, id.vars=c("type", "flooryear", "iso3", "Survey", "cellnumber"), measure.vars = c("national_access", "access", "access_dev", "use", "use_gap"))
+toplot_data <- melt(all_data, id.vars=c("type", "year", "iso3", "survey", "cellnumber"), measure.vars = c("national_access", "access", "access_dev", "use", "use_gap"))
 
 nat_plot <- ggplot(toplot_data, aes(x=iso3, y=value)) +
   geom_boxplot(aes(color=type, fill=type), alpha=0.25) +
@@ -116,7 +130,7 @@ nat_plot <- ggplot(toplot_data, aes(x=iso3, y=value)) +
        x="")
 print(nat_plot)
 
-year_plot <- ggplot(toplot_data, aes(x=factor(flooryear), y=value)) +
+year_plot <- ggplot(toplot_data, aes(x=factor(year), y=value)) +
               geom_boxplot(aes(color=type, fill=type), alpha=0.25) +
               facet_grid(variable ~., scales="free") +
               theme(legend.position="bottom",
@@ -127,7 +141,7 @@ year_plot <- ggplot(toplot_data, aes(x=factor(flooryear), y=value)) +
                    x="")
 print(year_plot)
 
-surv_plot <- ggplot(toplot_data, aes(x=Survey, y=value)) +
+surv_plot <- ggplot(toplot_data, aes(x=survey, y=value)) +
               geom_boxplot(aes(color=type, fill=type), alpha=0.25) +
               facet_grid(variable ~., scales="free") +
               theme(legend.position="bottom",
@@ -154,13 +168,14 @@ if (!"iso3" %in% names(old_covs)){
 }
 
 if ("cluster_pop" %in% names(old_covs)){
-  setnames(old_covs, "cluster_pop", "pixel_pop")
+  setnames(old_covs, c("cluster_pop", "Survey", "flooryear", "year"), c("pixel_pop", "survey", "year", "time"))
+  old_covs[, c("yearqtr", "fulldate"):=NULL]
 }
 
 all_covs <- append_dts(old_covs, new_covs)
 cov_names <- names(new_covs)
-cov_names <- cov_names[!cov_names %in% c(names(new_data), "month", "fulldate", "row_id")]
-toplot_covs <- melt(all_covs, id.vars=c("type", "flooryear", "iso3", "Survey", "cellnumber"), measure.vars = cov_names)
+cov_names <- cov_names[!cov_names %in% c(names(new_data), "row_id")]
+toplot_covs <- melt(all_covs, id.vars=c("type", "year", "iso3", "survey", "cellnumber"), measure.vars = cov_names)
 
 cov_plot <- ggplot(toplot_covs, aes(x=variable, y=value)) +
               geom_boxplot(aes(color=type, fill=type), alpha=0.25) +
