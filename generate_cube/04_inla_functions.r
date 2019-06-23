@@ -87,14 +87,14 @@ run_inla <- function(data, outcome_var, cov_vars, start_year, end_year){
   
   # prep data for model fitting
   cov_list<-data[, cov_vars, with=F]
-  cov_list$year <- data$yearqtr
+  cov_list$time <- data$capped_time
   cov_list <-as.list(cov_list)
   
   # generate observation matrix
   A_est =
     inla.spde.make.A(spatial_mesh, 
                      loc=as.matrix(data[, list(x,y,z)]), 
-                     group=data$yearqtr,
+                     group=data$capped_time,
                      group.mesh=temporal_mesh)
   field_indices = inla.spde.make.index("field", n.spde=spatial_mesh$n,n.group=temporal_mesh$m)
   
