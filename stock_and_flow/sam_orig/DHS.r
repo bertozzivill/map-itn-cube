@@ -6,8 +6,8 @@ library(survey)
 main_dir <- '~/Desktop/Dropbox/MYDATA/Space Time Malaria/Bucket model'
 
 
-HH1<-read.csv('~/Desktop/Dropbox/MYDATA/Space Time Malaria/Bucket model/WHO_Stock_and_Flow Files/Net details aggregated by household combined6Oct.csv',stringsAsFactors=FALSE)
-HH1_cluster<-read.csv('~/Desktop/Dropbox/SHARED/ITN data/DHS/Net details aggregated by cluster combined22Oct.csv',stringsAsFactors=FALSE)
+HH1<-read.csv(file.path(main_dir, 'WHO_Stock_and_Flow Files/Net details aggregated by household combined6Oct.csv',stringsAsFactors=FALSE))
+HH1_cluster<-read.csv('~/Desktop/Dropbox/SHARED/ITN data/DHS/Net details aggregated by cluster combined22Oct.csv',stringsAsFactors=FALSE) # todo: get this file from sam
 
 HH1$latitude=NA
 HH1$longitude=NA
@@ -84,7 +84,7 @@ for(i in 1:length(old_but_not_new_oldID)){
 	HH1$Survey.hh[HH1$Survey.hh%in%old_but_not_new_oldID[i]]=old_but_not_new_newID[i]
 	if(sum(HH1$Survey.hh%in%old_but_not_new_oldID[i])>1) print(paste("PROBLEM double match of survey name"))
 }
-KEY<-read.csv('~/Desktop/Dropbox/MYDATA/Space Time Malaria/Bucket model/KEY_080817.csv',stringsAsFactors=FALSE)
+KEY<-read.csv(file.path(main_dir, 'KEY_080817.csv'),stringsAsFactors=FALSE)
 HH1<-HH1[HH1$Survey.hh%in%KEY$Svy.Name,]
 HH1$Country=NA
 un<-unique(HH1$Survey.hh)
@@ -92,7 +92,7 @@ for(i in 1:length(un)){
 	HH1$Country[HH1$Survey.hh==un[i]]=KEY$Name[KEY$Svy.Name==un[i]]
 }
 
-master_table<-read.csv('~/Desktop/Dropbox/MYDATA/Space Time Malaria/Bucket model/National_Config_Data.csv',stringsAsFactors=FALSE)
+master_table<-read.csv(file.path(main_dir, 'National_Config_Data.csv'),stringsAsFactors=FALSE)
 
 library(RecordLinkage)
 
@@ -119,7 +119,7 @@ for(i in 1:length(un)){
 #these are all the newly processed harry files
 
 
-mainloc<-'~/Desktop/Dropbox/MYDATA/Space Time Malaria/Bucket model/newSVY/'
+mainloc<-file.path(main_dir, 'newSVY/')
 lsf<-list.files(mainloc)
 
 sbt = strsplit(lsf,'_')
@@ -130,7 +130,7 @@ library(data.table)
 new_SVY=as.data.frame(as.data.table(lapply(1:ncol,function(i)sapply(sbt,"[",i))))[,2]
 new_SVY<-unique(new_SVY)
 #key_harry<-read.csv('~/Desktop/Dropbox/MYDATA/Space Time Malaria/Bucket model/SurveyIDs_20171117_iso_2_3.csv',stringsAsFactors=FALSE)
-key_harry<-read.csv('~/Desktop/Dropbox/MYDATA/Space Time Malaria/Bucket model/SurveyIDs_20180712_iso_2_3.csv',stringsAsFactors=FALSE)
+key_harry<-read.csv(file.path(main_dir, 'SurveyIDs_20180712_iso_2_3.csv'),stringsAsFactors=FALSE)
 
 HH0<-read.csv(paste0(mainloc,'Svy_',new_SVY[1],'_ITN_HH_Res.csv'),stringsAsFactors=FALSE)
 #HH0$SurveyID=KEY[KEY$SurveyID==HH0$SurveyID[1],'SurveyId']
@@ -247,9 +247,9 @@ HH1<-HH1[HH1$Survey.hh!="",]
 HH1[HH1$Survey.hh=='ET2005DHS','year']=2005
 
 
-write.csv(HH1,'~/Desktop/Dropbox/MYDATA/Space Time Malaria/Bucket model/WHO_Stock_and_Flow Files/DHS_MIS_all_28052019.csv')
+write.csv(HH1, file.path(main_dir, 'WHO_Stock_and_Flow Files/DHS_MIS_all_28052019.csv'))
 ################################################################################################################################################################################
-HH2<-read.csv('~/Desktop/Dropbox/MYDATA/Space Time Malaria/Bucket model/WHO_Stock_and_Flow Files/MICS4 Net details aggregated by household 21Jan.csv')
+HH2<-read.csv(file.path(main_dir, 'WHO_Stock_and_Flow Files/MICS4 Net details aggregated by household 21Jan.csv'))
 HH2$latitude=NA
 HH2$longitude=NA
 HH2$hhid=NA
@@ -258,7 +258,7 @@ hh2_switch_to<-c("n.LLINs","n.LLINs.under.1year","n.LLINs.1to2years","n.LLINs.2t
 hh2_switch<-c("n.LLIN","n.LLIN.under.1year","n.LLIN.1to2years","n.LLIN.2to3years","n.LLIN.more.than.3years")
 colnames(HH2)[colnames(HH2)%in%hh2_switch]<-hh2_switch_to
 
-KEY<-read.csv('~/Desktop/Dropbox/MYDATA/Space Time Malaria/Bucket model/KEY_080817.csv',stringsAsFactors=FALSE)
+KEY<-read.csv(file.path(main_dir, 'KEY_080817.csv'),stringsAsFactors=FALSE)
 HH2<-HH2[HH2$Survey.hh%in%KEY$Svy.Name,]
 HH2$Country=NA
 un<-unique(HH2$Survey.hh)
@@ -285,7 +285,7 @@ colnames(HH2)<-colnames(HH1)
 
 ################################################################################################################################################################################
 
-HH3<-read.csv('~/Desktop/Dropbox/MYDATA/Space Time Malaria/Bucket model/WHO_Stock_and_Flow Files/Other source net data by household.csv')
+HH3<-read.csv(file.path(main_dir, 'WHO_Stock_and_Flow Files/Other source net data by household.csv'))
 HH3$latitude=NA
 HH3$longitude=NA
 HH3$hhid=NA
@@ -293,7 +293,7 @@ HH3$hhid=NA
 HH3<-HH3[HH3$Survey.hh%in%c('Eritrea2008','Sudan 2009','SierraLeone2011','Sudan2012'),]
 HH3<-HH3[!is.na(HH3$hh.size),]
 
-KEY<-read.csv('~/Desktop/Dropbox/MYDATA/Space Time Malaria/Bucket model/KEY_080817.csv',stringsAsFactors=FALSE)
+KEY<-read.csv(file.path(main_dir, 'KEY_080817.csv'),stringsAsFactors=FALSE)
 HH3<-HH3[HH3$Survey.hh%in%KEY$Svy.Name,]
 HH3$Country=NA
 un<-unique(HH3$Survey.hh)
@@ -326,7 +326,7 @@ colnames(HH3)<-colnames(HH1)
 
 
 HH<-rbind(HH1,HH2,HH3)
-write.csv(HH1,'~/Desktop/Dropbox/MYDATA/Space Time Malaria/Bucket model/WHO_Stock_and_Flow Files/ALL_HH_Data_28052019.csv')
+write.csv(HH1, file.path(main_dir, 'WHO_Stock_and_Flow Files/ALL_HH_Data_28052019.csv'))
 
 
 
@@ -435,4 +435,4 @@ for(i in 1:length(HHSurvey)){
 	cat("\n\n")
 }
 
-write.csv(Survey.info,'~/Desktop/Dropbox/MYDATA/Space Time Malaria/Bucket model/Aggregated_HH_Svy_indicators_28052019.csv')
+write.csv(Survey.info, file.path(main_dir, 'Aggregated_HH_Svy_indicators_28052019.csv'))

@@ -9,25 +9,28 @@ ClosestMatch2 = function(string, stringVector){
   stringVector[distance == max(distance)]
 
 }
+
+main_dir <- '/home/DIDE/sjbhatt/Bucket_model/'
+
 max_time=2017 ### set final time point
 Countryout<-as.character(argv[1])
 nr=40
 nc=10
 Country<-Countryout
-KEY=read.csv('/home/DIDE/sjbhatt/Bucket_model/KEY_080817.csv')
+KEY=read.csv(file.path(main_dir, 'KEY_080817.csv'))
 revtrunc <- function(x) x-trunc(x)
 
 
-NMCP<-read.csv('/home/DIDE/sjbhatt/Bucket_model/NMCP_2018.csv',stringsAsFactors=FALSE)
+NMCP<-read.csv(file.path(main_dir, 'NMCP_2018.csv'),stringsAsFactors=FALSE)
 
-MANUFACTURER<-read.csv('/home/DIDE/sjbhatt/Bucket_model/MANU_2018.csv',stringsAsFactors=FALSE)
+MANUFACTURER<-read.csv(file.path(main_dir, 'MANU_2018.csv'),stringsAsFactors=FALSE)
 
-proj2015<-read.csv('/home/DIDE/sjbhatt/Bucket_model/PROJ2015.csv',stringsAsFactors=FALSE)
+proj2015<-read.csv(file.path(main_dir, 'PROJ2015.csv'),stringsAsFactors=FALSE)
 
-POPULATIONS<-read.csv('/home/DIDE/sjbhatt/Bucket_model/country_table_populations.csv',stringsAsFactors=FALSE)
-data=read.csv('/home/DIDE/sjbhatt/Bucket_model/Aggregated_HH_Svy_indicators_28052019.csv',stringsAsFactors=FALSE)
-data3=read.csv('/home/DIDE/sjbhatt/Bucket_model/Aggregated_HH_Svy_indicators_MICS3_080817.csv',stringsAsFactors=FALSE)
-No_report_SVYs<-read.csv('/home/DIDE/sjbhatt/Bucket_model/No Report SVYs_080817.csv',stringsAsFactors=FALSE)
+POPULATIONS<-read.csv(file.path(main_dir,'country_table_populations.csv'),stringsAsFactors=FALSE)
+data=read.csv(file.path(main_dir, 'Aggregated_HH_Svy_indicators_28052019.csv'),stringsAsFactors=FALSE)
+data3=read.csv(file.path(main_dir,'Aggregated_HH_Svy_indicators_MICS3_080817.csv'),stringsAsFactors=FALSE)
+No_report_SVYs<-read.csv(file.path(main_dir,'No Report SVYs_080817.csv'),stringsAsFactors=FALSE)
 
 
 get.indicators.model<-function(mat,nc){
@@ -72,8 +75,8 @@ get.indicators<-function(jdat,prop0,prop1,l,Countryout){
 	indicators_mean<-matrix(nrow=l,ncol=4)
 	indicators_low<-matrix(nrow=l,ncol=4)
 	indicators_high<-matrix(nrow=l,ncol=4)
-	hh<-read.csv('/home/DIDE/sjbhatt/Bucket_model/HHsize.csv')
-	KEY=read.csv('/home/DIDE/sjbhatt/Bucket_model/KEY_080816.csv')
+	hh<-read.csv(file.path(main_dir, 'HHsize.csv'))
+	KEY=read.csv(file.path(main_dir,'KEY_080816.csv')) 
 	cn_nm<-as.character(KEY[KEY$Name%in%Countryout,'Svy.Name'])
 	hh_val<-hh[hh$HHSurvey%in%cn_nm,]
 	if(nrow(hh_val)!=0){
@@ -200,9 +203,9 @@ get.indicators.actual<-function(mat,totsum,rnames){
 }
 
 get.actual.indicators<-function(Countryout,data){
-	HH1<-read.csv('/home/DIDE/sjbhatt/Bucket_model/Net details aggregated by household combined6Oct.csv')
-	HH2<-read.csv('/home/DIDE/sjbhatt/Bucket_model/MICS4 Net details aggregated by household 21Jan.csv')
-	HH3<-read.csv('/home/DIDE/sjbhatt/Bucket_model/Other source net data by household.csv')
+	HH1<-read.csv(file.path(main_dir, 'Net details aggregated by household combined6Oct.csv'))
+	HH2<-read.csv(file.path(main_dir,'MICS4 Net details aggregated by household 21Jan.csv'))
+	HH3<-read.csv(file.path(main_dir,'Other source net data by household.csv'))
 	HH3<-HH3[HH3$Survey.hh%in%c('Eritrea2008','Sudan 2009'),]
 	colnames(HH2)<-colnames(HH1)
 	HH<-rbind(HH1,HH2,HH3)
@@ -325,10 +328,10 @@ NMCP_llin<-as.numeric(NMCP[NMCP$ISO3==Country,'LLIN'])
 
 # load populations at risk
 
-PAR<-read.csv('/home/DIDE/sjbhatt/Bucket_model/Population_For_Sam.csv',stringsAsFactors=FALSE)
+PAR<-read.csv(file.path(main_dir,'Population_For_Sam.csv'),stringsAsFactors=FALSE)
 PAR<-mean(PAR[PAR$iso_3_code==Country,'proportion_at_risk_of_pf'])
 
-POP<-read.csv('/home/DIDE/sjbhatt/Bucket_model/Population_For_Sam_2017.csv',stringsAsFactors=FALSE)
+POP<-read.csv(file.path(main_dir,'Population_For_Sam_2017.csv'),stringsAsFactors=FALSE)
 
 POP<-POP[POP$iso_3_code==Country,'total_population']
 names(POP)<-2000:max_time
@@ -497,7 +500,7 @@ if(nrow(SURVEY)==0){
 ################################################################################################################
 ################################################################################################################
 
-load('/home/DIDE/sjbhatt/Bucket_model/poissonPriors.RData')
+load(file.path(main_dir,'poissonPriors.RData'))
 
 
 
@@ -1335,7 +1338,7 @@ geom_point(data=plotmat3, aes(x=x2, y=y2),color='red',size=5,alpha=1,shape=18)+
 theme_bw() +
 scale_x_continuous(breaks=2000.5:2017.5)+
 labs(title = paste(Countryout),x = "Year", y="Number of nets")
-ggsave(paste('/home/DIDE/sjbhatt/Bucket_model/out/',Countryout,'_NICE.pdf',sep=""))
+ggsave(paste(file.path(main_dir,'out/'),Countryout,'_NICE.pdf',sep=""))
 
 
 indicators<-get.indicators(jdat,prop0,prop1,nrow(p1),Countryout)
@@ -1354,6 +1357,6 @@ rm('HH')
 rm('HH2')
 rm('tmp')
 
-save.image(paste('/home/DIDE/sjbhatt/Bucket_model/out/',Countryout,'.RData',sep=""))
+save.image(paste(file.path(main_dir, 'out/'),Countryout,'.RData',sep=""))
 
 
