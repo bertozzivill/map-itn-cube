@@ -248,6 +248,7 @@ get.actual.indicators<-function(Countryout,data){
 data3[data3==0]<-1e-6
 data3ls<-as.list(data3)
 data3ls$n=nrow(data3)
+# "I(0,)" is truncation syntax in BUGS
 model_string = '
 	model {
 		for(i in 1:n){
@@ -653,6 +654,9 @@ SVY$itnlimH<- SVY$mTot_itn + 3*SVY$sTot_itn
 SVY$itnlimH[SVY$itnlimH<0]=0
 
 ###
+
+# when you get to the point of dealing with this if-else situation, consider:
+# https://stats.stackexchange.com/questions/85690/how-to-conditionally-run-element-of-jags-script-based-on-user-supplied-variable
 
 if(any(is.na(SVY$sTot_llin)) | any(is.na(SVY$sTot_itn))){
 	model_string = '
