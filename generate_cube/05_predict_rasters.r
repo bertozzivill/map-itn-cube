@@ -12,7 +12,10 @@ predict_rasters <- function(input_dir, cov_dir, func_dir, main_indir, main_outdi
   
   set.seed(212)
   out_dir <- file.path(main_outdir, "05_predictions")
-  if (!dir.exists(out_dir)){dir.create(out_dir)}
+  if (!dir.exists(out_dir)){
+    dir.create(out_dir)
+    dir.create(file.path(out_dir, "monthly_access"))
+    }
   
   # TODO: load shapefiles and templates only when you're actually plotting (objects named World, Africa, Water, img)
   print("loading inla outputs and relevant functions")
@@ -143,6 +146,16 @@ predict_rasters <- function(input_dir, cov_dir, func_dir, main_indir, main_outdi
                                                       by=list(iso3, year, cellnumber)]
     summary_access <- summary_access[order(cellnumber)]
     
+    # save monthly rasters
+    print("saving monthly access")
+    for (this_month in 1:12){
+      this_access_map <-  copy(national_raster)
+      this_access <- acc_dev_predictions_transformed[month==this_month]
+      this_access_map[this_access$cellnumber] <- this_access$access
+      this_access_map[!is.na(national_raster) & is.na(this_access_map)] <- 0
+      writeRaster(this_access_map, file.path(out_dir, "monthly_access", paste0("ITN_",this_year,  ".", this_month, ".ACC.tif")),NAflag=-9999,overwrite=TRUE)
+    }
+    
     access_map <- copy(national_raster)
     access_map[summary_access$cellnumber] <- summary_access$access
     access_map[!is.na(national_raster) & is.na(access_map)] <- 0
@@ -215,7 +228,7 @@ predict_rasters <- function(input_dir, cov_dir, func_dir, main_indir, main_outdi
 
 if (Sys.getenv("run_individually")!=""){
   
-  # dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-highmem-64 --logging gs://map_data_z/users/amelia/logs --input-recursive input_dir=gs://map_data_z/users/amelia/itn_cube/input_data/ main_indir=gs://map_data_z/users/amelia/itn_cube/results/20190614_rearrange_scripts func_dir=gs://map_data_z/users/amelia/itn_cube/code/generate_cube cov_dir=gs://map_data_z/cubes_5k --input run_individually=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/run_individually.txt CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/05_predict_rasters.r --output-recursive main_outdir=gs://map_data_z/users/amelia/itn_cube/results/20190614_rearrange_scripts/ --command 'Rscript ${CODE}'
+  # dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-highmem-64 --logging gs://map_data_z/users/amelia/logs --input-recursive input_dir=gs://map_data_z/users/amelia/itn_cube/input_data/ main_indir=gs://map_data_z/users/amelia/itn_cube/results/20190623_monthly_inla func_dir=gs://map_data_z/users/amelia/itn_cube/code/generate_cube cov_dir=gs://map_data_z/cubes_5k --input run_individually=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/run_individually.txt CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/05_predict_rasters.r --output-recursive main_outdir=gs://map_data_z/users/amelia/itn_cube/results/20190623_monthly_inla/ --command 'Rscript ${CODE}'
 
   package_load <- function(package_list){
     # package installation/loading
