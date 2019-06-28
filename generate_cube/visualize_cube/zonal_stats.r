@@ -27,19 +27,20 @@ sam.root <- '/Volumes/map_pit/sam/bld1/bras2280/ITNcube/'
 # template.filename    <- file.path(zed.root, 'GBD2017/Processing/Stages/09a_Africa_Cubes/Checkpoint_Outputs/Summary_20181122/Africa/summaries/rasters/PfPR_mean/pr_2000_rmean_Africa.tif')
 template.filename <- file.path(main.dir, "05_predictions", "ITN_2000.MEAN.tif")
 
-raster.path          <- file.path(main.dir, "05_predictions")
+raster.path          <- file.path(main.dir, "05_predictions/monthly_access")
 output.filename      <- file.path(out.dir, 'compare_mean_access.csv')
 label <- "ITN Access"
 
-pop.path.and.prefix  <- file.path(zed.root, 'GBD2017/Processing/Stages/03_Muster_Population_Figures/Verified_Outputs/Ouput_Pop_Unmasked_5K/ihme_corrected_frankenpop_All_Ages_3_') 
-pop.suffix           <- '.tif'  # the filename characters and extension information that follows the year
+# pop.path.and.prefix  <- file.path(zed.root, 'GBD2017/Processing/Stages/03_Muster_Population_Figures/Verified_Outputs/Ouput_Pop_Unmasked_5K/ihme_corrected_frankenpop_All_Ages_3_') 
+pop.path.and.prefix <- '/Volumes/GoogleDrive/Shared drives/cubes/5km incomplete/Afripop/'
+pop.suffix           <- '.total.population.tif'  # the filename characters and extension information that follows the year
 
 zone.path            <- file.path(zed.root, 'master_geometries/Admin_Units/Global/MAP/2018/MG_5K/Rasters/')
 zone.string          <- 'admin2018_0_MG_5K'
 zone.filename        <- file.path(zone.path, paste0(zone.string,'.tif'))
 zone.data.filename   <- file.path(zone.path, paste0(zone.string, '_config_data.csv'))
 start.year           <- 2000
-end.year             <- 2016
+end.year             <- 2015
 end.replicated.year  <- 2016
 n.years <- end.year - start.year + 1
 
@@ -106,21 +107,24 @@ aggregate_raster <- function(input, pop, admin, template, label=""){
 # main aggregation
 full.results <- lapply(start.year:end.year, function(year){
   print(year)
-
-  input.acc <- raster(paste(raster.path, "/ITN_", year, ".ACC.tif", sep=''))
-  input.mean <- raster(paste(raster.path, "/ITN_", year, ".MEAN.tif", sep=''))
   
-  pop.filename   <- paste(pop.path.and.prefix, year, pop.suffix, sep='')
-  pop <- raster(pop.filename)
+  annual.results.table <- lapply(1:12, function(month){
+    print(month)
+    input.acc <- raster(paste(raster.path, "/ITN_", year, ".", month, ".ACC.tif", sep=''))
+    
+    pop.filename   <- paste(pop.path.and.prefix, year, pop.suffix, sep='')
+    pop <- raster(pop.filename)
+    
+    agg.zonal <- aggregate_raster(input.acc, pop, admin, template, label="inla_access")
+    
+    monthly.results.table <- merge(results.template, 
+                                  agg.zonal[, list(type, uid, year=year, month=month, rate=input_val/pop)],
+                                  by="uid", all.x=T)
+    rm(input.acc, agg.zonal); gc()
+    return(monthly.results.table)
+  })
   
-  agg.zonal.acc <- aggregate_raster(input.acc, pop, admin, template, label="access")
-  agg.zonal.mean <- aggregate_raster(input.mean, pop, admin, template, label="access_mean")
-  agg.zonal <- rbind(agg.zonal.acc, agg.zonal.mean)
-  
-  annual.results.table <- merge(results.template, 
-                                agg.zonal[, list(type, uid, year=year, rate=input_val/pop)],
-                                by="uid", all.x=T)
-  
+  annual.results.table <-rbindlist(annual.results.table)
   return(annual.results.table)
 })
 
@@ -146,16 +150,21 @@ full.results[, sum:=NULL]
 
 # test: compare to actual stock and flow
 stock.and.flow <- fread(file.path(main.dir, "01_stock_and_flow_access.csv"))
-stock.and.flow <- stock.and.flow[, list(rate=mean(nat_access)), by=list(iso3, year)]
 setnames(stock.and.flow, "iso3", "ISO3")
 
+time.map <- unique(stock.and.flow[, list(time, year, month)])
+full.results <- merge(full.results, time.map, by=c("year", "month"), all.x=T)
 
-time_series <- ggplot(full.results, aes(x=year, y=rate)) +
+to.plot <- rbind(full.results[, list(type="Mean of pixels", ISO3, time, rate)],
+                 stock.and.flow[, list(type="Stock and flow", ISO3, time, rate=nat_access)])
+
+time_series <- ggplot(to.plot[ISO3 %in% unique(stock.and.flow$ISO3)], aes(x=time, y=rate)) +
                 geom_line(aes(color=type)) +
-                geom_line(data=stock.and.flow, linetype=2) + 
                 facet_wrap(~ISO3) +
-                theme(legend.position = "bottom") +
-                labs(x="Year", y="Access")
+                theme(legend.position = "bottom",
+                      legend.title = element_blank()) +
+                labs(x="Time", y="Access",
+                     title="Stock and Flow vs. Raster Means, AfriPop")
 print(time_series)
 
 
