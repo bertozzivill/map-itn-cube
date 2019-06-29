@@ -150,17 +150,43 @@ full.results[, sum:=NULL]
 
 # test: compare to actual stock and flow
 stock.and.flow <- fread(file.path(main.dir, "01_stock_and_flow_access.csv"))
-setnames(stock.and.flow, "iso3", "ISO3")
+
+
+# further testing: plot against survey data
+survey.data <- survey_data <- fread(file.path(main.dir, "../../input_data/database/ALL_HH_Data_20112017.csv"))
+survey.data<-survey.data[ISO3 %in% unique(stock.and.flow$iso3), list(survey=Survey.hh, 
+                                                           country=Country,
+                                                           iso3=ISO3,
+                                                           cluster_id=Cluster.hh,
+                                                           latitude,
+                                                           longitude,
+                                                           year,
+                                                           month,
+                                                           sample.w,
+                                                           n.individuals.that.slept.in.surveyed.hhs,
+                                                           n.ITN.per.hh)]
+survey.data <- survey.data[!is.na(n.individuals.that.slept.in.surveyed.hhs) & n.individuals.that.slept.in.surveyed.hhs>0]
+survey.data[, n.with.access.to.ITN:=pmin(n.ITN.per.hh*2, n.individuals.that.slept.in.surveyed.hhs)]
+survey.data <- survey.data[complete.cases(survey.data)]
+
+aggregated.data <- survey.data[, list(pop=sum(n.individuals.that.slept.in.surveyed.hhs),
+                                      n.access=sum(n.with.access.to.ITN),
+                                      weighted.n.access= sum(n.with.access.to.ITN*sample.w),
+                                      weighted.pop=sum(n.individuals.that.slept.in.surveyed.hhs*sample.w)),
+                               by=list(iso3, survey, year)]
+aggregated.data[, access:=n.access/pop]
+aggregated.data[, weighted.access:=weighted.n.access/weighted.pop]
 
 time.map <- unique(stock.and.flow[, list(time, year, month)])
 full.results <- merge(full.results, time.map, by=c("year", "month"), all.x=T)
 
-to.plot <- rbind(full.results[, list(type="Mean of pixels", ISO3, time, rate)],
-                 stock.and.flow[, list(type="Stock and flow", ISO3, time, rate=nat_access)])
+to.plot <- rbind(full.results[, list(type="Mean of pixels", iso3=ISO3, time, rate)],
+                 stock.and.flow[, list(type="Stock and flow", iso3, time, rate=nat_access)])
 
-time_series <- ggplot(to.plot[ISO3 %in% unique(stock.and.flow$ISO3)], aes(x=time, y=rate)) +
+time_series <- ggplot(to.plot[iso3 %in% unique(stock.and.flow$iso3)], aes(x=time, y=rate)) +
                 geom_line(aes(color=type)) +
-                facet_wrap(~ISO3) +
+                geom_point(data=aggregated.data, aes(x=year, y=weighted.access), size=1) + 
+                facet_wrap(~iso3) +
                 theme(legend.position = "bottom",
                       legend.title = element_blank()) +
                 labs(x="Time", y="Access",
