@@ -193,6 +193,15 @@ time_series <- ggplot(to.plot[iso3 %in% unique(stock.and.flow$iso3)], aes(x=time
                      title="Stock and Flow vs. Raster Means, AfriPop")
 print(time_series)
 
+diff <- dcast.data.table(to.plot, iso3 + time ~ type)
+names(diff) <- c("iso3", "time", "pixel_mean", "stock_and_flow")
+diff[, diff:=pixel_mean-stock_and_flow]
+
+ggplot(diff[!is.na(diff)], aes(x=time, y=diff)) +
+  geom_hline(yintercept = 0, color="black") +
+  geom_line(color="red") +
+  facet_wrap(~iso3)
+
 
 full.results.wide <- dcast(full.results, uid + ISO3 ~ year, value.var="rate")
 write.csv(full.results.wide, file=output.filename, row.names=F)
