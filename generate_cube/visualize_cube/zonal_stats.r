@@ -202,8 +202,6 @@ ggplot(diff[!is.na(diff)], aes(x=time, y=diff)) +
   geom_line(color="red") +
   facet_wrap(~iso3)
 
-
-full.results.wide <- dcast(full.results, uid + ISO3 ~ year, value.var="rate")
-write.csv(full.results.wide, file=output.filename, row.names=F)
+write.csv(diff, file=output.filename, row.names=F)
 
 
