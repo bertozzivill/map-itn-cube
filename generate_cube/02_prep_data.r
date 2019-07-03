@@ -3,9 +3,12 @@
 ## Amelia Bertozzi-Villa
 ## April 2019
 ## 
-## A restructuring of Sam Bhatt's original code to prepare net-based survey metrics for the ITN cube model.
-## This script calcultes both national access and use metrics (from the stock and flow model) and 
-## cluster-level metrics from survey data, cleans that data, and saves it for the following script.
+## Prepare net-based survey metrics for the ITN cube model.
+## This script calculatescluster-level metrics from survey data, and merges on national-level access
+## from 01_prep_stockandflow.r. 
+
+## NB: This code is designed to be run as part of a larger pipeline (see 00_generate_cube_master.r).
+##      To run this script individually, see instructions at the bottom of the page. 
 ##############################################################################################################
 
 prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
@@ -46,12 +49,12 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
   # find access (# with a net available) and use (# sleeping under net) per household 
   HH[, n.with.access.to.ITN:=pmin(n.ITN.per.hh*2, n.individuals.that.slept.in.surveyed.hhs)]
   
-  # Main loop: calculating access/gap for each household cluster  ------------------------------------------------------------
-  
+  # Main loop: calculating access/use counts for each household cluster  ------------------------------------------------------------
   ncores <- detectCores()
   print(paste("--> Machine has", ncores, "cores available"))
   registerDoParallel(ncores-2)
-  cluster_stats<-foreach(i=1:length(unique_surveys),.combine=rbind) %dopar% { #survey loop
+  
+  cluster_stats<-foreach(i=1:length(unique_surveys),.combine=rbind) %dopar% { 
     
     this_survey<-unique_surveys[i]
     this_survey_data=HH[Survey.hh==this_survey,] # keep only household data for the survey in question
@@ -120,25 +123,24 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
   
   # Cleanup: remove flawed points, print summary messages, aggregate to pixel level, save ------------------------------------------------------------
   
-  #print(paste('**OUTPUT MESSAGE** remove points with no cooridnates: there are - ',nrow(data[!complete.cases(data),])))
   final_data<-final_data[complete.cases(final_data),]
   
-  print(paste("**OUTPUT MESSAGE** remove points with 0 lat 0 lon: there are - ", nrow(final_data[lat==0 & lon==0])))
+  print(paste("Removing points with 0 lat 0 lon: there are", nrow(final_data[lat==0 & lon==0])))
   final_data<-final_data[lat!=0 & lon!=0]
   
   # Check for invalid points, and attempt to reposition them
   national_raster<-raster(file.path(input_dir, "general/african_cn5km_2013_no_disputes.tif")) # master country layer
   NAvalue(national_raster)=-9999
   
-  print(paste("**OUTPUT MESSAGE** Attempting to reposition points"))
-  final_data<-reposition_points(national_raster, final_data, 4)
+  print("Attempting to reposition points")
+  final_data<-reposition_points(national_raster, final_data, radius=4)
   
   print(paste("--> Total number of household points", nrow(HH)))
   print(paste("--> Total number of cluster points", nrow(final_data)))
   print(paste("--> Total number countries", length(unique(HH$Country))))
   print(paste("--> Total number of surveys", length(unique(HH$Survey.hh))))
   
-  print(paste("**OUTPUT MESSAGE** Aggregating data at same pixel-month"))
+  print("Aggregating data by pixel-month")
   
   # snap points in each 5km pixel to centroid
   cellnumbers<-cellFromXY(national_raster, final_data[, list(lon, lat)])  
@@ -171,7 +173,7 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
   # re-associate with surveys
   final_data <- merge(final_data, survey_map, by=c("cellnumber", "time"), all.x=T)
   
-  # re-associate these values with iso3s
+  # re-associate  with iso3s
   final_data[, gaul:=national_raster[cellnumber]]
   final_data <- merge(final_data, iso_gaul_map[, list(gaul, iso3)], by="gaul", all.x=T)
   final_data[, gaul:=NULL]
@@ -183,8 +185,13 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
   
 }
 
+
+# ---------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+## TO RUN THIS SCRIPT INDIVIDUALLY, READ HERE
 # to get this to run on your desktop, create a variable in your environment called "run_locally" that has some value.
-# DO NOT set run_locally as an object that exists in this script, that defeats the purpose. 
+# DO NOT set run_locally as an object that exists in this script.
+
 if (Sys.getenv("run_individually")!="" | exists("run_locally")){
   
   print("RUNNING SCRIPT INDIVIDUALLY")

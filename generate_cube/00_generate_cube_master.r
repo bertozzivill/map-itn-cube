@@ -39,16 +39,16 @@ main_dir <- Sys.getenv("main_dir")
 start_year <- 2000
 end_year <- 2016
 
-## Stock and Flow ------------------------------------------------------------
+## Stock and Flow ## ------------------------------------------------------------
 print("STEP 1: Formatting stock and flow estimates")
 tic <- Sys.time()
 source(file.path(func_dir, "01_prep_stockandflow.r"))
-prep_stockandflow(input_dir, func_dir, main_outdir=main_dir, use_nat_dists=T)
+prep_stockandflow(input_dir, func_dir, main_outdir=main_dir)
 toc <- Sys.time()
 time_passed(tic, toc)
 
 
-## Prep Data ------------------------------------------------------------
+## Prep Data ## ------------------------------------------------------------
 print("STEP 2: Preparing input data")
 tic <- Sys.time()
 source(file.path(func_dir, "02_prep_data.r"))
@@ -57,7 +57,7 @@ toc <- Sys.time()
 time_passed(tic, toc)
 
 
-## Prep Covariates  ------------------------------------------------------------
+## Prep Covariates ## ------------------------------------------------------------
 print("STEP 3: Preparing covariates")
 tic <- Sys.time()
 source(file.path(func_dir, "03_prep_covariates.r"))
@@ -66,7 +66,7 @@ toc <- Sys.time()
 time_passed(tic, toc)
 
 
-## Run Regressions ------------------------------------------------------------
+## Run Regressions ## ------------------------------------------------------------
 print("STEP 4: Running access deviation and use gap regressions")
 tic <- Sys.time()
 source(file.path(func_dir, "04_dev_and_gap.r"))
@@ -75,7 +75,7 @@ toc <- Sys.time()
 time_passed(tic, toc)
 
 
-## Predict Outputs ------------------------------------------------------------
+## Predict Outputs ## ------------------------------------------------------------
 print("STEP 5: Predicting output rasters")
 tic <- Sys.time()
 source(file.path(func_dir, "05_predict_rasters.r"))
@@ -86,10 +86,5 @@ time_passed(tic, toc)
 
 big_toc <- Sys.time()
 time_passed(big_tic, big_toc)
-
-
-
-
-
 
 

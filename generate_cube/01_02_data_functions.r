@@ -3,16 +3,21 @@
 ## Amelia Bertozzi-Villa
 ## April 2019
 ## 
-## Functions to accompany 01_create_database.r-- prepping survey data to go into the ITN cube model. 
-## -emplogit2: 2-input empirical logit
-## -reposition_points: adjust impossibly-placed lat-longs
-## -aggregate_data: sum to pixel level (TODO: fix column bug)
+## Functions to accompany 01_prep_stockandflow.r and 02_prep_data.r
+
+## -emplogit: 1-input empirical logit
+## -emplogit2: 2-input empirical logit 
 ## -calc_access: calculate access metrics by household size from stock and flow outputs
+## -reposition_points: assign impossibly-placed lat-longs to the nearest valid pixel
+
 ##############################################################################################################
 
 # lifted from the docs of the empLogit function from the binomTools package
 emplogit <- function (y, eps = 1e-3){
-  log((eps + y)/(1 - y + eps))
+  # 1-variable logit transform
+  # y: value between 0 and 1
+  # eps: buffer to avoid null values
+  return(log((eps + y)/(1 - y + eps)))
 } 
 
 emplogit2<-function(y, n){
@@ -75,6 +80,7 @@ calc_access <- function(hh_props, max_nets=40, return_mean=F){
 
 
 reposition_points<-function(nat_raster, points, radius=4){
+  # assign impossibly-placed lat-longs to the nearest valid pixel, so long as they are sufficiently close to that pixel
   
   # nat_raster: raster layer of country boundaries
   # points: data.table including the columns "lat" and "long" for each cluster location
@@ -90,7 +96,7 @@ reposition_points<-function(nat_raster, points, radius=4){
     st<-paste0("<", "Survey-year: ", points$Survey[x],"-",points$year[x],">")
     error <- paste0("--> ", st, " Point ",  points[x,"lat"], points[x,"lon"]," is not positioned properly")
     
-    # find cell 4 rows up and 4 columns left of the point of interest (for matrix contstruction)
+    # find cell "radius" rows up and "radius" columns left of the point of interest (for matrix contstruction)
     row1 =  rowFromY(nat_raster, points[[x,"lat"]])-radius 
     col1 = colFromX(nat_raster, points[[x,"lon"]])-radius 
     
@@ -106,7 +112,7 @@ reposition_points<-function(nat_raster, points, radius=4){
         mat <- matrix(mat, nrow=matrix_side_len, ncol=matrix_side_len, byrow=TRUE)
         matcells<-mat
         
-        # get cell counts for each point in this
+        # get cell counts for each point
         for(i in 1:dim(mat)[1]){
           for(j in 1:dim(mat)[2]){
             matcells[i,j]=as.numeric(cellFromRowCol(nat_raster,(row1-1+i),(col1-1+j)))	

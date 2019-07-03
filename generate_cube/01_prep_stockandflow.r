@@ -3,20 +3,26 @@
 ## Amelia Bertozzi-Villa
 ## June 2019
 ## 
-## A restructuring of Sam Bhatt's original code to prepare net-based survey metrics for the ITN cube model.
-## This script takes quarterly values from the "stock and flow" mechanistic models and interpolates and 
+## Prepare net-based survey metrics for the ITN cube model.
+## This script takes quarterly values from the "stock and flow" mechanistic model and interpolates and 
 ## translates them into monthly access values. 
+## 
+## NB: This code is designed to be run as part of a larger pipeline (see 00_generate_cube_master.r).
+##      To run this script individually, see instructions at the bottom of the page. 
+##
 ## TODO: more detailed step-by-step description
 ##############################################################################################################
 
-prep_stockandflow <- function(input_dir, func_dir, main_outdir, use_nat_dists=T){
+prep_stockandflow <- function(input_dir, func_dir, main_outdir){
   
   input_dir <- file.path(input_dir, "stock_and_flow")
   source(file.path(func_dir, "01_02_data_functions.r"))
   
-  # Interpolate initial stock and flow probabilities and means  ------------------------------------------------------------
-  # p0 & p1-- from stock & flow, nat'l time series of p0=p(hh has 0 nets) and p1=avg # of nets
-  # for 40 countries (list length), houshold size 1-10+ (columns)
+  ##  Interpolate initial stock and flow probabilities and means ## ------------------------------------------------------------
+  
+  # this image contains quarterly national values for p0=p(hh has 0 nets) and p1=avg # of nets.
+  # "out" is a list of length 40 (# of countries), where each list is itself a list of length 2 (p0 and p1).
+  # Each p0 and p1 is a data frame with nrow=# of quarters and ncol=1:10 (for houshold sizes 1-10+)
   load(file.path(input_dir, "net_probs_and_means.rData")) # contains objects names "out" (list of stock and flow time series) and "Cout" (country names)
   
   # rename for clarity
@@ -34,12 +40,12 @@ prep_stockandflow <- function(input_dir, func_dir, main_outdir, use_nat_dists=T)
     quarterly_times <- as.numeric(rownames(country_list))
     start_year <- ceiling(min(quarterly_times))
     end_year <- floor(max(quarterly_times)-1)
-    # get your desired monthly outputs as decimal dates
-    # TODO: change from year divided equally by 12 to beginning/middle of month when you properly account for months in hh data
+    
+    # get decimal dates for the middle of each month: these are the dates for which we want interpolated values.
     full_times <- seq(as.Date(paste0(start_year, "/1/15")), by = "month", length.out = (end_year-start_year)*12)
     monthly_times <- decimal_date(full_times)
     
-    # for p0 and p1, interpolate to monthly prob_no_nets and mean_nets_per_hh
+    # for p0 and p1, interpolate to monthly probability of no nets and monthly mean nets per household, respectively
     country_subset <- lapply(1:2, function(layer){
       data.table(sapply(colnames(country_list), function(col){approx(quarterly_times, country_list[,col,layer], monthly_times)$y})) 
     })
@@ -62,11 +68,15 @@ prep_stockandflow <- function(input_dir, func_dir, main_outdir, use_nat_dists=T)
   
   write.csv(stock_and_flow, file=file.path(main_outdir, "01_stock_and_flow_probs_means.csv"), row.names=F)
   
-  ##  Calculate access for the surveys used in the stock and flow model  ------------------------------------------------------------
+  # will need to convert from year-month to decimal time later in the script
+  time_map <- unique(stock_and_flow[, list(time, year, month)])
+  
+  ##  Calculate national access by country and household size from the surveys used in the stock and flow model ## ------------------------------------------------------------
   
   print("loading and formatting household size distributions")
   
-  iso_gaul_map<-fread(file.path(input_dir, "../general/iso_gaul_map.csv")) # load table to match gaul codes to country names
+  # load table to match gaul codes to country names
+  iso_gaul_map<-fread(file.path(input_dir, "../general/iso_gaul_map.csv")) 
   setnames(iso_gaul_map, c("GAUL_CODE", "COUNTRY_ID", "NAME"), c("gaul", "iso3", "country"))
   
   # load household size distributions for each survey
@@ -78,20 +88,17 @@ prep_stockandflow <- function(input_dir, func_dir, main_outdir, use_nat_dists=T)
   hh_sizes <- melt.data.table(hh_sizes, id.vars="HHSurvey", variable.name="hh_size", value.name="prop")
   hh_sizes[, hh_size:=as.integer(hh_size)]
   
-  # update country names to fit with iso_gaul_map (for use when you actually DO calculate props by country name)
+  # format survey key; add two surveys present in data but not present in key
   survey_key[, Status:=NULL]
   setnames(survey_key, c("Svy Name", "Name"), c("HHSurvey", "country"))
-  
-  # add two surveys not present in key
   survey_key <- rbind(survey_key, data.table(HHSurvey=c("Kenya 2007", "Rwanda 2013"),
                                              country=c("Kenya", "Rwanda")))
   
-  # merge with name map and survey distribution
+  # merge with country name map and survey distribution
   survey_key <- merge(survey_key, iso_gaul_map, by="country", all.x=T)
   hh_sizes <- merge(hh_sizes, survey_key, by="HHSurvey", all.x=T)
   
-  # find size distribution;
-  # collapse such that the final bin is 10+
+  # function to aggregate survey data to find the total distribution of household sizes from 1:10+ across the provided dataset
   find_hh_distribution <- function(props, cap_hh_size=10){
     # where 'props' is a data.table with columns ('hh_size' and 'prop')
     denominator <- sum(props$prop)
@@ -107,33 +114,27 @@ prep_stockandflow <- function(input_dir, func_dir, main_outdir, use_nat_dists=T)
     return(hh_dist)
   }
   
+  # find household distribution across all surveys
   hh_dist_all <- find_hh_distribution(hh_sizes)
   
-  if (use_nat_dists){
-    
-    hh_distributions <- lapply(unique(stock_and_flow$iso3), function(this_iso){
-      if (this_iso %in% unique(hh_sizes$iso3)){
-        this_hh_dist <- find_hh_distribution(hh_sizes[iso3==this_iso])
-      }else{
-        this_hh_dist <- copy(hh_dist_all)
-      }
-      this_hh_dist[, iso3:=this_iso]
-      return(this_hh_dist)
-    })
-    hh_distributions <- rbindlist(hh_distributions)
-    
-    stock_and_flow <- merge(stock_and_flow, hh_distributions, by=c("iso3", "hh_size"), all=T)
-  }else{
-    stock_and_flow <- merge(stock_and_flow, hh_dist_all, by=c("hh_size"), all=T)
-  }
+  # find household distribution by country
+  hh_distributions <- lapply(unique(stock_and_flow$iso3), function(this_iso){
+    if (this_iso %in% unique(hh_sizes$iso3)){
+      this_hh_dist <- find_hh_distribution(hh_sizes[iso3==this_iso])
+    }else{
+      this_hh_dist <- copy(hh_dist_all)
+    }
+    this_hh_dist[, iso3:=this_iso]
+    return(this_hh_dist)
+  })
+  hh_distributions <- rbindlist(hh_distributions)
   
-  print("finding year-month-country access across household sizes")
-  
-  # weight stock and flow values by household propotions 
+  stock_and_flow <- merge(stock_and_flow, hh_distributions, by=c("iso3", "hh_size"), all=T)
+
+  print("Finding year-month-country net access across household sizes")
+  # weight stock and flow values by household proportions 
   stock_and_flow[, weighted_prob_no_nets:=hh_size_prop*stockflow_prob_no_nets]
   stock_and_flow[, weighted_prob_any_net:=hh_size_prop*(1-stockflow_prob_no_nets)]
-  
-  time_map <- unique(stock_and_flow[, list(time, year, month)])
   
   # calculate year-month-country access
   stock_and_flow_access <- lapply(unique(stock_and_flow$iso3), function(this_iso){
@@ -149,8 +150,9 @@ prep_stockandflow <- function(input_dir, func_dir, main_outdir, use_nat_dists=T)
     return(rbindlist(country_access))
   })
   stock_and_flow_access <- rbindlist(stock_and_flow_access)
-  stock_and_flow_access[, emplogit_nat_access:=emplogit(nat_access)]
   
+  # logit-transform access metric; add decimal time; save formatted stock and flow data
+  stock_and_flow_access[, emplogit_nat_access:=emplogit(nat_access)]
   stock_and_flow_access <- merge(stock_and_flow_access, time_map,  by="time", all=T)
   stock_and_flow_access <- stock_and_flow_access[, list(iso3, time, year, month, nat_access, emplogit_nat_access)]
   
@@ -158,8 +160,13 @@ prep_stockandflow <- function(input_dir, func_dir, main_outdir, use_nat_dists=T)
   
 }
 
+# ---------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+## TO RUN THIS SCRIPT INDIVIDUALLY, READ HERE
 # to get this to run on your desktop, create a variable in your environment called "run_locally" that has some value.
-# DO NOT set run_locally as an object that exists in this script, that defeats the purpose. 
+# DO NOT set run_locally as an object that exists in this script. 
+
 if (Sys.getenv("run_individually")!="" | exists("run_locally")){
   
   print("RUNNING SCRIPT INDIVIDUALLY")
@@ -185,7 +192,7 @@ if (Sys.getenv("run_individually")!="" | exists("run_locally")){
     func_dir <- Sys.getenv("func_dir") 
   }
   
-  prep_stockandflow(input_dir, func_dir, main_outdir, use_nat_dists=T)
+  prep_stockandflow(input_dir, func_dir, main_outdir)
   
 }
 
