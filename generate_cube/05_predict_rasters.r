@@ -3,8 +3,11 @@
 ## Amelia Bertozzi-Villa
 ## May 2019
 ## 
-## A restructuring of Sam Bhatt's original code to predict access and use outputs from the previously-run
-## input models. 
+## Using the inla objects from Step 4 and the covariates extracted from Step 3, predict monthly 
+## ITN rasters, transform them back to level space, and aggregate up to annual values
+
+## NB: This code is designed to be run as part of a larger pipeline (see 00_generate_cube_master.r).
+##      To run this script individually, see instructions at the bottom of the page. 
 ## 
 ##############################################################################################################
 
@@ -20,7 +23,7 @@ predict_rasters <- function(input_dir, cov_dir, func_dir, main_indir, main_outdi
   # TODO: load shapefiles and templates only when you're actually plotting (objects named World, Africa, Water, img)
   print("loading inla outputs and relevant functions")
   
-  # Load relevant outputs
+  # Load relevant outputs from previous steps 
   stock_and_flow_access <- fread(file.path(main_indir, "01_stock_and_flow_access.csv"))
   load(file.path(main_indir, "04_inla_dev_gap.Rdata"))
   
@@ -58,9 +61,9 @@ predict_rasters <- function(input_dir, cov_dir, func_dir, main_indir, main_outdi
   spatial_mesh <-  copy(inla_outputs[["access_dev"]][["spatial_mesh"]])
   temporal_mesh <- inla.mesh.1d(seq(2000,2015,by=2),interval=c(2000,2015),degree=2)
   
-  # to replace: temporal_mesh <- copy(inla_outputs[["access_dev"]][["spatial_mesh"]])
+  # TODO: replace with temporal_mesh <- copy(inla_outputs[["access_dev"]][["spatial_mesh"]])
   
-  ## Find early years to 'squash'  ## ---------------------------------------------------------
+  ## Find early years to 'squash' TODO: don't  ## ---------------------------------------------------------
   print("Finding years to squash")
   stock_and_flow_use <- fread(file.path(input_dir, "stock_and_flow/quarterly_use.csv"))
   stock_and_flow_use <- stock_and_flow_use[2:nrow(stock_and_flow_use)]
@@ -132,14 +135,12 @@ predict_rasters <- function(input_dir, cov_dir, func_dir, main_indir, main_outdi
     acc_dev_predictions <- merge(acc_dev_predictions, stock_and_flow_access, by=c("iso3", "year", "month"), all.x=T)
     acc_dev_predictions[, emplogit_access:= emplogit_nat_access + access_deviation]
     
-    # todo: definitely something weird with emplogit and access dev
     acc_dev_predictions_transformed <- acc_dev_predictions[, list(iso3, year, month, cellnumber, 
                                                                   emplogit_access=emplogit_access,
                                                                   access=plogis(emplogit_access),
                                                                   access_deviation=plogis(access_deviation),
                                                                   nat_access=plogis(emplogit_nat_access))]
     
-    # TODO: should na.rm be T or F?
     summary_access <- acc_dev_predictions_transformed[, list(nat_access=mean(nat_access, na.rm=F),
                                                              access_deviation=mean(access_deviation, na.rm=F),
                                                              access=mean(access, na.rm=F)),
@@ -225,6 +226,9 @@ predict_rasters <- function(input_dir, cov_dir, func_dir, main_indir, main_outdi
   
 }
 
+## TO RUN THIS SCRIPT INDIVIDUALLY, READ HERE
+# to get this to run on your desktop, create a variable in your environment called "run_locally" that has some value.
+# DO NOT set run_locally as an object that exists in this script.
 
 if (Sys.getenv("run_individually")!=""){
   

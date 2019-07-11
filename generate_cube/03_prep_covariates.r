@@ -3,7 +3,13 @@
 ## Amelia Bertozzi-Villa
 ## April 2019
 ## 
-## A restructuring of Sam Bhatt's original code to prepare covariates for the ITN cube model.
+## Extract covariates at the proper time points and pixels for the covariate model. 
+## This script includes covariate extraction for a) running the model (covariates only at data locations)
+## and b) predicting the model (covariates for the entire area of interest). Covariates are listed in 
+## 'covariate_key.csv'.
+
+## NB: This code is designed to be run as part of a larger pipeline (see 00_generate_cube_master.r).
+##      To run this script locally or individually, see instructions at the bottom of the page. 
 ## 
 ##############################################################################################################
 
@@ -15,9 +21,11 @@ prep_covariates <- function(input_dir, cov_dir, func_dir, main_indir, main_outdi
   data<-fread(file.path(main_indir, "02_survey_data.csv"))
   data[, row_id:=as.integer(row.names(data))]
   
-  # load covariates, keep only those used by sam in the most recent code
+  # load covariates
   cov_dt <- fread(file.path(func_dir, "covariate_key.csv"))
   cov_dt[, used_sam:= as.logical(used_sam)]
+  
+  # todo: remove this column when switching to new covariates
   cov_dt <- cov_dt[used_sam==T]
   
   # find the "valid" cell values for which we want to predict in the itn prediction step
@@ -103,6 +111,8 @@ prep_covariates <- function(input_dir, cov_dir, func_dir, main_indir, main_outdi
     these_fnames <- copy(dynamic_cov_dt)
     these_fnames[, year_to_use:=pmin(end_year, this_year)] # cap year by covariate availability
     these_fnames[, year_to_use:=pmax(year_to_use, start_year)] 
+    
+    # todo: change these year cap adjustments if necessary
     # cap to make sure the specific month_year is available (2000 and 2014 don't have all months)
     these_fnames[end_year==year_to_use & end_month<this_month, year_to_use:=end_year-1]
     these_fnames[start_year==year_to_use & start_month>this_month, year_to_use:=start_year+1]
@@ -154,9 +164,12 @@ prep_covariates <- function(input_dir, cov_dir, func_dir, main_indir, main_outdi
   print("saving to file")
   write.csv(data, file.path(main_outdir, "03_data_covariates.csv"), row.names = F)
   
-  
 }
 
+
+## TO RUN THIS SCRIPT INDIVIDUALLY, READ HERE
+# to get this to run on your desktop, create a variable in your environment called "run_locally" that has some value.
+# DO NOT set run_locally as an object that exists in this script.
 
 if (Sys.getenv("run_individually")!=""){
   

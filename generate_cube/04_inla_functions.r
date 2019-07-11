@@ -3,16 +3,18 @@
 ## Amelia Bertozzi-Villa
 ## May 2019
 ## 
-## Functions to accompany 03_access_dev.r 
+## Functions to accompany 04_dev_and_gap.r
 
-## -emplogit: 1-value empirial logit. 
-## -other_emplogit: compare to emplogit
-## -emplogit2: 2-input empirical logit
-## - ll.to.xyz: convert a set of lat-longs to cartesian gridpoints.
+## - emplogit: 1-value empirial logit. 
+## - emplogit2: 2-input empirical logit (odds ratio approx)
+## - ihs: inverse hyperbolic sine transform
+## - inv_ihs: inverse of the inverse hyperbolic sine transform
+## - ihs_loglik: log-likelihood for the IHS
 
-## -reposition.points: adjust impossibly-placed lat-longs
-## -aggregate.data: sum to pixel level (TODO: fix column bug)
-## -calc_access_matrix: calculate access metrics by household size from stock and flow outputs
+
+## - ll_to_xyz: convert a set of lat-longs to cartesian gridpoints.
+## - run_inla: return inla model object from data and covariates
+## - predict_inla: predict inla model from run_inla with new covariate values
 ##############################################################################################################
 
 # lifted from the docs of the empLogit function from the binomTools package
@@ -31,7 +33,7 @@ emplogit2<-function(y, n){
 
 
 # Inverse Hyperbolic sin transform
-ihs <- function(x, theta){  # function to IHS transform
+ihs <- function(x, theta){  
   return(asinh(theta * x)/theta) 
 }
 

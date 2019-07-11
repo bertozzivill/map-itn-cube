@@ -1,7 +1,12 @@
 ###############################################################################################################
-## 03_dev_and_gap.r
+## 04_dev_and_gap.r
 ## Amelia Bertozzi-Villa
 ## June 2019
+## 
+## Transform data and run inla models for 1. Access Deviation and 2. Use Gap.
+
+## NB: This code is designed to be run as part of a larger pipeline (see 00_generate_cube_master.r).
+##      To run this script individually, see instructions at the bottom of the page. 
 ## 
 ##############################################################################################################
 
@@ -38,7 +43,7 @@ run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, sta
   
   ## Prep for model ##-------------------------------------------------------------
   
-  # calculate use gap and  access deviation for data points, 
+  # calculate use gap and  access deviation for data points
   data[, emp_use_gap:=emplogit2(access_count, pixel_pop) - emplogit2(use_count, pixel_pop)] # emplogit difference of access-use
   data[, emp_access_dev:= emplogit2(access_count, pixel_pop) - emplogit(national_access)]
   
@@ -79,6 +84,11 @@ run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, sta
   save(inla_outputs, file=output_fname)
   
 }
+
+
+## TO RUN THIS SCRIPT INDIVIDUALLY, READ HERE
+# to get this to run on your desktop, create a variable in your environment called "run_locally" that has some value.
+# DO NOT set run_locally as an object that exists in this script.
 
 if (Sys.getenv("run_individually")!=""){
   
