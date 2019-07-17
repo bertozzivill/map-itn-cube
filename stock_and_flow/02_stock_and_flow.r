@@ -43,6 +43,8 @@ No_report_SVYs<-fread(file.path(main_dir,'No Report SVYs_080817.csv'),stringsAsF
 # distribution of household sizes in surveys-- used in itn cube as well, where does it come from
 hh<-fread(file.path(main_dir, 'HHsize.csv'))
 
+# get populations from database (frankenpop)
+
 
 # where do these numbers come from??
 # they look like different version of each other-- which to use? VERY different #s in some countries
@@ -54,7 +56,7 @@ test <- POP[iso_3_code %in% unique(PAR$iso_3_code)]
 ggplot(test, aes(x=year)) +
   geom_line(aes(y=total_population))+
   geom_line(data=PAR, aes(y=total_pop), color="red") + 
-  facet_wrap(~iso_3_code, scales="free")
+  facet_wrap(~iso_3_code, scales="free_y")
 
 # horrifying list. TODO: check eLife paper for rationals for these, put in to table.
 # pray for me.
