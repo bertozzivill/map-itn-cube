@@ -9,6 +9,38 @@
 ## General question: we can use data w/o lat-longs for stock and flow, couldn't we? Just not for cube?
 ##############################################################################################################
 
+
+# ML2010OTH: not an obvious duplicate, Harry says maybe available-- but go ahead and use bonnie's extraction
+
+# MYSTERY DATA SUMMARY
+# from Z:\Malaria data\Measure DHS\Data and Aggregation\Data from Malaria IndicatorsNet details aggregated by household combined6Oct.csv:
+
+# KE2007BM: Kenya 2007 AIS? See Z:\Malaria data\Measure DHS\Data and Aggregation\Data from Malaria Indicators\Kenya AIS 2007 download24012014
+# Permission: No source/permission info.
+
+
+# KE2010BM: looks like the Kenya 2010 MIS present in dhs_key-- not publicly available, unclear how we got it.
+# See Z:\Malaria data\Measure DHS\Data and Aggregation\Data from Malaria Indicators\Kenya 2010 download140513
+# Permission: No source/permission info.
+
+# NM2009SPA: data looks ok, but no reference for it in the data folder? 
+# may be the Namibia 2009 MIS from Z:\Malaria data\Surveys from other sources. 
+# Permission: See Namibia MIS 2009/MAPpermission.pdf, looks like we can use.
+#             Note says "we are allowed to state that we have this data, but we are not allowed to share it"
+
+
+# from Z:\Malaria data\Surveys from other sources. Some permissions documented in Surveys permissions.docx
+
+# Eritrea2008: MIS survey, not in dhs_key. No source/permission info. 
+# Malawi2010: MIS, not in dhs_key (though a 2010 DHS is documented). 
+#             Note says "Source: Malawi MoH, via researchers at Tulane. Permission: make no mention of the fact we have this survey, nor share the data"
+
+# SierraLeone2011: unclear origin, not in dhs_key. Possibly from Adam Bennet? No permission info. 
+# Sudan 2009, Sudan2012: From WHO. Note says "We are allowed to state that we have this data, but we are not allowed to share it"
+# Zambia: 2010 & 2012 MIS, not in dhs_key. No permission info. 
+
+
+
 rm(list=ls())
 
 library(data.table)
