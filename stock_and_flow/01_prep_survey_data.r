@@ -17,9 +17,9 @@ rm(list=ls())
 main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data"
 dhs_dir <- "/Volumes/GoogleDrive/Shared drives/Data Gathering/Standard_MAP_DHS_Outputs/DHS_ITN_Data/Output/2018-07-12/standard_tables"
 
-## HH1: DHS/MIS data
-## HH2: MICS4 data
-## HH3: Other source data
+# big table of national name/region/code maps. used to map ISO to GAUL in itn cube, not sure about here. 
+country_codes <-fread(file.path(main_dir, 'National_Config_Data.csv'))
+
 
 ## DATA SOURCE ONE: DHS SURVEYS ----------------------------------------------------------------------------------------------------------------------
 
@@ -51,10 +51,13 @@ dhs_data <- lapply(dhs_surveynums, function(svynum){
 
 dhs_data <- rbindlist(dhs_data)
 
+# Ethiopia survey ET2005DHS has 1997 as year in source while it should be 2005 
+dhs_data[SurveyId=="ET2005DHS",year:=2005]
+
 
 # read in older data extracted by B Mappin, keep only surveys that are not present in dhs_data
-
 print("reading older dhs data")
+
 # from Z:\Malaria data\Measure DHS\Data and Aggregation\Data from Malaria Indicators. 
 old_dhs_data <-fread(file.path(main_dir, "survey_data/Net details aggregated by household combined6Oct.csv"),stringsAsFactors=FALSE)
 setnames(old_dhs_data, c("Survey.hh"), c("old_id"))
@@ -78,19 +81,32 @@ old_dhs_cluster <- old_dhs_cluster[Survey %in% unique(old_dhs_data$old_id),
 old_dhs_data <- merge(old_dhs_data, old_dhs_cluster, by=c("old_id", "Cluster.hh"), all.x=T) # Congo 2011, Kenya 2007, and Kenya 2010 don't have gps data
 
 
+## DATA SOURCE TWO: MICS SURVEYS ----------------------------------------------------------------------------------------------------------------------
 
-
-
-# big table of national name/region/code maps. used to map ISO to GAUL in itn cube, not sure about here. 
-master_table<-fread(file.path(main_dir, 'National_Config_Data.csv'),stringsAsFactors=FALSE)
-
+# todo: check in with suzanne on older/newer versions of this
 
 ## MICS4 data -- from 2014, probably newer ones that we haven't processed 
 # originally from Z:\Malaria data\MICS\Indicator data\MICS4\MICS4 Net details aggregated by household 21Jan.csv
-HH2<-fread(file.path(main_dir, 'MICS4 Net details aggregated by household 21Jan.csv'))
+old_mics_data<-fread(file.path(main_dir, "survey_data/MICS4 Net details aggregated by household 21Jan.csv"))
+
+# todo: find country name and iso3
+
+
+## DATA SOURCE THREE: OTHER SURVEYS ----------------------------------------------------------------------------------------------------------------------
+# see data_checking.r for more details
 
 # "other" data-- unsure, hunt through Z:\Malaria data\Surveys from other sources
-HH3<-fread(file.path(main_dir, 'Other source net data by household.csv'))
+old_other_data <-fread(file.path(main_dir, "survey_data/Other source net data by household.csv"))
+
+# todo: find country name and iso3
+
+
+## Combine, format, and aggregate  ----------------------------------------------------------------------------------------------------------------------
+
+
+
+
+
 
 # written by this script: 
 # --'WHO_Stock_and_Flow Files/DHS_MIS_all_28052019.csv'
