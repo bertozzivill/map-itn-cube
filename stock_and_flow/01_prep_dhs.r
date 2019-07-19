@@ -14,47 +14,76 @@ library(RecordLinkage)
 
 rm(list=ls())
 
-main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/data_from_sam"
-
-
-### Read in all data ##### 
+main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data"
+dhs_dir <- "/Volumes/GoogleDrive/Shared drives/Data Gathering/Standard_MAP_DHS_Outputs/DHS_ITN_Data/Output/2018-07-12/standard_tables"
 
 ## HH1: DHS/MIS data
 ## HH2: MICS4 data
 ## HH3: Other source data
 
+## DATA SOURCE ONE: DHS SURVEYS ----------------------------------------------------------------------------------------------------------------------
 
-# from Z:\Malaria data\Measure DHS\Data and Aggregation\Data from Malaria Indicators. this looks very much like the ITN data we use to calibrate the inla model
-## oh SHIT this *is* the script that generates the itn data we use in the itn cube. UUF. 
-HH1<-fread(file.path(main_dir, "Net details aggregated by household combined6Oct.csv"),stringsAsFactors=FALSE)
+# Read in data extracted algorithmically from DHS website
 
-# from from Z:\Malaria data\Measure DHS\Data and Aggregation\Data from Malaria Indicators.
-# is this the same data but aggregated to the cluster level? It's only used to assign lat-longs to "HH1"
-# name changed from "Net details aggregated by cluster combined22Oct.csv" to "Net details aggregated by cluster combined22Oct_all.csv, hope it's ok"
-HH1_cluster<-fread(file.path(main_dir, "Net details aggregated by cluster combined22Oct_all.csv"),stringsAsFactors=FALSE) 
+print("reading latest DHS data")
+# dhs key originally from http://api.dhsprogram.com/rest/dhs/surveys?f=html&surveyStatus=all
+dhs_key <- fread(file.path(main_dir, "dhs_survey_key.csv"))
+dhs_key <- dhs_key[, list(SurveyId, SurveyNum, CountryName)]
 
-# to map old survey id to new survey ID
-# contains all svs in HH1 except "Swaziland2010"
-# TODO: is Uganda 2011 BM or DHS?
-KEY<-fread(file.path(main_dir, 'KEY_080817.csv'),stringsAsFactors=FALSE)
+dhs_files <- list.files(dhs_dir)
+dhs_surveynums <- as.integer(gsub("Svy_(.*)_ITN_HH_Res.csv", "\\1", dhs_files))
+dhs_surveynums <- dhs_surveynums[!is.na(dhs_surveynums)]
+available_dhs_key <- dhs_key[SurveyNum %in% dhs_surveynums]
+
+# read in all available surveys
+dhs_data <- lapply(dhs_surveynums, function(svynum){
+  
+  loc <- which(dhs_surveynums==svynum)
+  print(paste(loc, "of", length(dhs_surveynums)))
+  
+  dataset <- fread(file.path(dhs_dir, paste0("Svy_", svynum, "_ITN_HH_Res.csv")))
+  
+  # rename id column and fix column naming bug
+  setnames(dataset, c("SurveyID", "interview_month", "interview_year"), c("SurveyNum", "interview_year", "interview_month"))
+  dataset <- merge(dataset, available_dhs_key, by="SurveyNum", all.x=T)
+  return(dataset)
+})
+
+dhs_data <- rbindlist(dhs_data)
+
+
+# read in older data extracted by B Mappin, keep only surveys that are not present in dhs_data
+
+print("reading older dhs data")
+# from Z:\Malaria data\Measure DHS\Data and Aggregation\Data from Malaria Indicators. 
+old_dhs_data <-fread(file.path(main_dir, "survey_data/Net details aggregated by household combined6Oct.csv"),stringsAsFactors=FALSE)
+setnames(old_dhs_data, c("Survey.hh"), c("old_id"))
+
+old_dhs_key <- fread(file.path(main_dir, "survey_data/KEY_080817.csv"))
+setnames(old_dhs_key, c("Svy Name", "Name"), c("SurveyId", "CountryName"))
+old_dhs_key <- old_dhs_key[SurveyId!="U2011BM"] # remove duplicate survey, see data_checking.r for details
+
+old_dhs_data <- merge(old_dhs_data, old_dhs_key, by="old_id", all.x=T)
+
+# keep only surveys that don't overlap with newer DHS data-- see data_checking.r for how we got these survey values specifically
+old_dhs_data <- old_dhs_data[SurveyId %in% c("TZ2007AIS", "ML2010OTH", "KE2007BM", "KE2010BM", "NM2009SPA", "RC2012BM")]
+
+# also load cluster-level data from this extraction to get lat-longs
+old_dhs_cluster <- fread(file.path(main_dir, "/survey_data/Net details aggregated by cluster combined22Oct.csv"))
+old_dhs_cluster <- old_dhs_cluster[Survey %in% unique(old_dhs_data$old_id), 
+                                   list(old_id=Survey, 
+                                        Cluster.hh=Cluster.number,
+                                        latitude=Lat.cluster,
+                                        longitude=Long.cluster)]
+old_dhs_data <- merge(old_dhs_data, old_dhs_cluster, by=c("old_id", "Cluster.hh"), all.x=T) # Congo 2011, Kenya 2007, and Kenya 2010 don't have gps data
+
+
+
+
 
 # big table of national name/region/code maps. used to map ISO to GAUL in itn cube, not sure about here. 
 master_table<-fread(file.path(main_dir, 'National_Config_Data.csv'),stringsAsFactors=FALSE)
 
-# start of "harry" data-- so perhaps previous data was from Bonnie?
-
-# useful table of data sources overall
-# MISSING survey 331?
-key_harry<-fread(file.path(main_dir, 'SurveyIDs_20180712_iso_2_3.csv'),stringsAsFactors=FALSE)
-
-# "harry" surveys are from the newSVY folder-- why are these not aggregated already? Don't understand what's going on here
-# these are in a different format than the survey data above or in the itn cube code. Older format? newer?
-newsvy_dir <- file.path(main_dir, "newSVY")
-harry_svys <- list.files(newsvy_dir)
-harry_svys <- as.integer(gsub("Svy_(.*)_ITN_HH_Res.csv", "\\1", harry_svys))
-harry_svyids <- key_harry[SurveyNum %in% harry_svys]$SurveyId
-
-# NOTE: after this step sam removes anything from bonnie's file that's replicated in Harry's. What's left over from Bonnie's? why? 
 
 ## MICS4 data -- from 2014, probably newer ones that we haven't processed 
 # originally from Z:\Malaria data\MICS\Indicator data\MICS4\MICS4 Net details aggregated by household 21Jan.csv

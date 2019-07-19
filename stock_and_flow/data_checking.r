@@ -9,6 +9,15 @@
 ## General question: we can use data w/o lat-longs for stock and flow, couldn't we? Just not for cube?
 ##############################################################################################################
 
+## SUMMARY AS OF JULY 19TH 2019: 
+# Harry to extract: TZ2007AIS
+# Use Bonnie's: 
+# ML2010OTH
+# KE2007BM
+# KE2010BM
+# NM2009SPA
+# RC2012BM
+
 
 # ML2010OTH: not an obvious duplicate, Harry says maybe available-- but go ahead and use bonnie's extraction
 
