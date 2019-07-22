@@ -10,7 +10,7 @@ library(survey)
 library(zoo)
 library(data.table)
 library(ggplot2)
-library(RecordLinkage)
+library(lubridate)
 
 rm(list=ls())
 
@@ -112,15 +112,17 @@ setnames(old_mics_data, to_sub_mics, gsub("LLIN", "LLINs", to_sub_mics))
 # "other" data-- unsure, hunt through Z:\Malaria data\Surveys from other sources
 old_other_data <-fread(file.path(main_dir, "survey_data/Other source net data by household.csv"))
 
-# TODO: sam only keeps 'Eritrea2008','Sudan 2009','SierraLeone2011','Sudan2012'. Why?
+# surveys to drop for cube:
+# "Zambia 2010" "Zambia 2012": No hh_sample_wt
+# MW2010: No n_defacto_pop or n_slept_under_itn
+
+old_other_data <- old_other_data[!Survey.hh %in% c("Malawi2010", "Zambia 2010", "Zambia 2012")]
+
+## AGGREGATE ALL DATA  ----------------------------------------------------------------------------------------------------------------------
 
 ## Combine, and format old data  ----------------------------------------------------------------------------------------------------------------------
 
 all_old_data <- rbind(old_dhs_data, old_mics_data, old_other_data, fill=T)
-
-old_survey_key <- rbind(old_survey_key, data.table(SurveyId="MW2010",
-                                                   Survey.hh="Malawi2010",
-                                                   CountryName="Malawi"))
 
 # adjust some country names for merging and iso3s
 old_survey_key$CountryName <- mapvalues(old_survey_key$CountryName, 
@@ -161,10 +163,14 @@ all_old_data <- all_old_data[, list(SurveyId,
                                     n_llin_2_3yr=n.LLINs.2to3years,
                                     n_llin_gt3yr=n.LLINs.more.than.3years)
                                     ]
-
-## Combine, format, and aggregate  ----------------------------------------------------------------------------------------------------------------------
-
 all_data <- rbind(all_old_data, dhs_data)
+
+# remove columns about pregnant women and children under 5, we don't use them
+to_drop <- names(all_data)[names(all_data) %like% "u5" | names(all_data) %like% "preg"]
+
+all_data[, (to_drop):=NULL]
+
+## Isolate data to use for itn cube fitting-- must have entries in all columns listed below  ----------------------------------------------------------------------------------------------------------------------
 
 for_cube <- all_data[, list(SurveyId, 
                             CountryName,
@@ -179,13 +185,64 @@ for_cube <- all_data[, list(SurveyId,
                             n_slept_under_itn,
                             n_itn)]
 
-# TODO: surveys to drop for cube:
-# "Zambia 2010" "Zambia 2012": No hh_sample_wt
-# MW2010: No n_defacto_pop or n_slept_under_itn
 for_cube <- for_cube[complete.cases(for_cube)]
-write.csv(file.path(main_dir, "../results/hh_net_data.csv"), row.names=F)
+# write.csv(for_cube, file.path(main_dir, "../results/itn_survey_data.csv"), row.names=F) # TODO: compare this to the net data currently being used
+
+
+## SUMMARIZE DATA FOR STOCK AND FLOW  ----------------------------------------------------------------------------------------------------------------------
+
+# todo: drop non-african countries
+
+all_data <- all_data[!is.na(hh_size) & !is.na(year)]
+
+all_data[, hh_sample_wt:=hh_sample_wt/1e6] # as per dhs specs, apparently (ask sam). 
+
+# get date as middle day of collection month
+all_data[, time:=decimal_date(ymd(paste(year, month, "15", sep="-")))]
+
+# NOTE: this sum is different from n_itn in a handful of cases
+all_data[, summed_n_itn:= n_conv_itn + n_llin]
+
+print("Summarizing surveys")
+survey_summary <- lapply(unique(all_data$SurveyId), function(this_svy){
+  
+  print(this_svy)
+  this_svy_data <- all_data[SurveyId==this_svy]
+  
+  # set up survey design
+  svy_strat<-svydesign(ids=~clusterid, data=this_svy_data, weight=~adjusted_sample_wt) 
+  
+  # NOTE: changed to using n_defacto_pop from hh_size
+  svy_means <- as.data.frame(svymean( ~ hh_size +  n_defacto_pop + summed_n_itn + n_llin + n_conv_itn + 
+                                        n_slept_under_itn + n_itn_used, svy_strat))
+  names(svy_means) <- c("val", "se")
+  svy_sums <- as.data.frame( svytotal(~ n_llin + n_llin_1yr + n_llin_1_2yr + n_llin_2_3yr + n_llin_gt3yr, svy_strat) ) 
+  names(svy_sums) <- c("val", "se")
+  rownames(svy_sums) <- paste0("tot_", rownames(svy_sums))
+  svy_summary <- rbind(svy_means, svy_sums)
+  svy_summary$variable <- rownames(svy_summary)
+  
+  svy_summary <- data.table(svy_summary,
+                            surveyid = this_svy,
+                            iso3=unique(this_svy_data$iso3) ,
+                            country=unique(this_svy_data$CountryName),
+                            time=svymean(~time, svy_strat)[[1]],
+                            min_time=min(this_svy_data$time),
+                            max_time=max(this_svy_data$time)
+  )
+  svy_summary <- melt(svy_summary, measure.vars = c("val", "se"), variable.name="metric")
+  svy_summary <- dcast(svy_summary, surveyid + iso3 + country + time +  min_time + max_time + metric ~ variable, value.var="value")
+  
+  return(svy_summary)
+})
+
+# for each metric, values are means unless col name is "tot", in which case they are sums
+survey_summary <- rbindlist(survey_summary)
+
+# for comparison
+sam_summary_data <- fread(file.path(main_dir, "../data_from_sam/Aggregated_HH_Svy_indicators_28052019.csv"))
+
 
 
 # written by this script: 
 # --'WHO_Stock_and_Flow Files/DHS_MIS_all_28052019.csv'
-# --'Aggregated_HH_Svy_indicators_28052019.csv'
