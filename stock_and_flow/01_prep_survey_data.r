@@ -186,7 +186,7 @@ for_cube <- all_data[, list(SurveyId,
                             n_itn)]
 
 for_cube <- for_cube[complete.cases(for_cube)]
-# write.csv(for_cube, file.path(main_dir, "../results/itn_survey_data.csv"), row.names=F) # TODO: compare this to the net data currently being used
+write.csv(for_cube, file.path(main_dir, "../results/itn_survey_data.csv"), row.names=F) # TODO: compare this to the net data currently being used
 
 
 ## SUMMARIZE DATA FOR STOCK AND FLOW  ----------------------------------------------------------------------------------------------------------------------
@@ -239,10 +239,5 @@ survey_summary <- lapply(unique(all_data$SurveyId), function(this_svy){
 # for each metric, values are means unless col name is "tot", in which case they are sums
 survey_summary <- rbindlist(survey_summary)
 
-# for comparison
-sam_summary_data <- fread(file.path(main_dir, "../data_from_sam/Aggregated_HH_Svy_indicators_28052019.csv"))
+write.csv(survey_summary, file.path(main_dir, "../results/summarized_survey_data.csv"), row.names=F)
 
-
-
-# written by this script: 
-# --'WHO_Stock_and_Flow Files/DHS_MIS_all_28052019.csv'
