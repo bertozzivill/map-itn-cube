@@ -34,7 +34,10 @@ prep_covariates <- function(input_dir, cov_dir, func_dir, main_indir, main_outdi
   ### Static covariates  ----------------------------------------------------------------------------#######################  
   
   print("Extracting static covariates")
-  static_fnames <- cov_dt[type=="static", list(fname=file.path(cov_dir, cov_name, fpath_append, fname))]
+  static_fnames <- cov_dt[type=="static", list(fname=ifelse(fpath=="custom_covariates",
+                                                            file.path(input_dir, fpath, fname),
+                                                            file.path(cov_dir, fpath, fname))
+                                               )]
   
   all_static <- extract_values(static_fnames$fname,raster_indices)
   all_static[, cellnumber:=raster_indices]
@@ -50,11 +53,6 @@ prep_covariates <- function(input_dir, cov_dir, func_dir, main_indir, main_outdi
   print("Extracting annual covariates")
   annual_cov_dt <- cov_dt[type=="year"]
   
-  # find base fnames-- allows for the possibility of a non-year looping variable such as landcover fraction
-  base_fnames <- lapply(annual_cov_dt$cov_name, get_annual_fnames, covariate_dt=annual_cov_dt, input_dir=cov_dir)
-  base_fnames <- rbindlist(base_fnames)
-  base_fnames <- base_fnames[colname!="IGBP_Landcover_13"] # remove Urban landcover for high collinearity with population
-  
   print("Extracting whole-continent values")
   ncores <- detectCores()
   print(paste("--> Machine has", ncores, "cores available"))
@@ -64,15 +62,16 @@ prep_covariates <- function(input_dir, cov_dir, func_dir, main_indir, main_outdi
     
     print(this_year)
     
-    these_fnames <- copy(base_fnames)
+    these_fnames <- copy(annual_cov_dt)
     these_fnames[, year_to_use:=pmin(end_year, this_year)] # cap year by covariate availability
     these_fnames[, year_to_use:=pmax(year_to_use, start_year)] 
-    these_fnames[, full_fname:=str_replace(base_fname, "YEAR", as.character(year_to_use))]
+    these_fnames[, new_fname:=str_replace(fname, "YEAR", as.character(year_to_use))]
+    these_fnames[, full_fname:= file.path(cov_dir, fpath, new_fname)]
     
-    subset <- extract_values(these_fnames$full_fname, raster_indices, names=these_fnames$colname)
+    subset <- extract_values(these_fnames$full_fname, raster_indices, names=these_fnames$cov_name)
     subset[, year:=this_year]
     subset[, cellnumber:=raster_indices]
-    setcolorder(subset, c("year", "cellnumber", these_fnames$colname))
+    setcolorder(subset, c("year", "cellnumber", these_fnames$cov_name))
     
     return(subset)
   }
@@ -112,14 +111,13 @@ prep_covariates <- function(input_dir, cov_dir, func_dir, main_indir, main_outdi
     these_fnames[, year_to_use:=pmin(end_year, this_year)] # cap year by covariate availability
     these_fnames[, year_to_use:=pmax(year_to_use, start_year)] 
     
-    # todo: change these year cap adjustments if necessary
-    # cap to make sure the specific month_year is available (2000 and 2014 don't have all months)
+    # cap to make sure the specific month_year is available
     these_fnames[end_year==year_to_use & end_month<this_month, year_to_use:=end_year-1]
     these_fnames[start_year==year_to_use & start_month>this_month, year_to_use:=start_year+1]
     
     these_fnames[, new_fname:=str_replace(fname, "YEAR", as.character(year_to_use))]
     these_fnames[, new_fname:=str_replace(new_fname, "MONTH", str_pad(this_month, 2, pad="0"))]
-    these_fnames[, full_fname:=file.path(cov_dir, cov_name, fpath_append, new_fname)]
+    these_fnames[, full_fname:=file.path(cov_dir, fpath, new_fname)]
     
     subset <- extract_values(these_fnames$full_fname, raster_indices, names=these_fnames$cov_name)
     subset[, year:=this_year]
@@ -130,23 +128,6 @@ prep_covariates <- function(input_dir, cov_dir, func_dir, main_indir, main_outdi
     return(subset)
   }
   all_dynamic <- rbindlist(all_dynamic)
-  
-  # isolate values for data
-  # -------TEMP: for the four cell values that are mis-extracted, preserve the bug for now by replacing the correct with the incorrect values 
-  incorrect_points <- data.table(cellnumber=c(901138, 1027886, 1603132, 2141192),
-                                 year=c(2008, 2014, 2014, 2004),
-                                 month=c(12, 2, 10, 12),
-                                 sub_cellnumber=c(896098, 1026206, 1591372, 2137832))
-  
-  data <- merge(data, incorrect_points, by=c("cellnumber", "year", "month"), all.x=T)
-  data[is.na(sub_cellnumber), sub_cellnumber:=cellnumber]
-  
-  setnames(all_dynamic, "cellnumber", "sub_cellnumber")
-  data <- merge(data, all_dynamic, by=c("year", "month", "sub_cellnumber"), all.x=T)
-  data[, sub_cellnumber:=NULL]
-  setnames(all_dynamic, "sub_cellnumber", "cellnumber")
-  
-  ### -----------------------------------
   
   # save dynamic covariates(by year)
   print("saving dynamic covariates by year")

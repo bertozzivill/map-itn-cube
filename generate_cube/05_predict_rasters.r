@@ -59,15 +59,18 @@ predict_rasters <- function(input_dir, cov_dir, func_dir, main_indir, main_outdi
   
   # note: the mesh objects from access dev or use gap should be the same-- we just pick the access dev ones here.
   spatial_mesh <-  copy(inla_outputs[["access_dev"]][["spatial_mesh"]])
-  temporal_mesh <- inla.mesh.1d(seq(2000,2015,by=2),interval=c(2000,2015),degree=2)
-  
-  # TODO: replace with temporal_mesh <- copy(inla_outputs[["access_dev"]][["spatial_mesh"]])
+  temporal_mesh <- copy(inla_outputs[["access_dev"]][["temporal_mesh"]])
   
   ## Find early years to 'squash' TODO: don't  ## ---------------------------------------------------------
   print("Finding years to squash")
   stock_and_flow_use <- fread(file.path(input_dir, "stock_and_flow/quarterly_use.csv"))
   stock_and_flow_use <- stock_and_flow_use[2:nrow(stock_and_flow_use)]
-  names(stock_and_flow_use) <- c("country", seq(2000, 2018, 0.25))
+  
+  # find time span of dataset
+  time_points <- length(names(stock_and_flow_use))-2 # (subtract 1 for the "country" label, and 1 for the year 2000, our starting point)
+  end_year <- 2000 + time_points*0.25
+  names(stock_and_flow_use) <- c("country", seq(2000, end_year, 0.25)) 
+
   stock_and_flow_use <- melt(stock_and_flow_use, id.vars = "country", variable.name="time", value.name="use")
   stock_and_flow_use[, year:=floor(as.numeric(as.character(time)))]
   
@@ -110,16 +113,9 @@ predict_rasters <- function(input_dir, cov_dir, func_dir, main_indir, main_outdi
     ## Load year-specific covaraites  ## ---------------------------------------------------------
     
     print(paste(this_year, "Loading dynamic covariates"))
-    # TEMP TO COINCIDE WITH SAM: restrict the covariate year to 2001-2013
-    cov_year <- min(2013, max(this_year, 2001))
-    
+
     thisyear_covs <- annual_covs[year==cov_year]
     dynamic_covs <- fread(file.path(main_indir, paste0("03_dynamic_covariates/dynamic_", cov_year, ".csv")))
-    
-    # more temp ---
-    thisyear_covs[, year:= this_year]
-    dynamic_covs[, year:= this_year]
-    # ----
     
     thisyear_covs <- merge(static_covs, thisyear_covs, by="cellnumber", all=T)
     thisyear_covs <- merge(thisyear_covs, dynamic_covs, by=c("cellnumber", "year"), all=T)
