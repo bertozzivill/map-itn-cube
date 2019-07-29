@@ -29,28 +29,3 @@ extract_values <- function(raster_fname_list, extraction_indices, names=c()){
   rm(cov_stack); gc()
   return(extracted_covs)
 }
-
-
-get_annual_fnames <- function(covname, covariate_dt, input_dir){
-  this_cov <- covariate_dt[cov_name==covname]
-  if (this_cov$other_var==""){
-    fnames <- data.table(cov_name=covname,
-                         base_fname=file.path(input_dir, covname, this_cov$fpath_append, this_cov$fname),
-                         start_year=this_cov$start_year,
-                         end_year=this_cov$end_year,
-                         colname=covname 
-    )
-  }else{ 
-    fname_list <- lapply(this_cov$othervar_start:this_cov$othervar_end, function(newval){
-      new_fname <- str_replace(this_cov$fname, this_cov$other_var, as.character(newval))
-      return(file.path(input_dir, covname, this_cov$fpath_append, new_fname))
-    })
-    fnames <- data.table(cov_name=covname,
-                         base_fname=unlist(fname_list),
-                         start_year=this_cov$start_year,
-                         end_year=this_cov$end_year,
-                         colname=this_cov$othervar_start:this_cov$othervar_end)
-    fnames[, colname:=paste0(cov_name, "_", colname)]
-  }
-  return(fnames)
-}
