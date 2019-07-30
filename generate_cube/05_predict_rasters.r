@@ -11,7 +11,7 @@
 ## 
 ##############################################################################################################
 
-predict_rasters <- function(input_dir, cov_dir, func_dir, main_indir, main_outdir, prediction_years){
+predict_rasters <- function(input_dir, func_dir, main_indir, main_outdir, prediction_years){
   
   set.seed(212)
   out_dir <- file.path(main_outdir, "05_predictions")
@@ -228,8 +228,8 @@ predict_rasters <- function(input_dir, cov_dir, func_dir, main_indir, main_outdi
 
 if (Sys.getenv("run_individually")!=""){
   
-  # dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-highmem-64 --logging gs://map_data_z/users/amelia/logs --input-recursive input_dir=gs://map_data_z/users/amelia/itn_cube/input_data/ main_indir=gs://map_data_z/users/amelia/itn_cube/results/20190623_monthly_inla func_dir=gs://map_data_z/users/amelia/itn_cube/code/generate_cube cov_dir=gs://map_data_z/cubes_5k --input run_individually=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/run_individually.txt CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/05_predict_rasters.r --output-recursive main_outdir=gs://map_data_z/users/amelia/itn_cube/results/20190623_monthly_inla/ --command 'Rscript ${CODE}'
-
+  # dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-higmem-64 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data main_indir=gs://map_users/amelia/itn/itn_cube/results/20190729_new_covariates/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/04_dev_and_gap.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20190729_new_covariates/ --command 'Rscript ${CODE}'
+  
   package_load <- function(package_list){
     # package installation/loading
     new_packages <- package_list[!(package_list %in% installed.packages()[,"Package"])]
@@ -244,16 +244,14 @@ if (Sys.getenv("run_individually")!=""){
     main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190614_rearrange_scripts/"
     main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190614_rearrange_scripts/"
     func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
-    cov_dir <- "/Volumes/GoogleDrive/Shared drives/cubes/5km incomplete/"
   } else {
     input_dir <- Sys.getenv("input_dir")
     main_indir <- Sys.getenv("main_indir")
     main_outdir <- Sys.getenv("main_outdir")
     func_dir <- Sys.getenv("func_dir") # code directory for function scripts
-    cov_dir <- Sys.getenv("cov_dir")
   }
 
-  predict_rasters(input_dir, cov_dir, func_dir, main_indir, main_outdir, prediction_years=2000:2016)
+  predict_rasters(input_dir, func_dir, main_indir, main_outdir, prediction_years=2000:2016)
   
 }
 
