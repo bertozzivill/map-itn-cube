@@ -24,6 +24,31 @@ csv_dirlist <- function(dir, main_dir){
 
 all_files <- c(csv_dirlist("MICS4", main_dir), csv_dirlist("MICS5", main_dir), csv_dirlist("MICS6", main_dir))
 
+# for the Nigeria 2016 MICS5, determine which is the correct survey weighting
+nigeria <- fread(all_files[all_files %like% "Nigeria2016"])
+nigeria <- unique(nigeria[3:nrow(nigeria), list(clusterid=HH1, 
+                                                hhid=HH2, 
+                                                hhweight=as.numeric(hhweight),
+                                                hhweightkano=as.numeric(hhweightkano),
+                                                hh_size=as.integer(HH11)
+                                                )])
+svy_strat<-svydesign(ids=~clusterid, data=nigeria, weight=~hhweight) 
+svymean( ~ hh_size, svy_strat)
+
+
+# look at raw
+nigeria_hh <- fread("/Volumes/map_data/MICS_Automation/Acquisition/NEW/03 Processed/MICS5/Ready to Extract/Nigeria MICS 2016-17 SPSS Datasets_hh_ready.csv")
+
+new_nigeria_hh <- nigeria_hh[4:nrow(nigeria_hh), 
+                         list(clusterid=V2, hhid=V3, 
+                                hh_size=as.integer(V15),
+                                hhweight=as.numeric(V201), 
+                                hhweightkano=as.numeric(V204),
+                                hhweightlagos=as.numeric(V205))]
+new_nigeria_hh[is.na(hh_size), hh_size:=0]
+
+svy_strat<-svydesign(ids=~clusterid, data=new_nigeria_hh, weight=~hhweight) 
+svymean( ~ hh_size, svy_strat)
 
 print("loading data")
 # todo: find ways to read ascii data for accented letters
@@ -32,7 +57,7 @@ print("loading data")
 # temp for train
 all_files <- all_files[all_files %like% "MICS5"]
 
-all_data <- list(fread(all_files[1]), fread(all_files[3]))
+all_data <- lapply(all_files, fread)
 
 
 ## DATA QUESTIONS
