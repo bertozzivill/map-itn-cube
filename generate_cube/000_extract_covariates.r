@@ -9,6 +9,7 @@
 ## NB: This script requires an immense amount of memory, only rerun it if you absolutely must.
 ##############################################################################################################
 
+# DON'T USE THIS-- FOR FULL DSUB SEE 000_MAKE_DSUB.R
 # dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-ultramem-40 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data main_indir=gs://map_users/amelia/itn/itn_cube/results/covariates/20190729/ cov_dir=gs://mastergrids_5km --input run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/03_prep_covariates.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/covariates/20190729/ --command 'Rscript ${CODE}'
 
 
@@ -25,12 +26,10 @@ if(Sys.getenv("input_dir")=="") {
   input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
   main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190614_rearrange_scripts/"
   main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190614_rearrange_scripts/"
-  cov_dir <- "/Volumes/GoogleDrive/Shared drives/cubes/5km incomplete/"
 } else {
   input_dir <- Sys.getenv("input_dir")
   main_indir <- Sys.getenv("main_indir")
   main_outdir <- Sys.getenv("main_outdir")
-  cov_dir <- Sys.getenv("cov_dir")
 }
 
 prediction_years <- 2000:2019
@@ -67,16 +66,17 @@ cov_dt[, used_sam:= as.logical(used_sam)]
 # todo: remove this column when switching to new covariates
 cov_dt <- cov_dt[used_sam==T]
 
+# attach on list of vm directories passed into script via dsub
+vm_dirs <- data.table(cov_name=names(Sys.getenv(cov_dt$cov_name)), vm_path=Sys.getenv(cov_dt$cov_name))
+cov_dt <- merge(cov_dt, vm_dirs, by="cov_name", all.x=T)
+
 # find the "valid" cell values for which we want to predict in the itn prediction step
 raster_indices <- which_non_null(file.path(input_dir, "general/african_cn5km_2013_no_disputes.tif"))
 
 ### Static covariates  ----------------------------------------------------------------------------#######################  
 
 print("Extracting static covariates")
-static_fnames <- cov_dt[type=="static", list(fname=ifelse(fpath=="custom_covariates",
-                                                          file.path(input_dir, fpath, fname),
-                                                          file.path(cov_dir, fpath, fname))
-)]
+static_fnames <- cov_dt[type=="static", list(fname=file.path(vm_path, fname))]
 
 all_static <- extract_values(static_fnames$fname,raster_indices)
 all_static[, cellnumber:=raster_indices]
@@ -103,7 +103,7 @@ all_annual <- foreach(this_year=prediction_years) %dopar%{
   these_fnames[, year_to_use:=pmin(end_year, this_year)] # cap year by covariate availability
   these_fnames[, year_to_use:=pmax(year_to_use, start_year)] 
   these_fnames[, new_fname:=str_replace(fname, "YEAR", as.character(year_to_use))]
-  these_fnames[, full_fname:= file.path(cov_dir, fpath, new_fname)]
+  these_fnames[, full_fname:= file.path(vm_path, new_fname)]
   
   subset <- extract_values(these_fnames$full_fname, raster_indices, names=these_fnames$cov_name)
   subset[, year:=this_year]
@@ -153,7 +153,7 @@ all_dynamic <- foreach(month_index=1:nrow(all_yearmons)) %dopar% {
   
   these_fnames[, new_fname:=str_replace(fname, "YEAR", as.character(year_to_use))]
   these_fnames[, new_fname:=str_replace(new_fname, "MONTH", str_pad(this_month, 2, pad="0"))]
-  these_fnames[, full_fname:=file.path(cov_dir, fpath, new_fname)]
+  these_fnames[, full_fname:=file.path(vm_path, new_fname)]
   
   subset <- extract_values(these_fnames$full_fname, raster_indices, names=these_fnames$cov_name)
   subset[, year:=this_year]
