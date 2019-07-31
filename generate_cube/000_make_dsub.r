@@ -10,6 +10,8 @@
 
 library(data.table)
 
+rm(list=ls())
+
 func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
 
 # options 
