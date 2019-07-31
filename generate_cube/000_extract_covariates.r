@@ -87,7 +87,7 @@ raster_indices <- which_non_null(reference_raster)
 print("Extracting static covariates")
 static_fnames <- cov_dt[type=="static", list(fname=file.path(vm_path, fname))]
 
-all_static <- extract_values(static_fnames$fname,raster_indices)
+all_static <- extract_values(static_fnames$fname, raster_indices, reference_raster)
 write.csv(all_static, file.path(main_outdir, "static_covariates.csv"), row.names = F)
 
 rm(all_static); gc()
@@ -110,10 +110,15 @@ all_annual <- foreach(this_year=prediction_years) %dopar%{
   these_fnames <- copy(annual_cov_dt)
   these_fnames[, year_to_use:=pmin(end_year, this_year)] # cap year by covariate availability
   these_fnames[, year_to_use:=pmax(year_to_use, start_year)] 
+  
+  if (this_year%%5>0){
+    these_fnames[fpath %like% "Population", fname:=gsub("YEAR", "YEAR-Interp", fname)]
+  }
+  
   these_fnames[, new_fname:=str_replace(fname, "YEAR", as.character(year_to_use))]
   these_fnames[, full_fname:= file.path(vm_path, new_fname)]
   
-  subset <- extract_values(these_fnames$full_fname, raster_indices, names=these_fnames$cov_name)
+  subset <- extract_values(these_fnames$full_fname, raster_indices, reference_raster, names=these_fnames$cov_name)
   subset[, year:=this_year]
   setcolorder(subset, c("year", "cellnumber", these_fnames$cov_name))
   
@@ -162,7 +167,7 @@ all_dynamic <- foreach(month_index=1:nrow(all_yearmons)) %dopar% {
   these_fnames[, new_fname:=str_replace(new_fname, "MONTH", str_pad(this_month, 2, pad="0"))]
   these_fnames[, full_fname:=file.path(vm_path, new_fname)]
   
-  subset <- extract_values(these_fnames$full_fname, raster_indices, names=these_fnames$cov_name)
+  subset <- extract_values(these_fnames$full_fname, raster_indices, reference_raster, names=these_fnames$cov_name)
   subset[, year:=this_year]
   subset[, month:=this_month]
   setcolorder(subset, c("year", "month", "cellnumber", these_fnames$cov_name))
