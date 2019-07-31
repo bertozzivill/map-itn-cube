@@ -20,10 +20,10 @@ package_load <- function(package_list){
   lapply(package_list, library, character.only=T)
 }
 
-package_load(c("zoo","raster", "doParallel", "data.table", "rgdal", "INLA", "RColorBrewer", "cvTools", "boot", "stringr", "dismo", "gbm"))
+package_load(c("zoo","raster", "doParallel", "data.table", "rgdal", "RColorBrewer", "cvTools", "boot", "stringr", "dismo", "gbm"))
 
 if(Sys.getenv("input_dir")=="") {
-  input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
+  input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/"
   main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190614_rearrange_scripts/"
   main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190614_rearrange_scripts/"
 } else {
@@ -36,8 +36,7 @@ prediction_years <- 2000:2019
 
 # Functions ------------------------------------------------------------
 
-which_non_null <- function(raster_fname){
-  reference_raster <- raster(raster_fname)
+which_non_null <- function(reference_raster){
   NAvalue(reference_raster) <- -9999
   reference_vals <- getValues(reference_raster)
   index_vals <- which(!is.na(reference_vals))
@@ -45,14 +44,21 @@ which_non_null <- function(raster_fname){
 }
 
 # function for extracting a raster stack and applying it to data
-extract_values <- function(raster_fname_list, extraction_indices, names=c()){
-  cov_stack <- stack(raster_fname_list)
-  print(object_size(cov_stack))
+extract_values <- function(raster_fname_list, extraction_indices, reference_raster, names=c()){
+  
+  cov_stack <- lapply(raster_fname_list, function(this_fname){
+    print(paste("extracting", this_fname))
+    this_raster <- raster(this_fname)
+    this_raster <- crop(this_raster, reference_raster)
+  })
+  
+  cov_stack <- stack(cov_stack)
   NAvalue(cov_stack)=-9999
   extracted_covs <- data.table(cov_stack[extraction_indices])
   if (length(names)>0){
     names(extracted_covs) <- names
   }
+  extracted_covs[, cellnumber:=extraction_indices]
   rm(cov_stack); gc()
   return(extracted_covs)
 }
@@ -70,8 +76,11 @@ cov_dt <- cov_dt[used_sam==T]
 vm_dirs <- data.table(cov_name=names(Sys.getenv(cov_dt$cov_name)), vm_path=Sys.getenv(cov_dt$cov_name))
 cov_dt <- merge(cov_dt, vm_dirs, by="cov_name", all.x=T)
 
+write.csv(cov_dt, file.path(main_outdir, "covariate_key.csv"), row.names=F)
+
 # find the "valid" cell values for which we want to predict in the itn prediction step
-raster_indices <- which_non_null(file.path(input_dir, "general/african_cn5km_2013_no_disputes.tif"))
+reference_raster <- raster(file.path(input_dir, "general/african_cn5km_2013_no_disputes.tif"))
+raster_indices <- which_non_null(reference_raster)
 
 ### Static covariates  ----------------------------------------------------------------------------#######################  
 
@@ -79,8 +88,7 @@ print("Extracting static covariates")
 static_fnames <- cov_dt[type=="static", list(fname=file.path(vm_path, fname))]
 
 all_static <- extract_values(static_fnames$fname,raster_indices)
-all_static[, cellnumber:=raster_indices]
-write.csv(all_static, file.path(main_outdir, "03_static_covariates.csv"), row.names = F)
+write.csv(all_static, file.path(main_outdir, "static_covariates.csv"), row.names = F)
 
 rm(all_static); gc()
 print("static covariates successfully extracted")
@@ -107,7 +115,6 @@ all_annual <- foreach(this_year=prediction_years) %dopar%{
   
   subset <- extract_values(these_fnames$full_fname, raster_indices, names=these_fnames$cov_name)
   subset[, year:=this_year]
-  subset[, cellnumber:=raster_indices]
   setcolorder(subset, c("year", "cellnumber", these_fnames$cov_name))
   
   return(subset)
@@ -116,7 +123,7 @@ all_annual <- foreach(this_year=prediction_years) %dopar%{
 all_annual <- rbindlist(all_annual)
 
 # isolate values for data
-write.csv(all_annual, file.path(main_outdir, "03_annual_covariates.csv"), row.names = F)
+write.csv(all_annual, file.path(main_outdir, "annual_covariates.csv"), row.names = F)
 
 rm(all_annual); gc()
 print("annual covariates successfully extracted")
@@ -131,7 +138,7 @@ names(all_yearmons) <- c("month", "year")
 
 registerDoParallel(ncores-2)
 
-dynamic_outdir <- file.path(main_outdir, "03_dynamic_covariates")
+dynamic_outdir <- file.path(main_outdir, "dynamic_covariates")
 if (!dir.exists(dynamic_outdir)){
   dir.create(dynamic_outdir)
 }
@@ -158,7 +165,6 @@ all_dynamic <- foreach(month_index=1:nrow(all_yearmons)) %dopar% {
   subset <- extract_values(these_fnames$full_fname, raster_indices, names=these_fnames$cov_name)
   subset[, year:=this_year]
   subset[, month:=this_month]
-  subset[, cellnumber:=raster_indices]
   setcolorder(subset, c("year", "month", "cellnumber", these_fnames$cov_name))
   
   return(subset)
