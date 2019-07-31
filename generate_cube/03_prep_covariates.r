@@ -21,7 +21,7 @@ prep_covariates <- function(cov_dir, main_indir, main_outdir){
   ### Static covariates  ----------------------------------------------------------------------------#######################  
   
   print("Extracting static covariates")
-  all_static <- fread(file.path(cov_dir, "03_static_covariates.csv"))
+  all_static <- fread(file.path(cov_dir, "static_covariates.csv"))
   data <- merge(data, all_static, by="cellnumber", all.x=T)
   rm(all_static); gc()
   print("static covariates successfully extracted")
@@ -29,7 +29,7 @@ prep_covariates <- function(cov_dir, main_indir, main_outdir){
   ### Annual covariates  ----------------------------------------------------------------------------#######################  
   
   print("Extracting annual covariates")
-  all_annual <- fread(file.path(cov_dir, "03_annual_covariates.csv"))
+  all_annual <- fread(file.path(cov_dir, "annual_covariates.csv"))
   data <- merge(data, all_annual, by=c("year", "cellnumber"), all.x=T)
   rm(all_annual); gc()
   print("annual covariates successfully extracted")
@@ -38,7 +38,7 @@ prep_covariates <- function(cov_dir, main_indir, main_outdir){
   
   print("Extracting dynamic covariates")
 
-  dynamic_dir <- file.path(cov_dir, "03_dynamic_covariates")
+  dynamic_dir <- file.path(cov_dir, "dynamic_covariates")
   all_dynamic <- lapply(list.files(dynamic_dir, full.names = T), fread)
   all_dynamic <- rbindlist(all_dynamic)
   
@@ -72,7 +72,7 @@ if (Sys.getenv("run_individually")!=""){
   
   package_load(c("zoo","raster", "doParallel", "data.table", "rgdal", "INLA", "RColorBrewer", "cvTools", "boot", "stringr", "dismo", "gbm"))
   
-  if(Sys.getenv("input_dir")=="") {
+  if(Sys.getenv("main_indir")=="") {
     main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190614_rearrange_scripts/"
     main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190614_rearrange_scripts/"
     cov_dir <- "/Volumes/GoogleDrive/Shared drives/cubes/5km incomplete/"

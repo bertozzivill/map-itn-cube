@@ -13,8 +13,9 @@ library(data.table)
 func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
 
 # options 
-machine_type <- "n1-standard-64"
-label <- 'type=itn_cube'
+machine_type <- "n1-highmem-64"
+label <- "'type=itn_cube'"
+disk_size <- 400
 
 core_dir <- "gs://map_users/amelia/itn/itn_cube/"
 cloud_func_dir <- "gs://map_users/amelia/itn/code/generate_cube/"
@@ -25,12 +26,13 @@ cov_outlabel <- "20190729"
 dsub_str <- "dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1"
 label_str <- paste("--label", label)
 machine_str <- paste("--machine-type", machine_type)
+disc_str <- paste("--disk-size", disk_size)
 final_str <- "--command 'Rscript ${CODE}' "
 
 # directories
 logging_str <- paste("--logging", paste0(core_dir, "logs"))
 input_str <- paste("--input", 
-                   paste0("CODE=", cloud_func_dir, "03_prep_covariates.r")
+                   paste0("CODE=", cloud_func_dir, "000_extract_covariates.r")
                    )
 output_dir_str <- paste("--output-recursive", paste0("main_outdir=", core_dir, "results/covariates/", cov_outlabel))
 
@@ -48,7 +50,7 @@ cov_indirs <- paste(cov_indirs, collapse=" ")
 input_dir_str <- paste(input_dir_str, cov_indirs)
 
 # assemble full dsub--copy and paste this to run 000_extract_covariates
-full_dsub_str <- paste(dsub_str, label_str, machine_str, logging_str, input_str, input_dir_str, output_dir_str, final_str)
+full_dsub_str <- paste(dsub_str, label_str, machine_str, disc_str, logging_str, input_str, input_dir_str, output_dir_str, final_str)
 
 
 
