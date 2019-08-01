@@ -11,7 +11,7 @@
 ## 
 ##############################################################################################################
 
-predict_rasters <- function(input_dir, func_dir, main_indir, main_outdir, prediction_years){
+predict_rasters <- function(input_dir, func_dir, cov_dir, main_indir, main_outdir, prediction_years){
   
   set.seed(212)
   out_dir <- file.path(main_outdir, "05_predictions")
@@ -36,8 +36,8 @@ predict_rasters <- function(input_dir, func_dir, main_indir, main_outdir, predic
   
   ## Load Covariates  ## ---------------------------------------------------------
   print("loading static and annual covariates")
-  static_covs <- fread(file.path(main_indir, "03_static_covariates.csv"))
-  annual_covs <- fread(file.path(main_indir, "03_annual_covariates.csv"))
+  static_covs <- fread(file.path(cov_dir, "static_covariates.csv"))
+  annual_covs <- fread(file.path(cov_dir, "annual_covariates.csv"))
 
   ## Get locations in x-y-z space of each pixel centroid for prediction ## ---------------------------------------------------------
   national_raster <- raster(file.path(input_dir, "general/african_cn5km_2013_no_disputes.tif"))
@@ -114,8 +114,8 @@ predict_rasters <- function(input_dir, func_dir, main_indir, main_outdir, predic
     
     print(paste(this_year, "Loading dynamic covariates"))
 
-    thisyear_covs <- annual_covs[year==cov_year]
-    dynamic_covs <- fread(file.path(main_indir, paste0("03_dynamic_covariates/dynamic_", cov_year, ".csv")))
+    thisyear_covs <- annual_covs[year==this_year]
+    dynamic_covs <- fread(file.path(cov_dir, paste0("dynamic_covariates/dynamic_", this_year, ".csv")))
     
     thisyear_covs <- merge(static_covs, thisyear_covs, by="cellnumber", all=T)
     thisyear_covs <- merge(thisyear_covs, dynamic_covs, by=c("cellnumber", "year"), all=T)
@@ -228,7 +228,7 @@ predict_rasters <- function(input_dir, func_dir, main_indir, main_outdir, predic
 
 if (Sys.getenv("run_individually")!=""){
   
-  # dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-higmem-64 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data main_indir=gs://map_users/amelia/itn/itn_cube/results/20190729_new_covariates/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/04_dev_and_gap.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20190729_new_covariates/ --command 'Rscript ${CODE}'
+  # dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-highmem-64 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20190729 main_indir=gs://map_users/amelia/itn/itn_cube/results/20190729_new_covariates/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/05_predict_rasters.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20190729_new_covariates/ --command 'Rscript ${CODE}'
   
   package_load <- function(package_list){
     # package installation/loading
@@ -248,10 +248,11 @@ if (Sys.getenv("run_individually")!=""){
     input_dir <- Sys.getenv("input_dir")
     main_indir <- Sys.getenv("main_indir")
     main_outdir <- Sys.getenv("main_outdir")
+    cov_dir <- Sys.getenv("cov_dir")
     func_dir <- Sys.getenv("func_dir") # code directory for function scripts
   }
 
-  predict_rasters(input_dir, func_dir, main_indir, main_outdir, prediction_years=2000:2016)
+  predict_rasters(input_dir, func_dir, cov_dir, main_indir, main_outdir, prediction_years=2000:2016)
   
 }
 

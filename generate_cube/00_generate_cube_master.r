@@ -78,7 +78,7 @@ time_passed(tic, toc)
 print("STEP 5: Predicting output rasters")
 tic <- Sys.time()
 source(file.path(func_dir, "05_predict_rasters.r"))
-predict_rasters(input_dir, func_dir, main_indir=main_dir, main_outdir=main_dir, prediction_years=start_year:end_year)
+predict_rasters(input_dir, func_dir, cov_dir, main_indir=main_dir, main_outdir=main_dir, prediction_years=start_year:end_year)
 toc <- Sys.time()
 time_passed(tic, toc)
 
