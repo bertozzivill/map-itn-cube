@@ -85,9 +85,9 @@ raster_indices <- which_non_null(reference_raster)
 ### Static covariates  ----------------------------------------------------------------------------#######################  
 
 print("Extracting static covariates")
-static_fnames <- cov_dt[type=="static", list(fname=file.path(vm_path, fname))]
+static_cov_dt <- cov_dt[type=="static", list(fname=file.path(vm_path, fname))]
 
-all_static <- extract_values(static_fnames$fname, raster_indices, reference_raster)
+all_static <- extract_values(static_cov_dt$fname, raster_indices, reference_raster)
 write.csv(all_static, file.path(main_outdir, "static_covariates.csv"), row.names = F)
 
 rm(all_static); gc()
@@ -183,4 +183,5 @@ for (this_year in prediction_years){
   write.csv(all_dynamic[year==this_year], file.path(dynamic_outdir, paste0("dynamic_", this_year,".csv")), row.names=F)
 }
 rm(all_dynamic); gc()
+print("dynamic covariates successfully extracted")
 
