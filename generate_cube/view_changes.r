@@ -8,7 +8,7 @@
 ## 
 ##############################################################################################################
 
-# dsub --provider google-v2 --project my-test-project-210811 --image gcr.io/my-test-project-210811/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --logging gs://map_data_z/users/amelia/logs --input-recursive new_dir=gs://map_data_z/users/amelia/itn_cube/results/20190623_monthly_inla func_dir=gs://map_data_z/users/amelia/itn_cube/code/generate_cube old_dir=gs://map_data_z/users/amelia/itn_cube/results/20190614_rearrange_scripts --input CODE=gs://map_data_z/users/amelia/itn_cube/code/generate_cube/view_changes.r --output out_path=gs://map_data_z/users/amelia/itn_cube/results/20190623_monthly_inla/05_predictions/compare_changes.pdf --command 'Rscript ${CODE}'
+# dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive old_dir=gs://map_users/amelia/itn/itn_cube/results/20190623_monthly_inla new_dir=gs://map_users/amelia/itn/itn_cube/results/20190802_release_finalyear_inla/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input CODE=gs://map_users/amelia/itn/code/generate_cube/view_changes.r --output out_path=gs://map_users/amelia/itn/itn_cube/results/20190802_release_finalyear_inla/compare_changes.pdf --command 'Rscript ${CODE}'
 
 rm(list=ls())
 
