@@ -159,19 +159,9 @@ new_covs <- fread(file.path(new_dir, "03_data_covariates.csv"))
 old_covs <- fread(file.path(old_dir, "03_data_covariates.csv"))
 
 # adjust names
-new_names <- names(new_covs)
-old_names <- names(old_covs)
-
- # todo: make this naming better
-new_landcover <- sort(new_names[new_names %like% "Landcover"])
-old_landcover <- sort(old_names[old_names %like% "Landcover"])
-
-setnames(old_covs, old_landcover, new_landcover)
-setnames(old_covs, c("accessibility_50k_5km.mean", "PET_1950.2000_5km.mean", "AI_1950.2000_5km.mean",
-                     "viirs_nighttime_5km.mean", "Africa_SRTM_90m.mean", "Africa_slope_90m.mean", "AfriPop"),
-         c("Accessibility.2015.Annual.Data.5km.mean", "PET_v2.Synoptic.Overall.Data.5km.mean", "Aridity_Index_v2.Synoptic.Overall.Data.5km.mean",
-           "VIIRS.SLC.2014.Annual.mean.5km.mean", "SRTM_elevation.Synoptic.Overall.Data.5km.mean", "SRTM_SlopePCT_Corrected.Synoptic.Overall.Data.5km.mean",
-           "Population" ))
+name_key <- fread(file.path(func_dir, "oldnew_covariate_names.csv"))
+setnames(old_covs, name_key$old_name, name_key$common_name)
+setnames(new_covs, name_key$new_name, name_key$common_name)
 
 all_covs <- append_dts(old_covs, new_covs)
 cov_names <- names(new_covs)
@@ -190,58 +180,60 @@ cov_plot <- ggplot(toplot_covs, aes(x=variable, y=value)) +
 print(cov_plot)
 
 
-# ## 04: inla models
-# print("comparing old and new inla files")
-# load(file.path(new_dir, "04_inla_dev_gap.Rdata"))
-# new_models <- copy(inla_outputs)
-# load(file.path(old_dir, "04_inla_dev_gap.Rdata"))
-# old_models <- copy(inla_outputs)
-# 
-# for (this_name in names(new_models)){
-#   print(paste("Evaluating inla type", this_name))
-#   new_model <- new_models[[this_name]][["model_output"]]
-#   old_model <- old_models[[this_name]][["model_output"]]
-#   
-#   new_fixed <- new_model$summary.fixed
-#   new_fixed$cov<-rownames(new_fixed)
-#   new_fixed <- data.table(new_fixed)
-#   new_fixed <- new_fixed[order(cov)]
-#   new_fixed[, type:="New"]
-#   new_fixed[, kld:=NULL]
-#   
-#   new_hyperpar <- new_model$summary.hyperpar
-#   new_hyperpar$cov<-rownames(new_hyperpar)
-#   new_hyperpar <- data.table(new_hyperpar)
-#   new_hyperpar[, type:="New"]
-#   
-#   old_fixed <- old_model$summary.fixed
-#   old_fixed$cov<-rownames(old_fixed)
-#   old_fixed <- data.table(old_fixed)
-#   old_fixed <- old_fixed[order(cov)]
-#   old_fixed[, type:="Old"]
-#   old_fixed[, kld:=NULL]
-#   
-#   old_hyperpar <- old_model$summary.hyperpar
-#   old_hyperpar$cov<-rownames(old_hyperpar)
-#   old_hyperpar <- data.table(old_hyperpar)
-#   old_hyperpar[, type:="Old"]
-#   
-#   all_toplot <- rbind(new_fixed, new_hyperpar, old_fixed, old_hyperpar)
-#   all_toplot[, cov_id:=rep(1:length(unique(cov)), 2)]
-#   all_toplot <- melt.data.table(all_toplot, id.vars=c("type", "cov", "cov_id"))
-#   
-#   diff_plot <- ggplot(all_toplot, aes(x=value, y=cov)) +
-#                 geom_point(aes(color=type)) +
-#                 facet_wrap(~variable) +
-#                 labs(title=paste("INLA comparision:", this_name),
-#                      x="Value",
-#                      y="") +
-#                 theme(legend.position = "bottom",
-#                       legend.title = element_blank())
-#   
-#   print(diff_plot)
-#   
-# }
+## 04: inla models
+print("comparing old and new inla files")
+load(file.path(new_dir, "04_inla_dev_gap.Rdata"))
+new_models <- copy(inla_outputs)
+load(file.path(old_dir, "04_inla_dev_gap.Rdata"))
+old_models <- copy(inla_outputs)
+
+for (this_name in names(new_models)){
+  print(paste("Evaluating inla type", this_name))
+  new_model <- new_models[[this_name]][["model_output"]]
+  old_model <- old_models[[this_name]][["model_output"]]
+
+  new_fixed <- new_model$summary.fixed
+  new_fixed$cov<-rownames(new_fixed)
+  new_fixed$cov <- plyr::mapvalues(new_fixed$cov, name_key$new_name, name_key$common_name)
+  new_fixed <- data.table(new_fixed)
+  new_fixed <- new_fixed[order(cov)]
+  new_fixed[, type:="New"]
+  new_fixed[, kld:=NULL]
+
+  new_hyperpar <- new_model$summary.hyperpar
+  new_hyperpar$cov<-rownames(new_hyperpar)
+  new_hyperpar <- data.table(new_hyperpar)
+  new_hyperpar[, type:="New"]
+
+  old_fixed <- old_model$summary.fixed
+  old_fixed$cov<-rownames(old_fixed)
+  old_fixed$cov <- plyr::mapvalues(old_fixed$cov, name_key$old_name, name_key$common_name)
+  old_fixed <- data.table(old_fixed)
+  old_fixed <- old_fixed[order(cov)]
+  old_fixed[, type:="Old"]
+  old_fixed[, kld:=NULL]
+
+  old_hyperpar <- old_model$summary.hyperpar
+  old_hyperpar$cov<-rownames(old_hyperpar)
+  old_hyperpar <- data.table(old_hyperpar)
+  old_hyperpar[, type:="Old"]
+
+  all_toplot <- rbind(new_fixed, new_hyperpar, old_fixed, old_hyperpar)
+  all_toplot[, cov_id:=rep(1:length(unique(cov)), 2)]
+  all_toplot <- melt.data.table(all_toplot, id.vars=c("type", "cov", "cov_id"))
+
+  diff_plot <- ggplot(all_toplot, aes(x=value, y=cov)) +
+                geom_point(aes(color=type)) +
+                facet_wrap(~variable) +
+                labs(title=paste("INLA comparision:", this_name),
+                     x="Value",
+                     y="") +
+                theme(legend.position = "bottom",
+                      legend.title = element_blank())
+
+  print(diff_plot)
+
+}
 
 
 # 05: .tifs
