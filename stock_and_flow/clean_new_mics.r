@@ -24,23 +24,6 @@ csv_dirlist <- function(dir, main_dir){
 
 all_files <- c(csv_dirlist("MICS4", main_dir), csv_dirlist("MICS5", main_dir), csv_dirlist("MICS6", main_dir))
 
-# for the Nigeria 2016 MICS5, determine which is the correct survey weighting
-nigeria <- fread(all_files[all_files %like% "Nigeria2016"])
-
-nigeria <- unique(nigeria[3:nrow(nigeria), list(clusterid=HH1, 
-                                                hhid=HH2, 
-                                                net_count=as.integer(TN2),
-                                                hhweight=as.numeric(hhweight),
-                                                hhweightkano=as.numeric(hhweightkano),
-                                                hh_size=as.integer(HH11)
-                                                )])
-nigeria[is.na(net_count), net_count:=0]
-nigeria[, has_net:=as.integer(net_count>0)]
-svy_strat<-svydesign(ids=~clusterid, data=nigeria, weight=~hhweight) 
-
-svymean( ~ has_net, svy_strat)
-
-
 print("loading data")
 # todo: find ways to read ascii data for accented letters
 # all_mics <- lapply(all_files, fread)
@@ -48,11 +31,40 @@ print("loading data")
 # temp for train
 all_files <- all_files[all_files %like% "MICS5"]
 
-all_data <- lapply(all_files, fread)
+all_data <- lapply(all_files, function(this_fname){
+  print(this_fname)
+  this_data <- fread(this_fname)
+  setnames(this_data, "HHWEIGHT", "hhweight", skip_absent = T)
+  
+  if ("TN1" %in% names(this_data)){
+    if(nrow(this_data[HH_TN1!=TN1])>0) {stop("Discrepancy in TN1 column")}
+    this_data$TN1 <- NULL
+  }
+  setnames(this_data, "HH_TN1", "TN1")
+
+  if ("TN2" %in% names(this_data)){
+    if(nrow(this_data[HH_TN2!=TN2])>0) {stop("Discrepancy in TN2 column")}
+    this_data$TN2 <- NULL
+  }
+  setnames(this_data, "HH_TN2", "TN2")
+  
+  # remove unneeded names
+  these_names <- names(this_data)
+  to_keep <- these_names[!these_names %in% c("TN4", "TN6A", "TN8", "TN9", "TN10", "TN5A", "TN5B",
+                                          "TN12A", "TN12B", "TN12C", "hhweightkano", "hhweightlagos")]
+  
+  this_data <- this_data[, to_keep, with=F]
+  
+  return(this_data)
+} )
+
+# test absence of year/month data
+# guinea <- fread("/Volumes/map_data/MICS_Automation/Acquisition/NEW/03 Processed/MICS5/Ready to Extract/Guinea Bissau MICS 2014 SPSS Datasets_hh_ready.csv")
+# 
+# test <- guinea[, list(month=V7, year=V8)]
 
 
 ## DATA QUESTIONS
-## Cameroon 2014: no year/month data?
 
 # at the moment:
 # 1. the surveys have different column counts;
@@ -66,16 +78,10 @@ keys <- lapply(all_data, function(this_survey_data){
   colname_key <- melt(colname_key, id.vars = c("country", "report_year"), value.name = "question", variable.name = "code")
   colname_key[question=="Type of observed net", question:="Brand/type of observed net"] # to remove a duplicate code
   
-  # remove unneeded names
-  # todo: determine how to treat hhweightkano and hhweightlagos
-  colname_key <- colname_key[!code %in% c("TN4", "TN6A", "TN8", "TN9", "TN10", "TN5A", "TN5B",
-                                          "TN12A", "TN12B", "TN12C", "hhweightkano", "hhweightlagos")]
-  
   return(colname_key[, list(code, question)])
 })
 col_key <- unique(rbindlist(keys))
 col_key <- col_key[order(code)]
-
 
 # make short, clear names
 short_names <- c(HH1="clusterid",
@@ -114,6 +120,7 @@ all_data <- lapply(all_data, function(this_data){
     this_data$net_sleeper_5 <- NA
     this_data$net_sleeper_6 <- NA
   }
+  
   return(this_data)
 })
 
@@ -131,7 +138,7 @@ all_data[, net_id:=as.integer(net_id)]
 all_data[, hh_sample_wt:=as.numeric(hh_sample_wt)]
 
 
-## this dataset has a row for each household-household member-net, so it needs to be subset to calculate our summary 
+## this dataset has a row for each household-member-net, so it needs to be subset to calculate our summary 
 ## columns of interest.
 
 # make survey id, match country and iso3
@@ -162,7 +169,7 @@ itn_sleepers <- unique(all_data[, list(surveyid, clusterid, hhid, n_itn, net_id,
 # check that there is a line for each itn
 itn_sleepers[, itn_records:=max(net_id), by=list(surveyid, clusterid, hhid)]
 if(nrow(itn_sleepers[n_itn!=itn_records])>0){
-  warn("Some net counts don't match up!")
+  warning("Some net counts don't match up!")
   print(itn_sleepers[n_itn!=itn_records])
 }
 itn_sleepers[, c("itn_records", "n_itn"):=NULL]
