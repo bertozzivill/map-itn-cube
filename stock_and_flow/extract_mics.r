@@ -3,7 +3,7 @@
 ## Amelia Bertozzi-Villa
 ## July 2019
 ## 
-## Extract survey data from MICS4-6. 
+## Extract survey data from MICS5. 
 ##############################################################################################################
 
 library(data.table)
@@ -13,6 +13,7 @@ rm(list=ls())
 this_svy <- "MICS5"
 
 main_dir <- "/Volumes/map_data/MICS_Automation/Acquisition/NEW/03 Processed"
+out_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/survey_data/MICS5"
 
 svy_dir <- file.path(main_dir, this_svy, "Ready to Extract/")
 data_fnames <- list.files(svy_dir)
@@ -21,9 +22,6 @@ hh_cols <- c("HH1", "HH2", "HH5M", "HH5Y", "HH11", "HH14", "hhweight", "TN1", "T
 hl_cols <- c("HH1", "HH2", "HL1", "HL6A")
 tn_cols <- c( "HH1", "HH2", "TNLN", "TN5", "TN6", "TN11", 
               "TN12_1", "TN12_2", "TN12_3", "TN12_4", "TN12_5", "TN12_6")
-
-# French: benin: cameroon, congo, 
-# Portuguese: guinea bissau
 
 # make short, clear names
 short_names <- c(HH1="clusterid",
@@ -51,7 +49,8 @@ short_names <- c(HH1="clusterid",
 short_names <- data.table(code=names(short_names),
                           short_name=short_names)
 
-country_list <- unique(gsub("(.*) MICS .*", "\\1", data_fnames))
+country_list <- unique(gsub("(.*) MICS.*", "\\1", data_fnames))
+
 
 format_data <- function(fpath, cols_to_keep){
   data <- fread(fpath)
@@ -67,12 +66,14 @@ format_data <- function(fpath, cols_to_keep){
   return(data)
 }
 
+idx <- 1
+hh_list <- NULL
+hl_list <- NULL
+tn_list <- NULL
 
 for (this_country in country_list){
 
-  this_country <- country_list[[31]]
   these_fnames <- data_fnames[data_fnames %like% paste(this_country, "MICS")]
-  length(these_fnames[these_fnames %like% "Datasets_tn"])==0
   
   if (length(these_fnames[these_fnames %like% "Datasets_tn"])==0){
     next()
@@ -94,33 +95,39 @@ for (this_country in country_list){
   
   print(this_hhdata)
   print(summary(this_hhdata))
-  print(unique(this_hhdata$hh_has_nets))
   
   this_hhdata[is.na(this_hhdata)] <- 0
   this_hhdata[hh_has_nets %in% c("Missing", "Non d\xe9clar\xe9/Pas de r\xe9ponse", "Manquant"), n_itn:=NA]
   this_hhdata[,hh_has_nets:=NULL]
   
+  hh_list[[idx]] <- this_hhdata
+  
   print("EXTRACTING HL")
   this_hldata <- format_data(file.path(svy_dir, these_fnames[these_fnames %like% "Datasets_hl"]),
                              cols_to_keep <- short_names[code %in% hl_cols])
   print(this_hldata)
-  print(unique(this_hldata$hh_member_slept_in_hh))
   
   this_hldata[, binary_slept_in_hh:=as.integer(hh_member_slept_in_hh %in% c("Yes", "Oui", "Sim"))]
   this_hldata[hh_member_slept_in_hh %in% c("Missing", "Non d\xe9clar\xe9/Pas de r\xe9ponse", "Manquant", "Em falta"), binary_slept_in_hh:=NA]
+  
+  hl_list[[idx]] <- this_hldata
   
   print("EXTRACTING TN")
   this_tndata <- format_data(file.path(svy_dir, these_fnames[these_fnames %like% "Datasets_tn"]),
                              cols_to_keep <- short_names[code %in% tn_cols])
   print(this_tndata)
   
-  # could merge here? but maybe keep as-is and calculate metrics. 
+  tn_list[[idx]] <- this_tndata
   
+  # could merge here? but maybe keep as-is and calculate metrics. 
+  idx <- idx+1
 }
 
+hh_data <- rbindlist(hh_list)
+hl_data <- rbindlist(hl_list)
+tn_data <- rbindlist(tn_list)
 
-
-
-
-
+write.csv(hh_data, file.path(out_dir, "hh_data.csv"), row.names = F)
+write.csv(hl_data, file.path(out_dir, "hl_data.csv"), row.names = F)
+write.csv(tn_data, file.path(out_dir, "tn_data.csv"), row.names = F)
 
