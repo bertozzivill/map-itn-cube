@@ -8,6 +8,7 @@
 
 library(survey)
 library(zoo)
+library(plyr)
 library(data.table)
 library(ggplot2)
 library(lubridate)
@@ -15,7 +16,7 @@ library(lubridate)
 rm(list=ls())
 
 main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data"
-dhs_dir <- "/Volumes/GoogleDrive/Shared drives/Data Gathering/Standard_MAP_DHS_Outputs/DHS_ITN_Data/Output/2018-07-12/standard_tables"
+dhs_dir <- "/Volumes/GoogleDrive/Shared drives/Data Gathering/Standard_MAP_DHS_Outputs/DHS_ITN_Data/Output/2019-07-24/standard_tables"
 
 # big table of national name/region/code maps. used to map ISO to GAUL in itn cube, not sure about here. 
 country_codes <-fread(file.path(main_dir, 'National_Config_Data.csv'))
@@ -50,12 +51,16 @@ dhs_data <- lapply(dhs_surveynums, function(svynum){
   dataset <- fread(file.path(dhs_dir, paste0("Svy_", svynum, "_ITN_HH_Res.csv")))
   
   # rename id column and fix column naming bug
-  setnames(dataset, c("SurveyID", "interview_month", "interview_year"), c("SurveyNum", "year", "month"))
+  setnames(dataset, c("surveyid", "interview_month", "interview_year"), c("SurveyNum", "month", "year"))
   dataset <- merge(dataset, available_dhs_key, by="SurveyNum", all.x=T)
   return(dataset)
 })
 
 dhs_data <- rbindlist(dhs_data)
+
+# make the assumption that, if n_llin/n_conv is missing and it's after 2010, all nets are llins.
+dhs_data[year>2010 & is.na(n_llin), n_llin:=n_itn]
+dhs_data[year>2010 & is.na(n_conv_itn), n_conv_itn:=0]
 
 dhs_data$CountryName <- mapvalues(dhs_data$CountryName, 
                                         from=c("Congo Democratic Republic", "Congo", "Eswatini",
@@ -93,8 +98,6 @@ old_dhs_data <- merge(old_dhs_data, old_dhs_cluster, by=c("Survey.hh", "Cluster.
 
 ## DATA SOURCE TWO: MICS SURVEYS ----------------------------------------------------------------------------------------------------------------------
 
-# todo: check in with suzanne on older/newer versions of this
-
 ## MICS4 data -- from 2014, probably newer ones that we haven't processed 
 # originally from Z:\Malaria data\MICS\Indicator data\MICS4\MICS4 Net details aggregated by household 21Jan.csv
 old_mics_data<-fread(file.path(main_dir, "survey_data/MICS4 Net details aggregated by household 21Jan.csv"))
@@ -103,8 +106,16 @@ old_mics_data<-fread(file.path(main_dir, "survey_data/MICS4 Net details aggregat
 to_sub_mics <- names(old_mics_data)[names(old_mics_data) %like% "LLIN"]
 setnames(old_mics_data, to_sub_mics, gsub("LLIN", "LLINs", to_sub_mics))
 
-# todo: find country name and iso3
 
+## MICS5 data -- I extracted and cleaned these, see extract_mics.r and clean_new_mics.r
+## These include some subnational surveys that can't be included in the cube data (no lat/long) or the stock and flow data, drop those.
+mics5_data<-fread(file.path(main_dir, "survey_data/MICS5_clean_05_August_2019.csv"))
+setnames(mics5_data, c("surveyid", "country"), c("SurveyId", "CountryName"))
+mics5_data <- mics5_data[subnat==""]
+mics5_data[, subnat:=NULL]
+
+# drop ST2014MICS because apparently all survey weights are zero? todo: ask lisa about this
+mics5_data<- mics5_data[SurveyId!="ST2014MICS"]
 
 ## DATA SOURCE THREE: OTHER SURVEYS ----------------------------------------------------------------------------------------------------------------------
 # see data_checking.r for more details
@@ -125,7 +136,7 @@ old_other_data <- old_other_data[!Survey.hh %in% c("Malawi2010", "Zambia 2010", 
 all_old_data <- rbind(old_dhs_data, old_mics_data, old_other_data, fill=T)
 
 # adjust some country names for merging and iso3s
-old_survey_key$CountryName <- mapvalues(old_survey_key$CountryName, 
+old_survey_key$CountryName <- plyr::mapvalues(old_survey_key$CountryName, 
                                         from=c("Coted'Ivoire", "Democratic Republic of Congo", "Republic of Congo",
                                             "SaoTome & Principe", "The Gambia"),
                                         to=c("Cote d'Ivoire", "Democratic Republic Of The Congo", "Republic Of Congo",
@@ -136,6 +147,7 @@ old_survey_key <- merge(old_survey_key, country_codes[, list(CountryName=MAP_Cou
 all_old_data <- merge(all_old_data, old_survey_key, by="Survey.hh", all.x=T)
 
 # rename to correspond to new column names
+# todo: drop itn_theoretical_capacity if you don't need it
 all_old_data <- all_old_data[, list(SurveyId, 
                                     CountryName, 
                                     iso3,
@@ -167,8 +179,11 @@ all_data <- rbind(all_old_data, dhs_data)
 
 # remove columns about pregnant women and children under 5, we don't use them
 to_drop <- names(all_data)[names(all_data) %like% "u5" | names(all_data) %like% "preg"]
-
 all_data[, (to_drop):=NULL]
+
+# add cleaned mics5 data
+all_data <- rbind(all_data, mics5_data, fill=T)
+
 
 ## Isolate data to use for itn cube fitting-- must have entries in all columns listed below  ----------------------------------------------------------------------------------------------------------------------
 
@@ -210,14 +225,36 @@ survey_summary <- lapply(unique(all_data$SurveyId), function(this_svy){
   this_svy_data <- all_data[SurveyId==this_svy]
   
   # set up survey design
-  svy_strat<-svydesign(ids=~clusterid, data=this_svy_data, weight=~adjusted_sample_wt) 
+  svy_strat<-svydesign(ids=~clusterid, data=this_svy_data, weight=~hh_sample_wt) 
   
-  # NOTE: changed to using n_defacto_pop from hh_size
-  svy_means <- as.data.frame(svymean( ~ hh_size +  n_defacto_pop + summed_n_itn + n_llin + n_conv_itn + 
-                                        n_slept_under_itn + n_itn_used, svy_strat))
-  names(svy_means) <- c("val", "se")
-  svy_sums <- as.data.frame( svytotal(~ n_llin + n_llin_1yr + n_llin_1_2yr + n_llin_2_3yr + n_llin_gt3yr, svy_strat) ) 
-  names(svy_sums) <- c("val", "se")
+  meanvals <- c("hh_size", "n_defacto_pop", "summed_n_itn", "n_llin", "n_conv_itn", "n_slept_under_itn", "n_itn_used")
+  svy_means <- lapply(meanvals, function(this_val){
+    uniques <- unique(this_svy_data[[this_val]])
+    if (length(uniques)==1 & is.na(uniques[1])){
+      mean_df<- as.data.frame(svymean(as.formula(paste("~", this_val)), svy_strat))
+    }else{
+      mean_df<- as.data.frame(svymean(as.formula(paste("~", this_val)), svy_strat, na.rm=T))
+    }
+    names(mean_df) <- c("val", "se")
+    return(mean_df)
+    })
+  svy_means <- do.call("rbind", svy_means)
+  
+  totvals <- c("n_llin", "n_llin_1yr", "n_llin_1_2yr", "n_llin_2_3yr", "n_llin_gt3yr")
+  svy_sums <- lapply(totvals, function(this_val){
+    
+    # todo: check whether or not every entry of the column is null
+    uniques <- unique(this_svy_data[[this_val]])
+    if (length(uniques)==1 & is.na(uniques[1])){
+      tot_df<- as.data.frame(svytotal(as.formula(paste("~", this_val)), svy_strat))
+    }else{
+      tot_df<- as.data.frame(svytotal(as.formula(paste("~", this_val)), svy_strat, na.rm=T))
+    }
+    
+    names(tot_df) <- c("val", "se")
+    return(tot_df)
+  })
+  svy_sums <- do.call("rbind", svy_sums)
   rownames(svy_sums) <- paste0("tot_", rownames(svy_sums))
   svy_summary <- rbind(svy_means, svy_sums)
   svy_summary$variable <- rownames(svy_summary)
@@ -240,4 +277,3 @@ survey_summary <- lapply(unique(all_data$SurveyId), function(this_svy){
 survey_summary <- rbindlist(survey_summary)
 
 write.csv(survey_summary, file.path(main_dir, "../results/summarized_survey_data.csv"), row.names=F)
-
