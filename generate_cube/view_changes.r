@@ -8,7 +8,7 @@
 ## 
 ##############################################################################################################
 
-# dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive old_dir=gs://map_users/amelia/itn/itn_cube/results/20190623_monthly_inla new_dir=gs://map_users/amelia/itn/itn_cube/results/20190802_release_finalyear_inla/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input CODE=gs://map_users/amelia/itn/code/generate_cube/view_changes.r --output out_path=gs://map_users/amelia/itn/itn_cube/results/20190802_release_finalyear_inla/compare_changes.pdf --command 'Rscript ${CODE}'
+# dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive old_dir=gs://map_users/amelia/itn/itn_cube/results/20190623_monthly_inla new_dir=gs://map_users/amelia/itn/itn_cube/results/20190806_new_inputs/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input CODE=gs://map_users/amelia/itn/code/generate_cube/view_changes.r --output out_path=gs://map_users/amelia/itn/itn_cube/results/20190806_new_inputs/compare_changes.pdf --command 'Rscript ${CODE}'
 
 rm(list=ls())
 
@@ -22,8 +22,8 @@ package_load <- function(package_list){
 package_load(c( "raster", "data.table", "rasterVis", "stats", "RColorBrewer", "gridExtra", "ggplot2"))
 
 if(Sys.getenv("func_dir")=="") {
-  new_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190729_new_covariates/"
-  old_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190623_monthly_inla/"
+  new_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190806_new_inputs/"
+  old_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190729_new_covariates/"
   out_path <- file.path(new_dir, "05_predictions/view_changes.pdf")
   func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
 } else {
@@ -265,6 +265,7 @@ for (var_name in c("\\.MEAN", "\\.DEV", "\\.ACC", "\\.GAP", "\\.USE", "\\.RAKED_
   new_stack <- stack(file.path(new_raster_dir, new_files[grepl(var_name, new_files)]))
   old_stack <- stack(file.path(old_raster_dir, old_files[grepl(var_name, old_files)]))
   stack_diff <- new_stack - old_stack
+  names(stack_diff) <- paste0(names(new_stack), ".DIFF")
   
   plot_idx <- 1
   for (this_stack in c(new_stack, old_stack, stack_diff)){

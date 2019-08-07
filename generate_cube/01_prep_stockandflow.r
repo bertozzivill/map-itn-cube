@@ -23,7 +23,7 @@ prep_stockandflow <- function(input_dir, func_dir, main_outdir){
   # this image contains quarterly national values for p0=p(hh has 0 nets) and p1=avg # of nets.
   # "out" is a list of length 40 (# of countries), where each list is itself a list of length 2 (p0 and p1).
   # Each p0 and p1 is a data frame with nrow=# of quarters and ncol=1:10 (for houshold sizes 1-10+)
-  load(file.path(input_dir, "net_probs_and_means.rData")) # contains objects names "out" (list of stock and flow time series) and "Cout" (country names)
+  load(file.path(input_dir, "net_probs_and_means_temp2019.rData")) # contains objects names "out" (list of stock and flow time series) and "Cout" (country names)
   
   # rename for clarity
   net_probs_and_means <- out 
@@ -39,7 +39,7 @@ prep_stockandflow <- function(input_dir, func_dir, main_outdir){
     # interpolate  from quarterly to monthly values
     quarterly_times <- as.numeric(rownames(country_list))
     start_year <- ceiling(min(quarterly_times))
-    end_year <- floor(max(quarterly_times)-1)
+    end_year <- floor(max(quarterly_times))
     
     # get decimal dates for the middle of each month: these are the dates for which we want interpolated values.
     full_times <- seq(as.Date(paste0(start_year, "/1/15")), by = "month", length.out = (end_year-start_year)*12)
@@ -184,7 +184,7 @@ if (Sys.getenv("run_individually")!="" | exists("run_locally")){
   
   if(Sys.getenv("input_dir")=="") {
     input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
-    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190622_restructure_time/"
+    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190806_local_newsurveys/"
     func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
   } else {
     input_dir <- Sys.getenv("input_dir")
