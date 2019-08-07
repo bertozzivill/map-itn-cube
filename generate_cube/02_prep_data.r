@@ -21,7 +21,7 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
   setnames(iso_gaul_map, c("GAUL_CODE", "COUNTRY_ID", "NAME"), c("gaul", "iso3", "country"))
   
   # load household data and survey-to-country key, keep only those in country list
-  HH<-fread(file.path(input_dir, "database/ALL_HH_Data_20112017.csv")) # todo: come back and delete cols we don't need. also rename this
+  HH<-fread(file.path(input_dir, "database/ALL_HH_Data_26072019.csv")) # todo: come back and delete cols we don't need. also rename this
   
   # keep only the years and  columns we use
   HH<-HH[ISO3 %in% unique(stock_and_flow_outputs$iso3), list(Survey.hh, 
@@ -39,6 +39,10 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
   
   # TODO: data checks
   
+  # check to make sure all data rows can be assessed via stock and flow.
+  too_late <- HH[year>max(stock_and_flow_outputs$year)]
+  print(paste("DROPPING", nrow(too_late), "ROWS THAT GO BEYOND STOCK AND FLOW TIME LIMIT"))
+  HH <- HH[year<=max(stock_and_flow_outputs$year)]
   
   # Remove households with size zero or NA
   HH <- HH[!is.na(n.individuals.that.slept.in.surveyed.hhs) & n.individuals.that.slept.in.surveyed.hhs>0]
@@ -55,8 +59,9 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
   registerDoParallel(ncores-2)
   
   cluster_stats<-foreach(i=1:length(unique_surveys),.combine=rbind) %dopar% { 
-    
+  # for (i in 1:length(unique_surveys)){
     this_survey<-unique_surveys[i]
+    # print(this_survey)
     this_survey_data=HH[Survey.hh==this_survey,] # keep only household data for the survey in question
     un<-unique(this_survey_data$Cluster.hh) # get unique cluster IDs for that household survey
     
@@ -210,8 +215,8 @@ if (Sys.getenv("run_individually")!="" | exists("run_locally")){
   
   if(Sys.getenv("input_dir")=="") {
     input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
-    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190622_restructure_time/"
-    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190622_restructure_time/"
+    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190806_local_newsurveys/"
+    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190806_local_newsurveys/"
     func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
   } else {
     input_dir <- Sys.getenv("input_dir")

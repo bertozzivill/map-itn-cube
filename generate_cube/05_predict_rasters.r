@@ -252,7 +252,7 @@ if (Sys.getenv("run_individually")!=""){
     func_dir <- Sys.getenv("func_dir") # code directory for function scripts
   }
 
-  predict_rasters(input_dir, func_dir, cov_dir, main_indir, main_outdir, prediction_years=2000:2016)
+  predict_rasters(input_dir, func_dir, cov_dir, main_indir, main_outdir, prediction_years=2000:2018)
   
 }
 
