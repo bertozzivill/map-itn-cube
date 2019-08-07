@@ -6,14 +6,14 @@ library(gridExtra)
 rm(list=ls())
 
 z_dir <- "/Volumes/GoogleDrive/Shared drives/cubes/5km incomplete/ITN/"
-new_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190806_new_inputs/05_predictions"
+new_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190807_new_stockflow/05_predictions"
 old_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190614_rearrange_scripts/05_predictions"
 out_path <- file.path(new_dir, "05_predictions/view_changes.pdf")
 func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
 
 
 
-fnames <- c(paste0("ITN_",  2000:2009, ".RAKED_USE.tif"), paste0("ITN_", 2010:2016, ".USE.tif"))
+fnames <- paste0("ITN_", 2000:2016, ".USE.tif")
 names(fnames) <- 2000:2016
 
 pdf(file.path(new_dir, "zdir_oldir_comparison.pdf"), width=11, height=7)

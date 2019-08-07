@@ -22,8 +22,8 @@ package_load <- function(package_list){
 package_load(c( "raster", "data.table", "rasterVis", "stats", "RColorBrewer", "gridExtra", "ggplot2"))
 
 if(Sys.getenv("func_dir")=="") {
-  new_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190806_new_inputs/"
-  old_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190729_new_covariates/"
+  new_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190807_new_stockflow/"
+  old_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190623_monthly_inla/"
   out_path <- file.path(new_dir, "05_predictions/view_changes.pdf")
   func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
 } else {
@@ -260,7 +260,7 @@ compare_tifs <- function(old_tif, new_tif, name="", cutoff=0.001){
   return(stackplot)
 }
 
-for (var_name in c("\\.MEAN", "\\.DEV", "\\.ACC", "\\.GAP", "\\.USE", "\\.RAKED_USE")){
+for (var_name in c("\\.MEAN", "\\.DEV", "\\.ACC", "\\.GAP", "\\.USE")){
   print(paste("predicting for", var_name))
   new_stack <- stack(file.path(new_raster_dir, new_files[grepl(var_name, new_files)]))
   old_stack <- stack(file.path(old_raster_dir, old_files[grepl(var_name, old_files)]))
