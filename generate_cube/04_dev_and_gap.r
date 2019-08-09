@@ -29,8 +29,21 @@ run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, sta
   print(paste("dropping", dropped_rows, "rows of data due to null values in covariates!"))
   data <- data[complete.cases(data)]
   
-  # check for collinearity
   cov_names <- names(data)[(which(names(data)=="row_id")+1):length(names(data))]
+  
+  # drop any covariates that are all one value
+  for(cov in cov_names){
+    uniques <- unique(data[[cov]])
+    if (length(uniques)==1){
+      print(paste("DROPPING COVARIATE:", cov, "only has value", uniques))
+      data[[cov]] <- NULL
+    }
+  }
+  
+  cov_names <- names(data)[(which(names(data)=="row_id")+1):length(names(data))]
+  
+  # check for collinearity
+  
   cov_data <- data[, cov_names, with=F]
   collin <- cor(as.matrix(cov_data))
   diag(collin) <- 0
@@ -106,8 +119,8 @@ if (Sys.getenv("run_individually")!=""){
   
   if(Sys.getenv("input_dir")=="") {
     input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
-    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190614_rearrange_scripts/"
-    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190614_rearrange_scripts/"
+    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190808_new_landcover/"
+    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190808_new_landcover/"
     func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
   } else {
     input_dir <- Sys.getenv("input_dir")

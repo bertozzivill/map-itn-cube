@@ -127,7 +127,11 @@ all_annual <- foreach(this_year=prediction_years) %dopar%{
 
 all_annual <- rbindlist(all_annual)
 
-# isolate values for data
+landcov_names <- names(all_annual)[names(all_annual) %like% "Landcover"]
+for (this_name in landcov_names){
+  all_annual[[this_name]] <- all_annual[[this_name]]/100
+}
+
 write.csv(all_annual, file.path(main_outdir, "annual_covariates.csv"), row.names = F)
 
 rm(all_annual); gc()

@@ -22,7 +22,7 @@ package_load <- function(package_list){
 package_load(c( "raster", "data.table", "rasterVis", "stats", "RColorBrewer", "gridExtra", "ggplot2"))
 
 if(Sys.getenv("func_dir")=="") {
-  new_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190807_new_stockflow/"
+  new_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190808_new_landcover/"
   old_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190623_monthly_inla/"
   out_path <- file.path(new_dir, "05_predictions/view_changes.pdf")
   func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
@@ -165,7 +165,7 @@ setnames(new_covs, name_key$new_name, name_key$common_name)
 
 all_covs <- append_dts(old_covs, new_covs)
 cov_names <- names(new_covs)
-cov_names <- cov_names[!cov_names %in% c(names(new_data), "row_id")]
+cov_names <- cov_names[!cov_names %in% c(names(new_data), "row_id", "type")]
 toplot_covs <- melt(all_covs, id.vars=c("type", "year", "iso3", "survey", "cellnumber"), measure.vars = cov_names)
 
 cov_plot <- ggplot(toplot_covs, aes(x=variable, y=value)) +
