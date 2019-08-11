@@ -152,15 +152,179 @@ data <- data[, col_names, with=F]
 data <- rbind(data,data3T,data4)
 data <- data[order(data[,'date']),]
 
-MANUFACTURER<-MANUFACTURER[ISO3==this_country] # I think?
+MANUFACTURER<- unlist(MANUFACTURER[ISO3==this_country, as.character(2000:max_time), with=F]) # I think?
 
-NMCP_itn<-NMCP[ISO3==Country,list(ITN)] # why not include year?
-NMCP_total<-NMCP[ISO3==Country,list(TOT)]
-NMCP_llin<-NMCP[ISO3==Country,list(LLIN)]
+NMCP_itn<-NMCP[ISO3==this_country]$ITN # why not include year?
+NMCP_total<-NMCP[ISO3==this_country]$TOT
+NMCP_llin<-NMCP[ISO3==this_country]$LLIN
 
+# Format populations at risk (todo: obviously make more efficient)
+PAR <- mean(PAR[iso_3_code==this_country]$proportion_at_risk_of_pf) # is this used?
 
+POP <- POP[iso_3_code==this_country]$total_population
+names(POP)<-2000:max_time
 
+# subset the survey data
+SURVEY <- data[ISO3 %in% this_country,]
 
+# create blank dataframe if country has no surveys (why 2005? what are all of these other variables? what is happening?)
+if(nrow(SURVEY)==0){
+  SVY<-matrix(data=NA,nrow=1,ncol=12)
+  colnames(SVY)<-c('svyDate','s1','s2','mTot_llin','sTot_llin','mTot_itn','sTot_itn','index','index2a','index2b','sa','sb')
+  SVY[1,]<-c(2005,1,0,NA,NA,NA,NA,35,1,0,1,0)
+  SVY<-as.data.frame(SVY)
+  SVY<-as.list(SVY)
+  
+  dat<-list()
+  dat$MANUFACTURER<-(MANUFACTURER)
+  dat$NMCP_llin<-(NMCP_llin)
+  dat$NMCP_itn<-(NMCP_itn)
+  dat$NMCP_total<-(NMCP_total)
+  
+  
+  dat$years<-2000:max_time
+  dat$endyears<-2001:(max_time+1)
+  dat$midyears<-seq(2000.5,(max_time+0.5),1)
+  
+  dat$n<-length(dat$NMCP_llin)
+  dat$n2<-1
+  
+  SVY$NMCP_llin<-dat$NMCP_llin
+  SVY$NMCP_itn<-dat$NMCP_itn
+  SVY$NMCP_total<-dat$NMCP_total
+  
+  SVY$MANUFACTURER<-dat$MANUFACTURER
+  SVY$POP<-POP
+  SVY$midyear<-dat$midyear
+  SVY$n<-length(SVY$NMCP_llin)
+  SVY$n2<-1
+}else {
+  
+  SURVEY[SURVEY==0] <- 1e-6 # add small amount of precision
+  SURVEY_DATA <- SURVEY
+  
+  dat<-as.list(SURVEY_DATA)
+  dat$MANUFACTURER<-(MANUFACTURER)
+  dat$NMCP_llin<-(NMCP_llin)
+  dat$NMCP_itn<-(NMCP_itn)
+  dat$NMCP_total<-(NMCP_total)
+  
+  dat$years<-2000:max_time
+  dat$endyears<-2001:(max_time+1)
+  dat$midyears<-seq(2000.5,(max_time+0.5),1)
+  
+  dat$n<-length(dat$NMCP_llin) # n: number of years
+  dat$n2<-nrow(SURVEY_DATA) # n2: number of surveys
+  
+  # extract population from survey-years
+  dat$population<-rep(NA,dat$n2)
+  for(i in 1:nrow(SURVEY)){
+    dat$population[i]<-POP[as.numeric(names(POP))%in%floor(dat$date[i])]
+  }
+  
+  
+  # TODO: where do these numbers come from? why?
+  ########### ADJUSTMENT FOR SURVEYS NOT CONDUCTED NATIONALLY BUT ON A POPULATION AT RISK BASIS
+  if(Countryout=='Ethiopia') dat$population=c(68186507,75777180)
+  if(Countryout=='Namibia') dat$population[dat$names%in%'Namibia 2009']=1426602
+  if(Countryout=='Kenya') dat$population[dat$names%in%'Kenya 2007']=31148650
+  
+  
+  
+  ###############################################################################################
+  
+  # very similar to the model above-- does this mean the mics3 and nodata surveys get this treatment twice? why? I still don't understand what it does. 
+  model_string = '
+			model {
+				for(i in 1:n2){
+					hh[i]~dnorm(avg.hh.size[i],se.hh.size[i]^-2) I(0,)
+					avgllin[i]~dnorm(avg.LLIN.hh[i],se.LLIN.hh[i]^-2) I(0,)
+					avgitn[i]~dnorm(avg.ITN.hh[i],se.ITN.hh[i]^-2) I(0,)			
+					dTotllin[i]<-(avgllin[i]*population[i]/hh[i]) # add 2 to calibrate zeros		
+					dTotitn[i]<-(avgitn[i]*population[i]/hh[i]) # add 2 to calibrate zeros				
+					
+				}
+			}
+		'
+  
+  jags <- jags.model(textConnection(model_string),
+                     data = dat,
+                     n.chains = 1,
+                     n.adapt = 50000)
+  update(jags,n.iter=50000)
+  
+  jdat <- coda.samples(jags,variable.names=c('dTotllin','dTotitn'),n.iter=50000,thin=50) 
+  
+  var=colMeans(jdat[[1]])
+  dTotllin=grep("dTotllin",names(var))
+  dTotitn=grep("dTotitn",names(var))
+  
+  #llins
+  if(is.null(dim(jdat[,dTotllin][[1]]))){
+    dat$nTotal_llin<-c((mean(jdat[,dTotllin][[1]])),sd(jdat[,dTotllin][[1]]))
+    
+  }else {
+    dat$nTotal_llin<-c((colMeans(jdat[,dTotllin][[1]])),apply(jdat[,dTotllin][[1]],2,sd))
+  }
+  #itns
+  if(is.null(dim(jdat[,dTotitn][[1]]))){
+    dat$nTotal_itn<-c((mean(jdat[,dTotitn][[1]])),sd(jdat[,dTotitn][[1]]))
+    
+  }else {
+    dat$nTotal_itn<-c((colMeans(jdat[,dTotitn][[1]])),apply(jdat[,dTotitn][[1]],2,sd))
+  }
+  
+
+  SVY<-matrix(data=NA,nrow=dat$n2,ncol=12)
+  k=1
+  i=1
+  sample_times<-seq(0.0,(max_time-1999),0.25)+2000
+  index_times<-1:length(sample_times)
+  master_l<-length(index_times)
+  while(k<=(dat$n2)){
+    if(dat$date[k]>=dat$years[i] & dat$date[k]<dat$endyears[i]){
+      SVY[k,1]<-dat$date[k] # add date
+      SVY[k,2]<-(dat$date[k]-dat$years[i]) # add date
+      SVY[k,3]<-(dat$endyears[i]-dat$date[k]) # add date
+      
+      SVY[k,4]<-dat$nTotal_llin[k] 
+      SVY[k,5]<-dat$nTotal_llin[k+dat$n2]	
+      SVY[k,6]<-dat$nTotal_itn[k] 
+      SVY[k,7]<-dat$nTotal_itn[k+dat$n2]				
+      SVY[k,8]<-i
+      
+      mins<-abs(sample_times-dat$date[k])
+      mins_index<-index_times[order(mins,decreasing=FALSE)]
+      sorted<-sort(mins,decreasing=FALSE)[1:2]
+      sorted<-1-(sorted/sum(sorted))
+      SVY[k,9]<-mins_index[1]
+      SVY[k,10]<-mins_index[2]
+      SVY[k,11]<-sorted[1]
+      SVY[k,12]<-sorted[2]
+      
+      k=k+1	
+      i=1
+    } 
+    i=i+1
+    
+  }
+  
+  
+  colnames(SVY)<-c('svyDate','s1','s2','mTot_llin','sTot_llin','mTot_itn','sTot_itn','index','index2a','index2b','sa','sb')
+  SVY<-as.data.frame(SVY)
+  SVY<-as.list(SVY)
+  
+  SVY$NMCP_llin<-dat$NMCP_llin
+  SVY$NMCP_itn<-dat$NMCP_itn
+  SVY$NMCP_total<-dat$NMCP_total
+  
+  SVY$MANUFACTURER<-dat$MANUFACTURER
+  SVY$POP<-dat$POP
+  SVY$midyear<-dat$midyear
+  SVY$n<-length(SVY$NMCP_llin)
+  SVY$n2<-dat$n2
+  
+}
 
 
 
