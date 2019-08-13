@@ -953,6 +953,7 @@ if(any(is.na(SVY$sTot_llin)) | any(is.na(SVY$sTot_itn))){
 				itnD[i]<-sum(delta_store2[i,1:n])
 			}
 
+      #### ONLY PART THAT IS DIFFERENT
 			for(i in 1:n2){
 				j[i]<-index2a[i]	 
 				j2[i]<-index2b[i]	 	
@@ -964,6 +965,7 @@ if(any(is.na(SVY$sTot_llin)) | any(is.na(SVY$sTot_itn))){
 				mTot_llin[i] ~ dnorm(pred1[i],sTot_llin[i]^-2)	T(llinlimL[i],llinlimH[i])
 				mTot_itn[i] ~ dnorm(pred2[i],sTot_itn[i]^-2) T(itnlimL[i],itnlimH[i])
 			}
+		 ####  END ONLY PART THAT IS DIFFERENT
 		
 			trace~dunif(1,5000)
 			sample<-round(trace)
