@@ -81,12 +81,12 @@ POP<-fread(file.path(main_dir,'Population_For_Sam_2017.csv'),stringsAsFactors=FA
 
 data3[data3==0] <- 1e-6
 data3ls <- as.list(data3)
-data3ls$n <- nrow(data3)
+data3ls$survey_count <- nrow(data3)
 
 # "I(0,)" is truncation syntax in BUGS-- here, we're creating zero-truncated normals
 model_string = '
 	model {
-		for(i in 1:n){
+		for(i in 1:survey_count){
 
 			avgitn[i]~dnorm(avg.NET.hh[i],se.NET.hh[i]^-2) I(0,)		
 			
@@ -177,8 +177,8 @@ if(nrow(SURVEY)==0){
                   years = 2000:max_time,
                   endyears = 2001:(max_time+1),
                   midyears = seq(2000.5,(max_time+0.5),1),
-                  n = length(NMCP_llin),
-                  n2 = 1)
+                  year_count = length(NMCP_llin),
+                  survey_count = 1)
   
   SVY <- list(svyDate = 2005,
                   s1 = 1,
@@ -188,18 +188,18 @@ if(nrow(SURVEY)==0){
                   mTot_itn = NA,
                   sTot_itn = NA,
                   index = 35,
-                  index2a = 1,
-                  index2b = 0,
-                  sa = 1,
-                  sb = 0,
+                  quarter_start_indices = 1,
+                  quarter_end_indices = 0,
+                  quarter_prop_completed = 1,
+                  quarter_prop_remaining = 0,
                   NMCP_llin = NMCP_llin,
                   NMCP_itn = NMCP_itn,
                   NMCP_total = NMCP_total,
                   MANUFACTURER = MANUFACTURER,
                   POP = POP,
                   midyear = seq(2000.5,(max_time+0.5),1),
-                  n = length(NMCP_llin),
-                  n2 = 1
+                  year_count = length(NMCP_llin),
+                  survey_count = 1
                   )
   
 }else { # calculate total nets from surveys 
@@ -214,8 +214,8 @@ if(nrow(SURVEY)==0){
                   years = 2000:max_time,
                   endyears = 2001:(max_time+1),
                   midyears = seq(2000.5,(max_time+0.5),1),
-                  n = length(NMCP_llin),
-                  n2 = nrow(SURVEY_DATA),
+                  year_count = length(NMCP_llin),
+                  survey_count = nrow(SURVEY_DATA),
                   population = as.numeric(POP[as.character(floor(SURVEY_DATA$date))]))
   
   dat <- c(as.list(SURVEY_DATA), dat)
@@ -229,7 +229,7 @@ if(nrow(SURVEY)==0){
   
   model_string = '
 			model {
-				for(i in 1:n2){
+				for(i in 1:survey_count){
 					hh[i]~dnorm(avg.hh.size[i],se.hh.size[i]^-2) I(0,)
 					avgllin[i]~dnorm(avg.LLIN.hh[i],se.LLIN.hh[i]^-2) I(0,)
 					avgitn[i]~dnorm(avg.ITN.hh[i],se.ITN.hh[i]^-2) I(0,)			
@@ -274,24 +274,24 @@ if(nrow(SURVEY)==0){
   SVY <- list(svyDate = dat$date,
                   s1 = dat$date - floor(dat$date),
                   s2 = ceiling(dat$date) - dat$date,
-                  mTot_llin = as.numeric(dat$nTotal_llin[1:dat$n2]),
-                  sTot_llin = as.numeric(dat$nTotal_llin[(dat$n2+1):(dat$n2*2)]),
-                  mTot_itn = as.numeric(dat$nTotal_itn[1:dat$n2]),
-                  sTot_itn = as.numeric(dat$nTotal_itn[(dat$n2+1):(dat$n2*2)]),
+                  mTot_llin = as.numeric(dat$nTotal_llin[1:dat$survey_count]),
+                  sTot_llin = as.numeric(dat$nTotal_llin[(dat$survey_count+1):(dat$survey_count*2)]),
+                  mTot_itn = as.numeric(dat$nTotal_itn[1:dat$survey_count]),
+                  sTot_itn = as.numeric(dat$nTotal_itn[(dat$survey_count+1):(dat$survey_count*2)]),
                   index = sapply(floor(dat$date), function(year){which(year==dat$years)}), # year index
-                  # TODO: these are not always identical to the ones in SVY below. I think I'm right but don't get why
-                  index2a = sapply(floor(dat$date/0.25) * 0.25, function(time){which(time==sample_times)}), # floor yearquarter index
-                  index2b = sapply(ceiling(dat$date/0.25) * 0.25, function(time){which(time==sample_times)}), # ceiling yearquarter index
-                  sa = (dat$date - floor(dat$date/0.25) * 0.25)/0.25, # % of quarter elapsed
-                  sb = 1- (dat$date - floor(dat$date/0.25) * 0.25)/0.25, # % of quarter yet to come
+                  # TODO: these are not always identical to the ones in Sam's original code (see Ghana eg)
+                  quarter_start_indices = sapply(floor(dat$date/0.25) * 0.25, function(time){which(time==sample_times)}), # floor yearquarter index
+                  quarter_end_indices = sapply(ceiling(dat$date/0.25) * 0.25, function(time){which(time==sample_times)}), # ceiling yearquarter index
+                  quarter_prop_completed = (dat$date - floor(dat$date/0.25) * 0.25)/0.25, # % of quarter elapsed
+                  quarter_prop_remaining = 1- (dat$date - floor(dat$date/0.25) * 0.25)/0.25, # % of quarter yet to come
                   NMCP_llin = NMCP_llin, # year count
                   NMCP_itn = NMCP_itn,
                   NMCP_total = NMCP_total,
                   MANUFACTURER = MANUFACTURER,
                   POP = POP,
                   midyear = seq(2000.5,(max_time+0.5),1),
-                  n = length(NMCP_llin),
-                  n2 = dat$n2,
+                  year_count = length(NMCP_llin),
+                  survey_count = dat$survey_count,
                   population = POP, # duplicate -- maybe they had it below st it would be included in the no-survey results. redo this. 
                   svy_population = dat$population
               )
@@ -320,21 +320,21 @@ SVY <- c(SVY, as.list(trace1_priors, as.list(trace0_priors)))
 # ncol: # of years
 # worried that nrow is hard-coded-- think it should alwyas be ncol-4 such that the moving average doesn't extend beyond 
 # years for which we have data
-ncol <- SVY$n
+ncol <- SVY$year_count
 rows <- lapply(1:(ncol-4), function(row_idx){
   c( rep(0, row_idx-1),
      rep(1, 5),
      rep(0, ncol-5-row_idx+1)
   )
 })
-MV_avg <- do.call(rbind, rows)
+movingavg_indicators <- do.call(rbind, rows)
 
 # scale to one in each column
-MV <- prop.table(MV_avg, 2)
+moving_avg_weights <- prop.table(movingavg_indicators, 2)
 
 # add to svy list
-SVY$MV_avg<-(MV)
-SVY$nrow_mv<-nrow(MV)
+SVY$moving_avg_weights <- (moving_avg_weights)
+SVY$nrow_moving_avg <- nrow(moving_avg_weights)
 SVY$year_population<-unique(SVY$population) # this is like the fourth population. why.
 
 # expand population by quarter, append one more to the end
@@ -350,7 +350,7 @@ SVY$NMCP_llin[SVY$MANUFACTURER==0] <- 0
 
 # todo: remove or fix this
 # a hack if all NMCP itns are NAs - for example for chad.
-if(sum(is.na(SVY$NMCP_itn))==SVY$n){
+if(sum(is.na(SVY$NMCP_itn))==SVY$year_count){
   print("SETTING ITNS TO ZERO IN LATER YEARS: WHY???")
   SVY$NMCP_itn[14:17]=0
 }
@@ -374,16 +374,16 @@ if(this_country=='Mozambique'){ SVY$IRS=(1-0.1)
 # TODO: ask sam what this is
 ##### gp NMCP module - this replaces the previous continent wide stuff
 y1<-SVY$NMCP_llin
-x1=1:length(SVY$NMCP_llin)
+llin_year_indices=1:length(SVY$NMCP_llin)
 y2<-SVY$NMCP_itn
-x2=1:length(SVY$NMCP_itn)
+itn_year_indices=1:length(SVY$NMCP_itn)
 
 SVY$y1=y1[!is.na(y1)] # non-null llins
-SVY$x1=x1[!is.na(y1)] # index of non-null llins
+SVY$llin_year_indices=llin_year_indices[!is.na(y1)] # index of non-null llins
 SVY$y2=y2[!is.na(y2)] # non-null itns
-SVY$x2=x2[!is.na(y2)] # index of non-null itns
-SVY$z=sum(!is.na(y1)) # non-null year count for llins
-SVY$z2=sum(!is.na(y2)) # non-null year count for itns
+SVY$itn_year_indices=itn_year_indices[!is.na(y2)] # index of non-null itns
+SVY$llin_year_count=sum(!is.na(y1)) # non-null year count for llins
+SVY$itn_year_count=sum(!is.na(y2)) # non-null year count for itns
 
 
 # this allows a 3 sigma variation from the mean for the survey fitting
@@ -402,74 +402,85 @@ SVY$itnlimH[SVY$itnlimH<0]=0
 
 ### BIG model string to disentangle  #####----------------------------------------------------------------------------------------------------------------------------------
 
-# elements of SVY used:
-# n: number of years
-# MV: weights for rolling average
-# z: number of non-null years for llins
-# x1: index of non-null llins
+# TODO: trim SVY down to only those objects used in model
+
+# RENAMING:
+# Q: quarter_count
+# n: year_count
+# MV: moving_avg_weights
+# nrow_mv: nrow_moving_avg
+# z: llin_year_count
+# x1: llin_year_indices
+# z2: itn_year_count
+# x2: itn_year_indices
+# n2: survey_count
+# index2a: quarter_start_indices
+# index2b: quarter_end_indices
+# sa: quarter_prop_completed
+# sb: quarter_prop_remaining
 
 data_string <- "data{
-						Q<-(n*4+1)	# modeling a quarter per year, plus one more
-						MV<-MV_avg  # weights for the rolling average
+						quarter_count <- (year_count*4+1)	# modeling a quarter per year, plus one more
+						moving_avg_weights <- moving_avg_weights  # weights for the rolling average
 				}"
 model_preface <- "model {"
 model_suffix <- "}"
 
 # large standard deviation before 2003, small one after
-net_prior <- "for(i in 1:n){
-						std_N[i]<- ifelse(i<=4, 2, 0.2)  # standard deviation for manufacturer TWEAK
+net_prior <- "for(year_idx in 1:year_count){
+						std_N[year_idx] <- ifelse(year_idx<=4, 2, 0.2)  # standard deviation for manufacturer TWEAK
 					}"
 
-llin_init <- "for (i in 1:z) {
-						for (j in 1:z) {
-							Sigma1[i,j] <-  exp(-((x1[i] - x1[j])/rho_sq1)^2) + ifelse(i==j,tau1,0) 
+llin_init <- "for (llin_year_row in 1:llin_year_count) {
+						for (llin_year_column in 1:llin_year_count) {
+							Sigma1[llin_year_row, llin_year_column] <-  exp(-( (llin_year_indices[llin_year_row] - llin_year_indices[llin_year_column]) / rho_sq1)^2) + ifelse(llin_year_row==llin_year_column, tau1, 0) 
 						}
 					  }
 					  rho_sq1 ~ dunif(0,1) # restricted to prevent over smoothing
-	    			  tau1 ~ dunif(0,0.1)
+	    			tau1 ~ dunif(0,0.1)
 
-					  for (i in 1:z) {
-						 mu1[i]=0
+					  for (llin_year_idx in 1:llin_year_count) {
+						 mu1[llin_year_idx]=0
 					  }
 					  y1~ dmnorm(mu1,Sigma1) 
 	  
-					  for (i in 1:n) {
-						for (j in 1:z) {
-							Sigma_pred1[i,j] <-  exp(-((i - x1[j])/rho_sq1)^2)
+					  for (year_idx in 1:year_count) {
+						for (llin_year_idx in 1:llin_year_count) {
+							Sigma_pred1[year_idx, llin_year_idx] <-  exp(-((year_idx - llin_year_indices[llin_year_idx])/rho_sq1)^2)
 						}
 					  }			  
-						p1<-Sigma_pred1%*%inverse(Sigma1)%*%y1"
+						p1 <- Sigma_pred1%*%inverse(Sigma1)%*%y1"
 
-itn_init <- "for (i in 1:z2) {
-						for (j in 1:z2) {
-							Sigma2[i,j] <-  exp(-((x2[i] - x2[j])/rho_sq2)^2)  +ifelse(i==j,tau2,0) 
+itn_init <- "for (itn_year_row in 1:itn_year_count) {
+						for (itn_year_column in 1:itn_year_count) {
+							Sigma2[itn_year_row, itn_year_column] <-  exp(-((itn_year_indices[itn_year_row] - itn_year_indices[itn_year_column])/rho_sq2)^2)  +ifelse(itn_year_row==itn_year_column,tau2,0) 
 						}
 					  }
 					  rho_sq2 ~ dunif(0,1)
   					  tau2 ~ dunif(0,0.1)
 	  
-					  for (i in 1:z2) {
-						 mu2[i]=0
+					  for (itn_year_idx in 1:itn_year_count) {
+						 mu2[itn_year_idx]=0
 					  }
 					  y2~ dmnorm(mu2,Sigma2) 
 	  
-					  for (i in 1:n) {
-						for (j in 1:z2) {
-							Sigma_pred2[i,j] <- exp(-((i - x2[j])/rho_sq2)^2)
+					  for (year_idx in 1:year_count) {
+						for (itn_year_idx in 1:itn_year_count) {
+							Sigma_pred2[year_idx, itn_year_idx] <- exp(-((year_idx - itn_year_indices[itn_year_idx])/rho_sq2)^2)
 						}
 					  }			  
-					p2<-Sigma_pred2%*%inverse(Sigma2)%*%y2"
+					p2 <- Sigma_pred2%*%inverse(Sigma2)%*%y2"
 
 manu_nmcp_init <- " #initialise manufacturer and NMCP
-					for(j in 1:n){
+					for(year_idx in 1:year_count){
 						# manufacturer takes actual value
-						s_m[j] ~ dunif(0, 0.075) 	 # error in llin manufacturer	
-						mu[j]~dnorm(MANUFACTURER[j],((MANUFACTURER[j]+1e-12)*s_m[j])^-2) T(0,)
-						s_d[j] ~ dunif(0, 0.01) 	 # error in llin NMCP				
-						s_d2[j] ~ dunif(0, 0.01) 	 # error in ITN NMCP		
+						s_m[year_idx] ~ dunif(0, 0.075) 	 # error in llin manufacturer	
+						mu[year_idx]~dnorm(MANUFACTURER[year_idx],((MANUFACTURER[year_idx]+1e-12)*s_m[year_idx])^-2) T(0,)
+						s_d[year_idx] ~ dunif(0, 0.01) 	 # error in llin NMCP				
+						s_d2[year_idx] ~ dunif(0, 0.01) 	 # error in ITN NMCP		
 
-						delta_raw[j]<-ifelse(p1[j]>0,p1[j]*year_population[j],0)
-						delta2_raw[j]<-ifelse(p2[j]>0,p2[j]*year_population[j],0)					
+						delta_raw[year_idx]<-ifelse(p1[year_idx]>0,p1[year_idx]*year_population[year_idx],0)
+						delta2_raw[year_idx]<-ifelse(p2[year_idx]>0,p2[year_idx]*year_population[year_idx],0)					
 										
 					}
 							
@@ -482,31 +493,31 @@ manu_nmcp_init <- " #initialise manufacturer and NMCP
 					Psi[1] <- able[1]-delta_l[1]		
 				
 					#loop to get stocks and capped deltas
-					for(j in 2:n){
-						delta[j] <- ifelse(delta_raw[j]>(mu[j]+Psi[j-1]),mu[j]+Psi[j-1],delta_raw[j])					
-						able[j] <- Psi[j-1] + mu[j]	
-						par2[j]~dunif(3,24)
-						extra[j]~dbeta(2,par2[j])
-						delta_l[j]<-delta[j]+((able[j]-delta[j])*extra[j])
-						Psi[j] <- able[j]-delta_l[j]	
+					for(year_idx in 2:year_count){
+						delta[year_idx] <- ifelse(delta_raw[year_idx]>(mu[year_idx]+Psi[year_idx-1]),mu[year_idx]+Psi[year_idx-1],delta_raw[year_idx])					
+						able[year_idx] <- Psi[year_idx-1] + mu[year_idx]	
+						par2[year_idx]~dunif(3,24)
+						extra[year_idx]~dbeta(2,par2[year_idx])
+						delta_l[year_idx]<-delta[year_idx]+((able[year_idx]-delta[year_idx])*extra[year_idx])
+						Psi[year_idx] <- able[year_idx]-delta_l[year_idx]	
 					}"
 
-llin_main <- "for(i in 1:4){ # change according to size of MV
+llin_main <- "for(i in 1:4){ # change according to size of moving_avg_weights
 						k[1,i]~dunif(16,18) 
 						L[1,i]~dunif(1,20.7)		
 
 					}
 										
-					for(i in 5:nrow_mv){ # change according to size of MV
+					for(i in 5:nrow_moving_avg){ # change according to size of moving_avg_weights
 						k[1,i]~dunif(16,18) 
 						L[1,i]~dunif(4,20.7)
 					}
-					mv_k<-k%*%MV		
-					mv_L<-L%*%MV
+					mv_k <- k%*%moving_avg_weights		
+					mv_L <- L%*%moving_avg_weights
 
 
 					#llins
-					for(j in 1:n){
+					for(j in 1:year_count){
 	
 						xx1[1,j]<-(-0.25)
 						xx2[1,j]<-(-0.25)
@@ -524,7 +535,7 @@ llin_main <- "for(i in 1:4){ # change according to size of MV
 						g.m[j,8]<-g.m[j,3]/g.m[j,5]
 						g.m[j,9]<-g.m[j,4]/g.m[j,5]
 			
-						for(i in 1:Q){
+						for(i in 1:quarter_count){
 							ind1[i,j]<-ifelse(((i-1)/4)<(j-1+0.25),0,1) # counter to set zero if not the right time
 							ind2[i,j]<-ifelse(((i-1)/4)<(j-1+0.5),0,1) # counter to set zero if not the right time
 							ind3[i,j]<-ifelse(((i-1)/4)<(j-1+0.75),0,1) # counter to set zero if not the right time
@@ -547,22 +558,20 @@ llin_main <- "for(i in 1:4){ # change according to size of MV
 							nets3[i,j]<-ifelse(xx3[i+1,j]>=mv_L[j],0,ind3[i,j]*(delta_l[j]*g.m[j,8])*exp(mv_k[j]-mv_k[j]/(1-(xx3[i+1,j]/mv_L[j])^2))) #multiplies the loss function
 							nets4[i,j]<-ifelse(xx4[i+1,j]>=mv_L[j],0,ind4[i,j]*(delta_l[j]*g.m[j,9])*exp(mv_k[j]-mv_k[j]/(1-(xx4[i+1,j]/mv_L[j])^2))) #multiplies the loss function
 				
-				
-							
 							ThetaM[i,j]<-nets1[i,j]+nets2[i,j]+nets3[i,j]+nets4[i,j] # starts discounting
 				
 						}
 					}"
 
-itn_main <- "	for(i in 1:nrow_mv){
+itn_main <- "	for(i in 1:nrow_moving_avg){
 						k2[1,i]~dunif(16,18) 
 						L2[1,i]~dunif(1.5,20.7)	
 					}
-					mv_k2<-k2%*%MV
-					mv_L2<-L2%*%MV
+					mv_k2 <- k2%*%moving_avg_weights
+					mv_L2 <- L2%*%moving_avg_weights
 
 		
-					for(j in 1:n){
+					for(j in 1:year_count){
 
 						xx1_itn[1,j]<-(-0.25)
 						xx2_itn[1,j]<-(-0.25)
@@ -580,7 +589,7 @@ itn_main <- "	for(i in 1:nrow_mv){
 						g2.m[j,8]<-g2.m[j,3]/g2.m[j,5]
 						g2.m[j,9]<-g2.m[j,4]/g2.m[j,5]			
 
-						for(i in 1:Q){
+						for(i in 1:quarter_count){
 							ind1_itn[i,j]<-ifelse(((i-1)/4)<(j-1+0.25),0,1) # counter to set zero if not the right time
 							ind2_itn[i,j]<-ifelse(((i-1)/4)<(j-1+0.5),0,1) # counter to set zero if not the right time
 							ind3_itn[i,j]<-ifelse(((i-1)/4)<(j-1+0.75),0,1) # counter to set zero if not the right time
@@ -610,24 +619,24 @@ itn_main <- "	for(i in 1:nrow_mv){
 					}	"
 
 
-accounting <- "for(i in 1:Q){
-				ThetaT[i]<-sum(ThetaM[i,1:n])
-				ThetaT2[i]<-sum(ThetaM2[i,1:n])
-				llinD[i]<-sum(delta_store[i,1:n])
-				itnD[i]<-sum(delta_store2[i,1:n])
+accounting <- "for(i in 1:quarter_count){
+				ThetaT[i]<-sum(ThetaM[i,1:year_count])
+				ThetaT2[i]<-sum(ThetaM2[i,1:year_count])
+				llinD[i]<-sum(delta_store[i,1:year_count])
+				itnD[i]<-sum(delta_store2[i,1:year_count])
 			}"
 
 
-additional_section <- "for(i in 1:n2){
-				j[i]<-index2a[i]	 
-				j2[i]<-index2b[i]	 	
+additional_section <- "for(i in 1:survey_count){
+				quarter_start_index[i] <- quarter_start_indices[i]	 
+				quarter_end_index[i] <- quarter_end_indices[i]	 	
 				
-				pred1[i]<-sa[i]*ThetaT[j[i]]+sb[i]*ThetaT[j2[i]]	
-				pred2[i]<-sa[i]*ThetaT2[j[i]]+sb[i]*ThetaT2[j2[i]]	
-				pred3[i]<-pred1[i]+pred2[i]
+				pred1[i] <- quarter_prop_completed[i] * ThetaT[quarter_start_index[i]] + quarter_prop_remaining[i] * ThetaT[quarter_end_index[i]]	
+				pred2[i] <- quarter_prop_completed[i] * ThetaT2[quarter_start_index[i]] + quarter_prop_remaining[i] * ThetaT2[quarter_end_index[i]]	
+				pred3[i] <- pred1[i] + pred2[i]
 					
-				mTot_llin[i] ~ dnorm(pred1[i],sTot_llin[i]^-2)	T(llinlimL[i],llinlimH[i])
-				mTot_itn[i] ~ dnorm(pred2[i],sTot_itn[i]^-2) T(itnlimL[i],itnlimH[i])
+				mTot_llin[i] ~ dnorm(pred1[i], sTot_llin[i]^-2)	T(llinlimL[i], llinlimH[i])
+				mTot_itn[i] ~ dnorm(pred2[i], sTot_itn[i]^-2) T(itnlimL[i], itnlimH[i])
 			}"
 
 updating <- "
@@ -664,7 +673,7 @@ updating <- "
 			p0_p1<-prop0_p1[sample2]
 			p0_p2<-prop0_p2[sample2]
 			p0_i1<-prop0_i1[sample2]	
-			for(i in 1:Q){	
+			for(i in 1:quarter_count){	
 				ThetaT3[i]<-ifelse(((ThetaT[i]+ThetaT2[i])/(PAR*IRS*population[i]))<0,0,((ThetaT[i]+ThetaT2[i])/(PAR*IRS*population[i])))
 				T3_p0[i]<-log(ThetaT3[i]/(1-ThetaT3[i]))
 				for(j in 1:10){
