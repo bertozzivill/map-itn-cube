@@ -15,6 +15,8 @@ library(RecordLinkage)
 
 rm(list=ls())
 
+# TODO: FIX THE WAY POPULATION IS USED
+
 ### Set initial values #####----------------------------------------------------------------------------------------------------------------------------------
 
 main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/data_from_sam"
@@ -67,9 +69,6 @@ POP<-fread(file.path(main_dir,'Population_For_Sam_2017.csv'),stringsAsFactors=FA
 #   geom_line(data=PAR, aes(y=total_pop), color="red") + 
 #   facet_wrap(~iso_3_code, scales="free_y")
 
-# horrifying list. TODO: check eLife paper for rationals for these, put in to table.
-# pray for me.
-load(file.path(main_dir,'poissonPriors.RData'))
 
 # written by this script: per-country:
 # save.image(paste(file.path(main_dir, 'out/'),Countryout,'.RData',sep=""))
@@ -203,7 +202,7 @@ if(nrow(SURVEY)==0){
                   n2 = 1
                   )
   
-}else {
+}else { # calculate total nets from surveys 
   
   SURVEY[SURVEY==0] <- 1e-6 # add small amount of precision
   SURVEY_DATA <- SURVEY
@@ -285,16 +284,121 @@ if(nrow(SURVEY)==0){
                   index2b = sapply(ceiling(dat$date/0.25) * 0.25, function(time){which(time==sample_times)}), # ceiling yearquarter index
                   sa = (dat$date - floor(dat$date/0.25) * 0.25)/0.25, # % of quarter elapsed
                   sb = 1- (dat$date - floor(dat$date/0.25) * 0.25)/0.25, # % of quarter yet to come
-                  NMCP_llin = NMCP_llin,
+                  NMCP_llin = NMCP_llin, # year count
                   NMCP_itn = NMCP_itn,
                   NMCP_total = NMCP_total,
                   MANUFACTURER = MANUFACTURER,
                   POP = POP,
                   midyear = seq(2000.5,(max_time+0.5),1),
                   n = length(NMCP_llin),
-                  n2 = dat$n2)
+                  n2 = dat$n2,
+                  population = POP, # duplicate -- maybe they had it below st it would be included in the no-survey results. redo this. 
+                  svy_population = dat$population
+              )
   
 }
+
+
+### process priors #####----------------------------------------------------------------------------------------------------------------------------------
+
+# horrifying list. TODO: check eLife paper for rationals for these, put in to table.
+# pray for me.
+
+# test: is anything used besides trace0 and trace1?
+load(file.path(main_dir,'poissonPriors.RData'))
+
+trace1_priors <- trace1[, c(paste0("chain:1.b",1:10), paste0("chain:1.i", 1:10))]
+setnames(trace1_priors, names(trace1_priors), gsub("chain\\:1\\.", "prop1_", names(trace1_priors)) ) 
+trace0_priors <- trace0[, c(paste0("chain:1.", c("b1", "b2", "b3", "p1", "p2", "i1")))]
+setnames(trace0_priors, names(trace0_priors), gsub("chain\\:1\\.", "prop0_", names(trace0_priors)) ) 
+
+SVY <- c(SVY, as.list(trace1_priors, as.list(trace0_priors)))
+
+### prep (MV??) for jags run #####----------------------------------------------------------------------------------------------------------------------------------
+
+# ah, this looks like years to capture for a five-year moving average
+# ncol: # of years
+# worried that nrow is hard-coded-- think it should alwyas be ncol-4 such that the moving average doesn't extend beyond 
+# years for which we have data
+ncol <- SVY$n
+rows <- lapply(1:(ncol-4), function(row_idx){
+  c( rep(0, row_idx-1),
+     rep(1, 5),
+     rep(0, ncol-5-row_idx+1)
+  )
+})
+MV_avg <- do.call(rbind, rows)
+
+# scale to one in each column
+MV <- prop.table(MV_avg, 2)
+
+# add to svy list
+SVY$MV_avg<-(MV)
+SVY$nrow_mv<-nrow(MV)
+SVY$year_population<-unique(SVY$population) # this is like the fourth population. why.
+
+# expand population by quarter, append one more to the end
+SVY$population <- c( rep(SVY$year_population, each=4), SVY$year_population[length(SVY$year_population)] ) 
+
+### Scale NMCP  #####----------------------------------------------------------------------------------------------------------------------------------
+
+# scale NMCP to nets per person
+SVY$NMCP_llin <- SVY$NMCP_llin/SVY$year_population
+
+# set llins to zero in early years for which manufacturers didn't report any nets 
+SVY$NMCP_llin[SVY$MANUFACTURER==0] <- 0
+
+# todo: remove or fix this
+# a hack if all NMCP itns are NAs - for example for chad.
+if(sum(is.na(SVY$NMCP_itn))==SVY$n){
+  print("SETTING ITNS TO ZERO IN LATER YEARS: WHY???")
+  SVY$NMCP_itn[14:17]=0
+}
+
+# I removed dropna values from this that feel like they could result in year mismatches
+SVY$NMCP_itn <- SVY$NMCP_itn/SVY$year_population
+SVY$NMCP_total <- SVY$NMCP_total/SVY$year_population
+
+### Store population at risk, set limits (??)  #####----------------------------------------------------------------------------------------------------------------------------------
+
+# store population at risk parameter 
+SVY$PAR<-PAR
+
+# set IRS values. todo: HOW? These definitely need updating. 
+if(this_country=='Mozambique'){ SVY$IRS=(1-0.1)
+}else if(this_country=='Madagascar'){ SVY$IRS=(1-0.24)
+}else if(this_country=='Zimbabwe'){ SVY$IRS=(1-0.48)
+}else if(this_country=='Eritrea'){ SVY$IRS=(1-0.1)
+}else{ SVY$IRS=1}
+
+# TODO: ask sam what this is
+##### gp NMCP module - this replaces the previous continent wide stuff
+y1<-SVY$NMCP_llin
+x1=1:length(SVY$NMCP_llin)
+y2<-SVY$NMCP_itn
+x2=1:length(SVY$NMCP_itn)
+
+SVY$y1=y1[!is.na(y1)] # non-null llins
+SVY$x1=x1[!is.na(y1)] # should be length of non-null llins, but instead is a repeat
+SVY$y2=y2[!is.na(y2)] # non-null itns
+SVY$x2=x2[!is.na(y2)] # should be length of non-null itns, but instead is a repeat
+SVY$z=sum(!is.na(y1)) # sum of percapita llins???
+SVY$z2=sum(!is.na(y2)) # sum of percapita itns???
+
+
+# this allows a 3 sigma variation from the mean for the survey fitting
+SVY$llinlimL<- SVY$mTot_llin - 3*SVY$sTot_llin
+SVY$llinlimL[SVY$llinlimL<0]=0
+
+SVY$llinlimH<- SVY$mTot_llin + 3*SVY$sTot_llin
+SVY$llinlimH[SVY$llinlimH<0]=0
+
+SVY$itnlimL<- SVY$mTot_itn - 3*SVY$sTot_itn
+SVY$itnlimL[SVY$itnlimL<0]=0
+
+SVY$itnlimH<- SVY$mTot_itn + 3*SVY$sTot_itn
+SVY$itnlimH[SVY$itnlimH<0]=0
+
 
 
 

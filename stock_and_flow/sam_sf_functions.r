@@ -8,6 +8,13 @@ ClosestMatch2 = function(string, stringVector){
 
 revtrunc <- function(x) x-trunc(x)
 
+#loss function
+sigmoid<-function(t,k,L){
+  v<-exp(k-k/(1-(t/L)^2))
+  v[t>L]<-0
+  return(v)	
+}
+
 get.indicators.model<-function(mat,nc){
   cnames<-colnames(mat)<-1:nc
   rnames<-rownames(mat)<-0:nr	
