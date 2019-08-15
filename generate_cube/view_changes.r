@@ -280,6 +280,18 @@ for (var_name in c("\\.MEAN", "\\.DEV", "\\.ACC", "\\.GAP", "\\.USE")){
                              xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F)
     }
     
+    colorcount <- 50
+    breaks <- c(0, seq(0.01, 1, length.out=colorcount))
+    pal <- c("#e9e9e9", rev(wpal("sky", n=60)[1:(colorcount-1)]))
+    
+    pdf(file.path(new_dir, "05_predictions/use_time_series.pdf"), width=11, height=7)
+    
+    print(levelplot(this_stack,
+              par.settings=rasterTheme(region=pal), at=breaks,
+              xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F))
+    graphics.off()
+    
+    
     print(stackplot)
     plot_idx <- plot_idx+1
   }
