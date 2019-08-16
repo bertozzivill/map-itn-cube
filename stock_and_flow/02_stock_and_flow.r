@@ -427,11 +427,14 @@ model_preface <- "model {"
 model_suffix <- "}"
 
 # large standard deviation before 2003, small one after
-net_prior <- "for(year_idx in 1:year_count){
-						std_N[year_idx] <- ifelse(year_idx<=4, 2, 0.2)  # standard deviation for manufacturer TWEAK
-					}"
+# This seems to never be used, comment out. 
+# net_prior <- "for(year_idx in 1:year_count){
+# 						std_N[year_idx] <- ifelse(year_idx<=4, 2, 0.2)  # standard deviation for manufacturer TWEAK
+# 					}"
 
-llin_init <- "for (llin_year_row in 1:llin_year_count) {
+# NMCP GP priors-- replace equations 14 and 15? 
+# TODO: I'm almost positive this should be pulling from y1 (the actual nets/capita) rather than llin_year_indices
+llin_prior <- "for (llin_year_row in 1:llin_year_count) {
 						for (llin_year_column in 1:llin_year_count) {
 							Sigma1[llin_year_row, llin_year_column] <-  exp(-( (llin_year_indices[llin_year_row] - llin_year_indices[llin_year_column]) / rho_sq1)^2) + ifelse(llin_year_row==llin_year_column, tau1, 0) 
 						}
@@ -449,9 +452,10 @@ llin_init <- "for (llin_year_row in 1:llin_year_count) {
 							Sigma_pred1[year_idx, llin_year_idx] <-  exp(-((year_idx - llin_year_indices[llin_year_idx])/rho_sq1)^2)
 						}
 					  }			  
-						p1 <- Sigma_pred1%*%inverse(Sigma1)%*%y1"
+						p1 <- Sigma_pred1%*%inverse(Sigma1)%*%y1" # what does this do?
 
-itn_init <- "for (itn_year_row in 1:itn_year_count) {
+
+itn_prior <- "for (itn_year_row in 1:itn_year_count) {
 						for (itn_year_column in 1:itn_year_count) {
 							Sigma2[itn_year_row, itn_year_column] <-  exp(-((itn_year_indices[itn_year_row] - itn_year_indices[itn_year_column])/rho_sq2)^2)  +ifelse(itn_year_row==itn_year_column,tau2,0) 
 						}
@@ -471,11 +475,12 @@ itn_init <- "for (itn_year_row in 1:itn_year_count) {
 					  }			  
 					p2 <- Sigma_pred2%*%inverse(Sigma2)%*%y2"
 
+# see equations 5, and 17-22 of supplement
 manu_nmcp_init <- " #initialise manufacturer and NMCP
 					for(year_idx in 1:year_count){
 						# manufacturer takes actual value
 						s_m[year_idx] ~ dunif(0, 0.075) 	 # error in llin manufacturer	
-						mu[year_idx]~dnorm(MANUFACTURER[year_idx],((MANUFACTURER[year_idx]+1e-12)*s_m[year_idx])^-2) T(0,)
+						mu[year_idx]~dnorm(MANUFACTURER[year_idx],((MANUFACTURER[year_idx]+1e-12)*s_m[year_idx])^-2) I(0,)
 						s_d[year_idx] ~ dunif(0, 0.01) 	 # error in llin NMCP				
 						s_d2[year_idx] ~ dunif(0, 0.01) 	 # error in ITN NMCP		
 
@@ -502,6 +507,7 @@ manu_nmcp_init <- " #initialise manufacturer and NMCP
 						Psi[year_idx] <- able[year_idx]-delta_l[year_idx]	
 					}"
 
+# loss functions-- see section 3.2.2.3
 llin_main <- "for(i in 1:4){ # change according to size of moving_avg_weights
 						k[1,i]~dunif(16,18) 
 						L[1,i]~dunif(1,20.7)		
@@ -563,6 +569,26 @@ llin_main <- "for(i in 1:4){ # change according to size of moving_avg_weights
 						}
 					}"
 
+# testing 
+year_count <- 4
+quarter_count <- year_count*4+1
+ind1 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
+ind_delta1 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
+xx1 <- matrix(rep(NA, year_count*(quarter_count+1)), ncol=year_count)
+xx1[1,1:4] <- -0.25
+for (j in 1:year_count){
+  for (i in 1:quarter_count){
+    ind1[i,j]<-ifelse(((i-1)/4)<(j-1+0.25),0,1)
+    ind_delta1[i,j]<-ifelse(((i-1)/4)==(j-1+0.25),1,0) # counter to set zero if not the right time
+    xx1[i+1,j]<-ifelse(ind1[i,j]==1,xx1[i,j]+0.25,xx1[i,j]+0) # counts the loss function
+  }
+}
+
+
+
+
+
+
 itn_main <- "	for(i in 1:nrow_moving_avg){
 						k2[1,i]~dunif(16,18) 
 						L2[1,i]~dunif(1.5,20.7)	
@@ -619,6 +645,7 @@ itn_main <- "	for(i in 1:nrow_moving_avg){
 					}	"
 
 
+# ??
 accounting <- "for(i in 1:quarter_count){
 				ThetaT[i]<-sum(ThetaM[i,1:year_count])
 				ThetaT2[i]<-sum(ThetaM2[i,1:year_count])
@@ -626,7 +653,7 @@ accounting <- "for(i in 1:quarter_count){
 				itnD[i]<-sum(delta_store2[i,1:year_count])
 			}"
 
-
+# triggered if there are no nulls in survey data
 additional_section <- "for(i in 1:survey_count){
 				quarter_start_index[i] <- quarter_start_indices[i]	 
 				quarter_end_index[i] <- quarter_end_indices[i]	 	
@@ -639,6 +666,7 @@ additional_section <- "for(i in 1:survey_count){
 				mTot_itn[i] ~ dnorm(pred2[i], sTot_itn[i]^-2) T(itnlimL[i], itnlimH[i])
 			}"
 
+# for fitting the model
 updating <- "
 			trace~dunif(1,5000)
 			sample<-round(trace)
