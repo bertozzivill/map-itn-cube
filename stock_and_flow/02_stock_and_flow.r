@@ -115,7 +115,7 @@ varsd <- apply(jdat[[1]],2,sd) # todo: understand "apply" better
 ditn <- grep("ditn",names(var))
 dllin <- grep("dllin",names(var))
 
-data3T <-data.table(X=1:data3ls$n,
+data3T <-data.table(X=1:data3ls$survey_count,
                    names=data3$names,
                    Country=data3$Country,
                    ISO3=data3$ISO3,
@@ -220,7 +220,7 @@ if(nrow(SURVEY)==0){
   
   dat <- c(as.list(SURVEY_DATA), dat)
   
-  # TODO: where do these numbers come from? why?
+  # TODO: update these with appropriate populations from surveys
   ########### ADJUSTMENT FOR SURVEYS NOT CONDUCTED NATIONALLY BUT ON A POPULATION AT RISK BASIS
   if(this_country=='Ethiopia') dat$population=c(68186507,75777180)
   if(this_country=='Namibia') dat$population[dat$names%in%'Namibia 2009']=1426602
@@ -301,8 +301,7 @@ if(nrow(SURVEY)==0){
 
 ### process priors #####----------------------------------------------------------------------------------------------------------------------------------
 
-# horrifying list. TODO: check eLife paper for rationals for these, put in to table.
-# pray for me.
+# priors list from script sam sent. todo: explore.
 
 # test: is anything used besides trace0 and trace1?
 load(file.path(main_dir,'poissonPriors.RData'))
@@ -364,7 +363,7 @@ SVY$NMCP_total <- SVY$NMCP_total/SVY$year_population
 # store population at risk parameter 
 SVY$PAR<-PAR
 
-# set IRS values. todo: HOW? These definitely need updating. 
+# set IRS values. todo: update these from WHO data or anita work
 if(this_country=='Mozambique'){ SVY$IRS=(1-0.1)
 }else if(this_country=='Madagascar'){ SVY$IRS=(1-0.24)
 }else if(this_country=='Zimbabwe'){ SVY$IRS=(1-0.48)
@@ -653,8 +652,9 @@ accounting <- "for(i in 1:quarter_count){
 				itnD[i]<-sum(delta_store2[i,1:year_count])
 			}"
 
-# triggered if there are no nulls in survey data
-additional_section <- "for(i in 1:survey_count){
+# triggered if there are no nulls in survey data (sTot_llin or sTot_itn) ## WHY? are we losing a lot of survey data?
+# is the survey mean never actually used for fitting? why not?
+surveys <- "for(i in 1:survey_count){
 				quarter_start_index[i] <- quarter_start_indices[i]	 
 				quarter_end_index[i] <- quarter_end_indices[i]	 	
 				
@@ -666,7 +666,7 @@ additional_section <- "for(i in 1:survey_count){
 				mTot_itn[i] ~ dnorm(pred2[i], sTot_itn[i]^-2) T(itnlimL[i], itnlimH[i])
 			}"
 
-# for fitting the model
+# for fitting the model. todo: undersrtand these priors 
 updating <- "
 			trace~dunif(1,5000)
 			sample<-round(trace)
@@ -684,6 +684,7 @@ updating <- "
 			p1_b8<-prop1_b8[sample]
 			p1_b9<-prop1_b9[sample]
 			p1_b10<-prop1_b10[sample]
+			
 			p1_i1<-prop1_i1[sample]
 			p1_i2<-prop1_i2[sample]
 			p1_i3<-prop1_i3[sample]
@@ -698,9 +699,13 @@ updating <- "
 			p0_b1<-prop0_b1[sample2]
 			p0_b2<-prop0_b2[sample2]
 			p0_b3<-prop0_b3[sample2]
+			
 			p0_p1<-prop0_p1[sample2]
 			p0_p2<-prop0_p2[sample2]
+			
 			p0_i1<-prop0_i1[sample2]	
+			
+			
 			for(i in 1:quarter_count){	
 				ThetaT3[i]<-ifelse(((ThetaT[i]+ThetaT2[i])/(PAR*IRS*population[i]))<0,0,((ThetaT[i]+ThetaT2[i])/(PAR*IRS*population[i])))
 				T3_p0[i]<-log(ThetaT3[i]/(1-ThetaT3[i]))
@@ -720,5 +725,171 @@ updating <- "
 			}"
 
 
+if(any(is.na(SVY$sTot_llin)) | any(is.na(SVY$sTot_itn))){
+  full_model_string <- paste(data_string,
+                             model_preface, 
+                             llin_prior, 
+                             itn_prior, 
+                             manu_nmcp_init, 
+                             llin_main, 
+                             itn_main, 
+                             accounting, 
+                             updating, 
+                             model_suffix,
+                             sep="\n")
+}else{
+  full_model_string <- paste(data_string,
+                             model_preface, 
+                             llin_prior, 
+                             itn_prior, 
+                             manu_nmcp_init, 
+                             llin_main, 
+                             itn_main, 
+                             accounting, 
+                             surveys,  # this is the only difference
+                             updating, 
+                             model_suffix,
+                             sep="\n")
+  
+}
 
+# write to file. TODO: can write this to jags?
+fileConn<-file("~/Desktop/model.txt")
+writeLines(full_model_string, fileConn)
+close(fileConn)
+
+
+### Run model  #####----------------------------------------------------------------------------------------------------------------------------------
+
+n.adapt=10000
+update=1000000
+n.iter=50000
+thin=100
+
+jags<-c()
+jags <- jags.model(file=textConnection(full_model_string),
+                   data = SVY,
+                   n.chains = 1,
+                   n.adapt=n.adapt)
+update(jags,n.iter=update)
+
+
+# extract needed variables (TODO: make a function for this, remove year hard-coding)
+jdat <- coda.samples(jags,variable.names=c('extra',
+                                           'delta_l',
+                                           'able',
+                                           'nets1',
+                                           'nets2',
+                                           'nets3',
+                                           'nets4',
+                                           'nets1_itn',
+                                           'nets2_itn',
+                                           'nets3_itn',
+                                           'nets4_itn',
+                                           'xx1',
+                                           'xx2',
+                                           'xx3',
+                                           'xx4',
+                                           'xx1_itn',
+                                           'xx2_itn',
+                                           'xx3_itn',
+                                           'xx4_itn',
+                                           'g.m',
+                                           'g2.m',
+                                           'delta_store',
+                                           'llinD',
+                                           'itnD',
+                                           'ThetaT3',
+                                           'prop1',
+                                           'prop0',
+                                           'mv_k2',
+                                           'mv_L2',
+                                           'ThetaT2',
+                                           'ThetaM2',
+                                           'delta',
+                                           'delta2_raw',
+                                           'delta_raw',
+                                           'mu',
+                                           'Psi',
+                                           's_m',
+                                           's_d',
+                                           'ThetaT',
+                                           'ThetaM',
+                                           'mv_k',
+                                           'mv_L'),
+                     n.iter=n.iter,thin=thin) 
+
+
+var<-colMeans(jdat[[1]])
+g.m=grep("g.m",names(var))
+
+prop1=grep("^prop1\\[",names(var))
+prop0=grep("^prop0\\[",names(var))
+
+
+ThetaT3=grep("ThetaT3\\[",names(var))
+
+p0<-matrix(plogis(var[prop0]),ncol=10,nrow=73)
+p1<-matrix(var[prop1],ncol=10,nrow=73)
+
+
+ThetaM2=grep("ThetaM2\\[",names(var))
+
+ThetaM=grep("ThetaM\\[",names(var))
+ThetaT=grep("ThetaT\\[",names(var))
+ThetaT2=grep("ThetaT2\\[",names(var))
+
+mu=grep("mu",names(var))
+s_m=grep("s_m",names(var))
+s_d=grep("s_d",names(var))
+delta=grep("^delta\\[",names(var))
+delta_l=grep("^delta_l\\[",names(var))
+
+delta_tot=grep("^delta_tot\\[",names(var))
+
+able=grep("^able\\[",names(var))
+underdist=grep("^underdist\\[",names(var))
+
+
+llinD=grep("^llinD\\[",names(var))
+itnD=grep("^itnD\\[",names(var))
+
+delta_raw=grep("^delta_raw\\[",names(var))
+delta2_raw=grep("^delta2_raw\\[",names(var))
+delta_store=grep("^delta_store\\[",names(var))
+
+Psi=grep("Psi",names(var))
+k=grep("mv_k\\[",names(var))
+L=grep("mv_L\\[",names(var))
+k2=grep("mv_k2\\[",names(var))
+L2=grep("mv_L2\\[",names(var))
+ind=grep("ind",names(var))
+ind2=grep("ind2",names(var))
+zz=grep("zz",names(var))
+
+
+p.v2=grep("p.v2",names(var))
+xx=grep("xx",names(var))
+yy=grep("yy",names(var))
+
+M<-matrix(var[ThetaM],nrow=73,ncol=18)
+M2<-matrix(var[ThetaM2],nrow=73,ncol=18)
+
+ic<- HPDinterval(jdat)[[1]]
+Thetaic=grep("ThetaT\\[",rownames(ic))
+Theta2ic=grep("ThetaT2\\[",rownames(ic))
+itnDic=grep("itnD\\[",rownames(ic))
+llinDic=grep("llinD\\[",rownames(ic))
+
+half_lifes<-c()
+for(i in 1:18){
+  t=seq(0,10,.01)
+  sig<-sigmoid(t,var[k][i],var[L][i])
+  half_lifes[i]<-(t[which.min(abs(sig-0.5))])
+}
+
+hl=cbind(2000:2017,half_lifes,SVY$NMCP_llin)
+
+
+# then: plotting, saving
 
