@@ -21,52 +21,48 @@ rm(list=ls())
 
 main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/data_from_sam"
 
-max_time <- 2017 ### set final time point
+min_year <- 2000
+max_year<- 2017
 Countryout <- "GHA" # as.character(argv[1]) # aha, script gets run once per country
 this_country <- Countryout
 
 ### Read in all data #####----------------------------------------------------------------------------------------------------------------------------------
 
-# to map old survey id to new survey ID
-KEY<-fread(file.path(main_dir, 'KEY_080817.csv'),stringsAsFactors=FALSE)
+# NMCP data from WHO
+nmcp_data<-fread(file.path(main_dir, 'NMCP_2018.csv'),stringsAsFactors=FALSE)
 
-# NMCP data-- from an RA these days? 
-NMCP<-fread(file.path(main_dir, 'NMCP_2018.csv'),stringsAsFactors=FALSE)
+# Manufacturer data from WHO
+manufacturer_data<-fread(file.path(main_dir, 'MANU_2018.csv'),stringsAsFactors=FALSE)
 
-# Manufacturer data-- from an RA these days? 
-MANUFACTURER<-fread(file.path(main_dir, 'MANU_2018.csv'),stringsAsFactors=FALSE)
-setnames(MANUFACTURER, names(MANUFACTURER), as.character(MANUFACTURER[1,]))
-MANUFACTURER <- MANUFACTURER[2:nrow(MANUFACTURER),]
-MANUFACTURER <- MANUFACTURER[Country!=""]
+# todo: see if this formatting is necessary with 2019 data
+setnames(manufacturer_data, names(manufacturer_data), as.character(manufacturer_data[1,]))
+manufacturer_data <- manufacturer_data[2:nrow(manufacturer_data),]
+manufacturer_data <- manufacturer_data[Country!=""]
 
-# not populations at all-- an iso-gaul map
-POPULATIONS<-fread(file.path(main_dir,'country_table_populations.csv'),stringsAsFactors=FALSE)
-
-# from 01_prep_dhs
+# from dhs prep script
 data <- fread(file.path(main_dir, 'Aggregated_HH_Svy_indicators_28052019.csv'),stringsAsFactors=FALSE)
 setnames(data, "V1", "X")
 
-# TODO: where does the MICS3 data come from? why is it not processed like the others?
-data3 <- fread(file.path(main_dir,'Aggregated_HH_Svy_indicators_MICS3_080817.csv'),stringsAsFactors=FALSE)
-
-# also unclear origin
-No_report_SVYs<-fread(file.path(main_dir,'No Report SVYs_080817.csv'),stringsAsFactors=FALSE)
+# MICS3 and nosurvey data both from Bonnie originally, defer to eLife paper to explain them
+mics3_data <- fread(file.path(main_dir,'Aggregated_HH_Svy_indicators_MICS3_080817.csv'),stringsAsFactors=FALSE)
+no_report_surveydata <-fread(file.path(main_dir,'No Report SVYs_080817.csv'),stringsAsFactors=FALSE)
 
 # distribution of household sizes in surveys-- used in itn cube as well, where does it come from?
 # update: sam has send script for this, look thhrough it
-hh<-fread(file.path(main_dir, 'HHsize.csv'))
+# note: not actually used in this script, keep it here anyway as a reminder
+household_sizes<-fread(file.path(main_dir, 'HHsize.csv'))
 
 # todo: get populations from database (frankenpop)
 # where do these numbers come from??
 # they look like different version of each other-- which to use? VERY different #s in some countries
-# POP has 55 countries, PAR has 50 BUT overlap is 48-- POP doesn't have CPV or YEM, reasonably
-PAR<-fread(file.path(main_dir,'Population_For_Sam.csv'),stringsAsFactors=FALSE)
-POP<-fread(file.path(main_dir,'Population_For_Sam_2017.csv'),stringsAsFactors=FALSE)
+# population_v2 has 55 countries, population_v1 has 50 BUT overlap is 48-- population_v2 doesn't have CPV or YEM, reasonably
+population_v1<-fread(file.path(main_dir,'Population_For_Sam.csv'),stringsAsFactors=FALSE)
+population_v2<-fread(file.path(main_dir,'Population_For_Sam_2017.csv'),stringsAsFactors=FALSE)
 
-# test <- POP[iso_3_code %in% unique(PAR$iso_3_code)]
+# test <- population_v2[iso_3_code %in% unique(population_v1$iso_3_code)]
 # ggplot(test, aes(x=year)) +
 #   geom_line(aes(y=total_population))+
-#   geom_line(data=PAR, aes(y=total_pop), color="red") + 
+#   geom_line(data=population_v1, aes(y=total_pop), color="red") + 
 #   facet_wrap(~iso_3_code, scales="free_y")
 
 
@@ -75,20 +71,20 @@ POP<-fread(file.path(main_dir,'Population_For_Sam_2017.csv'),stringsAsFactors=FA
 # ggsave(paste(file.path(main_dir,'out/'),Countryout,'_NICE.pdf',sep=""))
 
 
+# TODO: move mics3 and nosurvey processing to another script
 ### preprocess MICS3 Data #####----------------------------------------------------------------------------------------------------------------------------------
 
 # todo: what is the difference between the JAGS outputs for avg ITN/LLIN and the values in the survey itself?
 
-data3[data3==0] <- 1e-6
-data3ls <- as.list(data3)
-data3ls$survey_count <- nrow(data3)
+mics3_data[mics3_data==0] <- 1e-6 # jags dislikes zeros
+mics3_list <- as.list(mics3_data)
+mics3_list$survey_count <- nrow(mics3_data)
 
-# "I(0,)" is truncation syntax in BUGS-- here, we're creating zero-truncated normals
-model_string = '
+model_string = "
 	model {
 		for(i in 1:survey_count){
 
-			avgitn[i]~dnorm(avg.NET.hh[i],se.NET.hh[i]^-2) I(0,)		
+			avgitn[i]~dnorm(avg.NET.hh[i],se.NET.hh[i]^-2) I(0,)	# 'I(0,)' is truncation syntax in BUGS-- here, we're creating zero-truncated normals
 			
 			llin[i]~dnorm(avg.LLIN[i],se.LLIN[i]^-2) I(0,)
 			itn[i]~dnorm(avg.ITN[i],se.ITN[i]^-2) I(0,)
@@ -100,10 +96,10 @@ model_string = '
 			
 		}
 	}
-'
+"
 
 jags <- jags.model(textConnection(model_string),
-                   data = data3ls,
+                   data = mics3_list,
                    n.chains = 1,
                    n.adapt = 50000)
 update(jags,n.iter=50000)
@@ -115,23 +111,22 @@ varsd <- apply(jdat[[1]],2,sd) # todo: understand "apply" better
 ditn <- grep("ditn",names(var))
 dllin <- grep("dllin",names(var))
 
-data3T <-data.table(X=1:data3ls$survey_count,
-                   names=data3$names,
-                   Country=data3$Country,
-                   ISO3=data3$ISO3,
-                   date=data3$date,
-                   avg.hh.size=data3$avg.hh.size,
-                   se.hh.size=data3$se.hh.size,
+mics3_estimates <-data.table(X=1:mics3_list$survey_count,
+                   names=mics3_data$names,
+                   Country=mics3_data$Country,
+                   ISO3=mics3_data$ISO3,
+                   date=mics3_data$date,
+                   avg.hh.size=mics3_data$avg.hh.size,
+                   se.hh.size=mics3_data$se.hh.size,
                    avg.ITN.hh=var[ditn],
                    se.ITN.hh=varsd[ditn],
                    avg.LLIN.hh=var[dllin],
                    se.LLIN.hh=varsd[dllin])
-# rownames(data3T) <- 1:data3ls$n # todo: necessary?
 
 ### preprocess No Report Surveys #####----------------------------------------------------------------------------------------------------------------------------------
 
-# todo: is it acceptable to calculate se this way?
-data4 <- No_report_SVYs[, list(X=1:nrow(No_report_SVYs),
+# todo: is it acceptable to calculate se this way? Justification for it in eLife paper
+no_report_estimates <- no_report_surveydata[, list(X=1:nrow(no_report_surveydata),
                                    names=paste(names, round(time)),
                                    Country,
                                    ISO3,
@@ -142,89 +137,65 @@ data4 <- No_report_SVYs[, list(X=1:nrow(No_report_SVYs),
                                    se.ITN.hh=average.number.ofCITNs.per.household*0.01,
                                    avg.LLIN.hh=average.number.of.LLINs.per.household,
                                    se.LLIN.hh=average.number.of.LLINs.per.household*0.01)]
-data4[data4==0]<-1e-12
+no_report_estimates[no_report_estimates==0]<-1e-12
 
-### combine and process all surveys #####----------------------------------------------------------------------------------------------------------------------------------
+### combine and process all surveys and NMCP/manufacturer data #####----------------------------------------------------------------------------------------------------------------------------------
 
 col_names<-c('X','names','Country','ISO3','date','avg.hh.size','se.hh.size','avg.ITN.hh','se.ITN.hh','avg.LLIN.hh','se.LLIN.hh')
 
 data <- data[, col_names, with=F]
-data <- rbind(data,data3T,data4)
+data <- rbind(data,mics3_estimates,no_report_estimates)
 data <- data[order(data[,'date']),]
 
-MANUFACTURER<- unlist(MANUFACTURER[ISO3==this_country, as.character(2000:max_time), with=F]) # I think?
 
-NMCP_itn<-NMCP[ISO3==this_country]$ITN # why not include year?
-NMCP_total<-NMCP[ISO3==this_country]$TOT
-NMCP_llin<-NMCP[ISO3==this_country]$LLIN
-
-# Format populations at risk (todo: obviously make more efficient)
-PAR <- mean(PAR[iso_3_code==this_country]$proportion_at_risk_of_pf) # is this used?
-
-POP <- POP[iso_3_code==this_country]$total_population
-names(POP)<-2000:max_time
+### TODO: up to this point, there is no country subsetting, so all of the above can just happen once in a separate script#####----------------------------------------------------------------------------------------------------------------------------------
 
 # subset the survey data
-SURVEY <- data[ISO3 %in% this_country,]
+this_survey_data <- data[ISO3 %in% this_country,]
+
+this_manufacturer_data<- unlist(manufacturer_data[ISO3==this_country, as.character(min_year:max_year), with=F])
+
+nmcp_itn<-nmcp_data[ISO3==this_country]$ITN # why not include year?
+nmcp_total<-nmcp_data[ISO3==this_country]$TOT
+nmcp_llin<-nmcp_data[ISO3==this_country]$LLIN
+
+# Format populations at risk (todo: make population consistent)
+PAR <- mean(population_v1[iso_3_code==this_country]$proportion_at_risk_of_pf) # is this used?
+POP <- population_v2[iso_3_code==this_country]$total_population
+names(POP)<-min_year:max_year
+
 
 # create blank dataframe if country has no surveys (why 2005? what are all of these other variables? what is happening?)
-if(nrow(SURVEY)==0){
+if(nrow(this_survey_data)==0){
   
-  dat <- list(MANUFACTURER = MANUFACTURER,
-                  NMCP_llin = NMCP_llin,
-                  NMCP_itn = NMCP_itn,
-                  NMCP_total = NMCP_total,
-                  years = 2000:max_time,
-                  endyears = 2001:(max_time+1),
-                  midyears = seq(2000.5,(max_time+0.5),1),
-                  year_count = length(NMCP_llin),
-                  survey_count = 1)
-  
-  SVY <- list(svyDate = 2005,
-                  s1 = 1,
-                  s2 = 0,
-                  mTot_llin = NA,
+  SVY <- list(    mTot_llin = NA,
                   sTot_llin = NA,
                   mTot_itn = NA,
                   sTot_itn = NA,
-                  index = 35,
                   quarter_start_indices = 1,
                   quarter_end_indices = 0,
                   quarter_prop_completed = 1,
                   quarter_prop_remaining = 0,
-                  NMCP_llin = NMCP_llin,
-                  NMCP_itn = NMCP_itn,
-                  NMCP_total = NMCP_total,
-                  MANUFACTURER = MANUFACTURER,
-                  POP = POP,
-                  midyear = seq(2000.5,(max_time+0.5),1),
-                  year_count = length(NMCP_llin),
-                  survey_count = 1
+                  manufacturer_data = this_manufacturer_data,
+                  year_count = length(nmcp_llin),
+                  survey_count = 1,
+                  population=POP
                   )
   
 }else { # calculate total nets from surveys 
   
-  SURVEY[SURVEY==0] <- 1e-6 # add small amount of precision
-  SURVEY_DATA <- SURVEY
+  this_survey_data[this_survey_data==0] <- 1e-6 # add small amount of precision
   
-  dat <- list(MANUFACTURER = MANUFACTURER,
-                  NMCP_llin = NMCP_llin,
-                  NMCP_itn = NMCP_itn,
-                  NMCP_total = NMCP_total,
-                  years = 2000:max_time,
-                  endyears = 2001:(max_time+1),
-                  midyears = seq(2000.5,(max_time+0.5),1),
-                  year_count = length(NMCP_llin),
-                  survey_count = nrow(SURVEY_DATA),
-                  population = as.numeric(POP[as.character(floor(SURVEY_DATA$date))]))
+  totnet_calc_list <- list(survey_count = nrow(this_survey_data),
+              population = as.numeric(POP[as.character(floor(this_survey_data$date))]))
   
-  dat <- c(as.list(SURVEY_DATA), dat)
+  totnet_calc_list <- c(as.list(this_survey_data), totnet_calc_list)
   
   # TODO: update these with appropriate populations from surveys
   ########### ADJUSTMENT FOR SURVEYS NOT CONDUCTED NATIONALLY BUT ON A POPULATION AT RISK BASIS
-  if(this_country=='Ethiopia') dat$population=c(68186507,75777180)
-  if(this_country=='Namibia') dat$population[dat$names%in%'Namibia 2009']=1426602
-  if(this_country=='Kenya') dat$population[dat$names%in%'Kenya 2007']=31148650
+  if(this_country=='Ethiopia') totnet_calc_list$population=c(68186507,75777180)
+  if(this_country=='Namibia') totnet_calc_list$population[totnet_calc_list$names%in%'Namibia 2009']=1426602
+  if(this_country=='Kenya') totnet_calc_list$population[totnet_calc_list$names%in%'Kenya 2007']=31148650
   ###############################################################################################
   
   model_string = '
@@ -233,15 +204,15 @@ if(nrow(SURVEY)==0){
 					hh[i]~dnorm(avg.hh.size[i],se.hh.size[i]^-2) I(0,)
 					avgllin[i]~dnorm(avg.LLIN.hh[i],se.LLIN.hh[i]^-2) I(0,)
 					avgitn[i]~dnorm(avg.ITN.hh[i],se.ITN.hh[i]^-2) I(0,)			
-					dTotllin[i]<-(avgllin[i]*population[i]/hh[i]) # add 2 to calibrate zeros		
-					dTotitn[i]<-(avgitn[i]*population[i]/hh[i]) # add 2 to calibrate zeros				
+					dTotllin[i]<-(avgllin[i]*population[i]/hh[i]) 	
+					dTotitn[i]<-(avgitn[i]*population[i]/hh[i])	
 					
 				}
 			}
 		'
   
   jags <- jags.model(textConnection(model_string),
-                     data = dat,
+                     data = totnet_calc_list,
                      n.chains = 1,
                      n.adapt = 50000)
   update(jags,n.iter=50000)
@@ -256,47 +227,46 @@ if(nrow(SURVEY)==0){
   #llins
   if(is.null(dim(jdat[,dTotllin][[1]]))){ #TODO: is this ever true?
     warning("NULL LLIN JDAT DIMENSIONS! EXPLORE.")
-    dat$nTotal_llin<-c((mean(jdat[,dTotllin][[1]])),sd(jdat[,dTotllin][[1]]))
+    nTotal_llin_mean <-mean(jdat[,dTotllin][[1]])
+    nTotal_llin_sd <- sd(jdat[,dTotllin][[1]])
   }else {
-    dat$nTotal_llin <- c(var[dTotllin], varsd[dTotllin])
+    nTotal_llin_mean <- var[dTotllin]
+    nTotal_llin_sd <- varsd[dTotllin]
   }
   
   #itns
   if(is.null(dim(jdat[,dTotitn][[1]]))){
     warning("NULL ITN JDAT DIMENSIONS! EXPLORE.")
-    dat$nTotal_itn <- c((mean(jdat[,dTotitn][[1]])),sd(jdat[,dTotitn][[1]]))
+    nTotal_itn_mean <- mean(jdat[,dTotitn][[1]])
+    nTotal_itn_sd <- sd(jdat[,dTotitn][[1]])
   }else {
-    dat$nTotal_itn <- c(var[dTotitn], varsd[dTotitn])
+    nTotal_itn_mean <- var[dTotitn]
+    nTotal_itn_sd <- varsd[dTotitn]
   }
   
-  sample_times <- seq(2000, max_time+1, 0.25) 
+  sample_times <- seq(min_year, max_year+1, 0.25) 
   
-  SVY <- list(svyDate = dat$date,
-                  s1 = dat$date - floor(dat$date),
-                  s2 = ceiling(dat$date) - dat$date,
-                  mTot_llin = as.numeric(dat$nTotal_llin[1:dat$survey_count]),
-                  sTot_llin = as.numeric(dat$nTotal_llin[(dat$survey_count+1):(dat$survey_count*2)]),
-                  mTot_itn = as.numeric(dat$nTotal_itn[1:dat$survey_count]),
-                  sTot_itn = as.numeric(dat$nTotal_itn[(dat$survey_count+1):(dat$survey_count*2)]),
-                  index = sapply(floor(dat$date), function(year){which(year==dat$years)}), # year index
+  SVY <- list(    mTot_llin = as.numeric(nTotal_llin_mean),
+                  sTot_llin = as.numeric(nTotal_llin_sd),
+                  mTot_itn = as.numeric(nTotal_itn_mean),
+                  sTot_itn = as.numeric(nTotal_itn_sd),
                   # TODO: these are not always identical to the ones in Sam's original code (see Ghana eg)
-                  quarter_start_indices = sapply(floor(dat$date/0.25) * 0.25, function(time){which(time==sample_times)}), # floor yearquarter index
-                  quarter_end_indices = sapply(ceiling(dat$date/0.25) * 0.25, function(time){which(time==sample_times)}), # ceiling yearquarter index
-                  quarter_prop_completed = (dat$date - floor(dat$date/0.25) * 0.25)/0.25, # % of quarter elapsed
-                  quarter_prop_remaining = 1- (dat$date - floor(dat$date/0.25) * 0.25)/0.25, # % of quarter yet to come
-                  NMCP_llin = NMCP_llin, # year count
-                  NMCP_itn = NMCP_itn,
-                  NMCP_total = NMCP_total,
-                  MANUFACTURER = MANUFACTURER,
-                  POP = POP,
-                  midyear = seq(2000.5,(max_time+0.5),1),
-                  year_count = length(NMCP_llin),
-                  survey_count = dat$survey_count,
-                  population = POP, # duplicate -- maybe they had it below st it would be included in the no-survey results. redo this. 
-                  svy_population = dat$population
+                  quarter_start_indices = sapply(floor(totnet_calc_list$date/0.25) * 0.25, function(time){which(time==sample_times)}), # floor yearquarter index
+                  quarter_end_indices = sapply(ceiling(totnet_calc_list$date/0.25) * 0.25, function(time){which(time==sample_times)}), # ceiling yearquarter index
+                  quarter_prop_completed = (totnet_calc_list$date - floor(totnet_calc_list$date/0.25) * 0.25)/0.25, # % of quarter elapsed
+                  quarter_prop_remaining = 1- (totnet_calc_list$date - floor(totnet_calc_list$date/0.25) * 0.25)/0.25, # % of quarter yet to come
+                  manufacturer_data = this_manufacturer_data,
+                  year_count = length(nmcp_llin),
+                  survey_count = totnet_calc_list$survey_count,
+                  population = POP # duplicate -- maybe they had it below st it would be included in the no-survey results. redo this. 
               )
   
 }
+
+# TODO: again, make population less twisted.
+SVY$year_population<-unique(SVY$population) # this is like the fourth population. why.
+# expand population by quarter, append one more to the end
+SVY$population <- c( rep(SVY$year_population, each=4), SVY$year_population[length(SVY$year_population)] ) 
 
 
 ### process priors #####----------------------------------------------------------------------------------------------------------------------------------
@@ -311,14 +281,11 @@ setnames(trace1_priors, names(trace1_priors), gsub("chain\\:1\\.", "prop1_", nam
 trace0_priors <- trace0[, c(paste0("chain:1.", c("b1", "b2", "b3", "p1", "p2", "i1")))]
 setnames(trace0_priors, names(trace0_priors), gsub("chain\\:1\\.", "prop0_", names(trace0_priors)) ) 
 
-SVY <- c(SVY, as.list(trace1_priors, as.list(trace0_priors)))
+SVY <- c(SVY, as.list(trace1_priors), as.list(trace0_priors))
 
-### prep (MV??) for jags run #####----------------------------------------------------------------------------------------------------------------------------------
+### prep moving average for jags run #####----------------------------------------------------------------------------------------------------------------------------------
 
-# ah, this looks like years to capture for a five-year moving average
-# ncol: # of years
-# worried that nrow is hard-coded-- think it should alwyas be ncol-4 such that the moving average doesn't extend beyond 
-# years for which we have data
+# binary matrix showing which years to average
 ncol <- SVY$year_count
 rows <- lapply(1:(ncol-4), function(row_idx){
   c( rep(0, row_idx-1),
@@ -327,39 +294,44 @@ rows <- lapply(1:(ncol-4), function(row_idx){
   )
 })
 movingavg_indicators <- do.call(rbind, rows)
-
-# scale to one in each column
-moving_avg_weights <- prop.table(movingavg_indicators, 2)
+moving_avg_weights <- prop.table(movingavg_indicators, 2) # scale to one in each column
 
 # add to svy list
-SVY$moving_avg_weights <- (moving_avg_weights)
+SVY$moving_avg_weight_matrix <- (moving_avg_weights)
 SVY$nrow_moving_avg <- nrow(moving_avg_weights)
-SVY$year_population<-unique(SVY$population) # this is like the fourth population. why.
 
-# expand population by quarter, append one more to the end
-SVY$population <- c( rep(SVY$year_population, each=4), SVY$year_population[length(SVY$year_population)] ) 
-
-### Scale NMCP  #####----------------------------------------------------------------------------------------------------------------------------------
+### Scale NMCP to nets per person, save summary stats  #####----------------------------------------------------------------------------------------------------------------------------------
 
 # scale NMCP to nets per person
-SVY$NMCP_llin <- SVY$NMCP_llin/SVY$year_population
+nmcp_llin_pp <- nmcp_llin/SVY$year_population
 
 # set llins to zero in early years for which manufacturers didn't report any nets 
-SVY$NMCP_llin[SVY$MANUFACTURER==0] <- 0
+nmcp_llin_pp[this_manufacturer_data==0] <- 0
 
 # todo: remove or fix this
 # a hack if all NMCP itns are NAs - for example for chad.
-if(sum(is.na(SVY$NMCP_itn))==SVY$year_count){
+if(sum(is.na(nmcp_itn))==SVY$year_count){
   print("SETTING ITNS TO ZERO IN LATER YEARS: WHY???")
-  SVY$NMCP_itn[14:17]=0
+  nmcp_itn[14:17]=0
 }
 
 # I removed dropna values from this that feel like they could result in year mismatches
-SVY$NMCP_itn <- SVY$NMCP_itn/SVY$year_population
-SVY$NMCP_total <- SVY$NMCP_total/SVY$year_population
+nmcp_itn_pp <- nmcp_itn/SVY$year_population
+nmcp_total_pp <- nmcp_total/SVY$year_population
 
-### Store population at risk, set limits (??)  #####----------------------------------------------------------------------------------------------------------------------------------
+# TODO: ask sam what this is
+##### gp NMCP module - this replaces the previous continent wide stuff
+llin_year_indices=1:length(nmcp_llin_pp)
+itn_year_indices=1:length(nmcp_itn_pp)
 
+SVY$nmcp_llin_pp <- nmcp_llin_pp[!is.na(nmcp_llin_pp)] # non-null llins
+SVY$llin_year_indices <- llin_year_indices[!is.na(nmcp_llin_pp)] # index of non-null llins
+SVY$nmcp_itn_pp <- nmcp_itn_pp[!is.na(nmcp_itn_pp)] # non-null itns
+SVY$itn_year_indices <- itn_year_indices[!is.na(nmcp_itn_pp)] # index of non-null itns
+SVY$llin_year_count <- sum(!is.na(nmcp_llin_pp)) # non-null year count for llins
+SVY$itn_year_count <- sum(!is.na(nmcp_itn_pp)) # non-null year count for itns
+
+### Store population at risk, and IRS parameters. TODO: update IRS, find PAR for surveys more rigorously  #####----------------------------------------------------------------------------------------------------------------------------------
 # store population at risk parameter 
 SVY$PAR<-PAR
 
@@ -370,22 +342,9 @@ if(this_country=='Mozambique'){ SVY$IRS=(1-0.1)
 }else if(this_country=='Eritrea'){ SVY$IRS=(1-0.1)
 }else{ SVY$IRS=1}
 
-# TODO: ask sam what this is
-##### gp NMCP module - this replaces the previous continent wide stuff
-y1<-SVY$NMCP_llin
-llin_year_indices=1:length(SVY$NMCP_llin)
-y2<-SVY$NMCP_itn
-itn_year_indices=1:length(SVY$NMCP_itn)
 
-SVY$y1=y1[!is.na(y1)] # non-null llins
-SVY$llin_year_indices=llin_year_indices[!is.na(y1)] # index of non-null llins
-SVY$y2=y2[!is.na(y2)] # non-null itns
-SVY$itn_year_indices=itn_year_indices[!is.na(y2)] # index of non-null itns
-SVY$llin_year_count=sum(!is.na(y1)) # non-null year count for llins
-SVY$itn_year_count=sum(!is.na(y2)) # non-null year count for itns
+### Find 3-sigma bounds on mean net parameter values   #####----------------------------------------------------------------------------------------------------------------------------------
 
-
-# this allows a 3 sigma variation from the mean for the survey fitting
 SVY$llinlimL<- SVY$mTot_llin - 3*SVY$sTot_llin
 SVY$llinlimL[SVY$llinlimL<0]=0
 
@@ -401,38 +360,29 @@ SVY$itnlimH[SVY$itnlimH<0]=0
 
 ### BIG model string to disentangle  #####----------------------------------------------------------------------------------------------------------------------------------
 
-# TODO: trim SVY down to only those objects used in model
+test_snippet <- function(string, test_data){
+  n.adapt=10000
+  update=1000000
+  n.iter=50000
+  thin=100
+  
+  jags<-c()
+  jags <- jags.model(file=textConnection(string),
+                     data = test_data,
+                     n.chains = 1,
+                     n.adapt=n.adapt)
+}
 
-# RENAMING:
-# Q: quarter_count
-# n: year_count
-# MV: moving_avg_weights
-# nrow_mv: nrow_moving_avg
-# z: llin_year_count
-# x1: llin_year_indices
-# z2: itn_year_count
-# x2: itn_year_indices
-# n2: survey_count
-# index2a: quarter_start_indices
-# index2b: quarter_end_indices
-# sa: quarter_prop_completed
-# sb: quarter_prop_remaining
 
 data_string <- "data{
 						quarter_count <- (year_count*4+1)	# modeling a quarter per year, plus one more
-						moving_avg_weights <- moving_avg_weights  # weights for the rolling average
+						moving_avg_weights <- moving_avg_weight_matrix  # weights for the rolling average
 				}"
 model_preface <- "model {"
 model_suffix <- "}"
 
-# large standard deviation before 2003, small one after
-# This seems to never be used, comment out. 
-# net_prior <- "for(year_idx in 1:year_count){
-# 						std_N[year_idx] <- ifelse(year_idx<=4, 2, 0.2)  # standard deviation for manufacturer TWEAK
-# 					}"
-
 # NMCP GP priors-- replace equations 14 and 15? 
-# TODO: I'm almost positive this should be pulling from y1 (the actual nets/capita) rather than llin_year_indices
+# TODO: I'm almost positive this should be pulling from nmcp_llin_pp (the actual nets/capita) rather than llin_year_indices
 llin_prior <- "for (llin_year_row in 1:llin_year_count) {
 						for (llin_year_column in 1:llin_year_count) {
 							Sigma1[llin_year_row, llin_year_column] <-  exp(-( (llin_year_indices[llin_year_row] - llin_year_indices[llin_year_column]) / rho_sq1)^2) + ifelse(llin_year_row==llin_year_column, tau1, 0) 
@@ -442,7 +392,7 @@ llin_prior <- "for (llin_year_row in 1:llin_year_count) {
 	    			tau1 ~ dunif(0,0.1)
 
 					  for (llin_year_idx in 1:llin_year_count) {
-						 mu1[llin_year_idx]=0
+						 mu1[llin_year_idx] <- 0
 					  }
 					  y1~ dmnorm(mu1,Sigma1) 
 	  
@@ -453,6 +403,7 @@ llin_prior <- "for (llin_year_row in 1:llin_year_count) {
 					  }			  
 						p1 <- Sigma_pred1%*%inverse(Sigma1)%*%y1" # what does this do?
 
+# test_snippet(paste(data_string, model_preface, llin_prior, model_suffix), test_data = SVY)
 
 itn_prior <- "for (itn_year_row in 1:itn_year_count) {
 						for (itn_year_column in 1:itn_year_count) {
@@ -463,7 +414,7 @@ itn_prior <- "for (itn_year_row in 1:itn_year_count) {
   					  tau2 ~ dunif(0,0.1)
 	  
 					  for (itn_year_idx in 1:itn_year_count) {
-						 mu2[itn_year_idx]=0
+						 mu2[itn_year_idx] <- 0
 					  }
 					  y2~ dmnorm(mu2,Sigma2) 
 	  
@@ -474,12 +425,15 @@ itn_prior <- "for (itn_year_row in 1:itn_year_count) {
 					  }			  
 					p2 <- Sigma_pred2%*%inverse(Sigma2)%*%y2"
 
+# test_snippet(paste(data_string, model_preface, itn_prior, model_suffix), test_data = SVY)
+
+
 # see equations 5, and 17-22 of supplement
 manu_nmcp_init <- " #initialise manufacturer and NMCP
 					for(year_idx in 1:year_count){
 						# manufacturer takes actual value
 						s_m[year_idx] ~ dunif(0, 0.075) 	 # error in llin manufacturer	
-						mu[year_idx]~dnorm(MANUFACTURER[year_idx],((MANUFACTURER[year_idx]+1e-12)*s_m[year_idx])^-2) I(0,)
+						mu[year_idx]~dnorm(manufacturer_data[year_idx],((manufacturer_data[year_idx]+1e-12)*s_m[year_idx])^-2) T(0,)
 						s_d[year_idx] ~ dunif(0, 0.01) 	 # error in llin NMCP				
 						s_d2[year_idx] ~ dunif(0, 0.01) 	 # error in ITN NMCP		
 
@@ -771,6 +725,8 @@ jags <- jags.model(file=textConnection(full_model_string),
                    data = SVY,
                    n.chains = 1,
                    n.adapt=n.adapt)
+
+
 update(jags,n.iter=update)
 
 
@@ -888,7 +844,7 @@ for(i in 1:18){
   half_lifes[i]<-(t[which.min(abs(sig-0.5))])
 }
 
-hl=cbind(2000:2017,half_lifes,SVY$NMCP_llin)
+hl=cbind(2000:2017,half_lifes,SVY$nmcp_llin)
 
 
 # then: plotting, saving

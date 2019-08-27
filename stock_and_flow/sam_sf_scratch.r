@@ -7,7 +7,7 @@ library(RecordLinkage)
 main_dir <- '/Volumes/GoogleDrive/My Drive/stock_and_flow/data_from_sam/'
 
 max_time=2017 ### set final time point
-Countryout<-as.character(argv[1]) # aha, script gets run once per country
+Countryout<-"SSD" # aha, script gets run once per country
 nr=40 # number of... year-quarters? Or sample size for dpoisson? never used
 nc=10 # max hh size? or max net count? never used
 Country<-Countryout
