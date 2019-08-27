@@ -431,7 +431,7 @@ itn_prior <- "for (itn_year_row in 1:itn_year_count) {
 # see equations 5, and 17-22 of supplement
 manu_nmcp_init <- " #initialise manufacturer and NMCP
 					for(year_idx in 1:year_count){
-						# manufacturer takes actual value
+						
 						s_m[year_idx] ~ dunif(0, 0.075) 	 # error in llin manufacturer	
 						mu[year_idx]~dnorm(manufacturer_data[year_idx],((manufacturer_data[year_idx]+1e-12)*s_m[year_idx])^-2) T(0,)
 						s_d[year_idx] ~ dunif(0, 0.01) 	 # error in llin NMCP				
@@ -460,8 +460,11 @@ manu_nmcp_init <- " #initialise manufacturer and NMCP
 						Psi[year_idx] <- able[year_idx]-delta_l[year_idx]	
 					}"
 
-# loss functions-- see section 3.2.2.3
-llin_main <- "for(i in 1:4){ # change according to size of moving_avg_weights
+# test_snippet(paste(data_string, model_preface, llin_prior, itn_prior, manu_nmcp_init, model_suffix), test_data = SVY)
+
+# try my own
+llin_testing <- 
+" for(i in 1:4){ # change according to size of moving_avg_weights
 						k[1,i]~dunif(16,18) 
 						L[1,i]~dunif(1,20.7)		
 
@@ -471,6 +474,43 @@ llin_main <- "for(i in 1:4){ # change according to size of moving_avg_weights
 						k[1,i]~dunif(16,18) 
 						L[1,i]~dunif(4,20.7)
 					}
+					
+mv_k <- k%*%moving_avg_weights		
+mv_L <- L%*%moving_avg_weights
+
+for(j in 1:year_count){
+  
+  g.m[j,1] ~ dunif(0,1)
+  g.m[j,2] ~ dunif(0,1)
+  g.m[j,3] ~ dunif(0,1)
+  g.m[j,4] ~ dunif(0,1)
+  
+  g.m[j,5] <- sum(g.m[j,1:4])
+  g.m[j,6] <- g.m[j,1]/g.m[j,5]
+  g.m[j,7] <- g.m[j,2]/g.m[j,5]
+  g.m[j,8] <- g.m[j,3]/g.m[j,5]
+  g.m[j,9] <- g.m[j,4]/g.m[j,5]
+  
+  xx1[1,j] <- (-0.25)
+  
+  for(i in 1:quarter_count){
+    ind1[i,j]<-ifelse(((i-1)/4)<(j-1+0.25),0,1)
+    ind_delta1[i,j]<-ifelse(((i-1)/4)==(j-1+0.25),1,0)
+    xx1[i+1,j]<-ifelse(ind1[i,j]==1,xx1[i,j]+0.25,xx1[i,j]+0)
+    nets1[i,j]<-ifelse(xx1[i+1,j]>=mv_L[j],0,ind1[i,j]*(delta_l[j]*g.m[j,6])*exp(mv_k[j]-mv_k[j]/(1-(xx1[i+1,j]/mv_L[j])^2)))
+  }
+  
+}"
+
+# test_snippet(paste(data_string, model_preface, llin_prior, itn_prior, manu_nmcp_init, llin_testing, model_suffix), test_data = SVY)
+
+# loss functions-- see section 3.2.2.3
+llin_main <- "for(i in 1:nrow_moving_avg){ 
+						k[1,i]~dunif(16,18) 
+						L[1,i]~dunif(4,20.7)	# changed this back from either (1, 20.7) or (3, 20.7) to avoid an error
+
+					}
+										
 					mv_k <- k%*%moving_avg_weights		
 					mv_L <- L%*%moving_avg_weights
 
@@ -522,24 +562,38 @@ llin_main <- "for(i in 1:4){ # change according to size of moving_avg_weights
 						}
 					}"
 
-# testing 
-year_count <- 4
+# test_snippet(paste(data_string, model_preface, llin_prior, itn_prior, manu_nmcp_init, llin_main, model_suffix), test_data = SVY)
+
+# testing to find bug
+year_count <- SVY$year_count
 quarter_count <- year_count*4+1
+moving_avg_weights <- SVY$moving_avg_weight_matrix
+delta_l <- SVY$nmcp_llin_pp * SVY$year_population # number of nets distributed
+delta_l[1:4] <- c(25, 342, 560, 90) # make nonzero to make calculations clearer
+
+k <- runif(SVY$nrow_moving_avg, 16, 18)
+L <- c(runif(4, 1, 20.7), runif(SVY$nrow_moving_avg-4, 4, 20.7))
+mv_k <- k%*%moving_avg_weights		
+mv_L <- L%*%moving_avg_weights
+
+xx1 <- matrix(rep(NA, year_count*(quarter_count+1)), ncol=year_count)
 ind1 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
 ind_delta1 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
-xx1 <- matrix(rep(NA, year_count*(quarter_count+1)), ncol=year_count)
-xx1[1,1:4] <- -0.25
+nets1 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
+
+g.m <- matrix(runif(year_count*4), ncol=4)
+g.m.scaled <- prop.table(g.m, 1)
+g.m <- cbind(g.m, rowSums(g.m), g.m.scaled)
+
 for (j in 1:year_count){
+  xx1[1,j]<-(-0.25)
   for (i in 1:quarter_count){
     ind1[i,j]<-ifelse(((i-1)/4)<(j-1+0.25),0,1)
     ind_delta1[i,j]<-ifelse(((i-1)/4)==(j-1+0.25),1,0) # counter to set zero if not the right time
     xx1[i+1,j]<-ifelse(ind1[i,j]==1,xx1[i,j]+0.25,xx1[i,j]+0) # counts the loss function
+    nets1[i,j]<-ifelse(xx1[i+1,j]>=mv_L[j],0,ind1[i,j]*(delta_l[j]*g.m[j,6])*exp(mv_k[j]-mv_k[j]/(1-(xx1[i+1,j]/mv_L[j])^2)))
   }
 }
-
-
-
-
 
 
 itn_main <- "	for(i in 1:nrow_moving_avg){
@@ -597,8 +651,8 @@ itn_main <- "	for(i in 1:nrow_moving_avg){
 						}
 					}	"
 
+ #test_snippet(paste(data_string, model_preface, llin_prior, itn_prior, manu_nmcp_init, itn_main, model_suffix), test_data = SVY) # this one runs without changing the priors on L, huh
 
-# ??
 accounting <- "for(i in 1:quarter_count){
 				ThetaT[i]<-sum(ThetaM[i,1:year_count])
 				ThetaT2[i]<-sum(ThetaM2[i,1:year_count])
@@ -720,12 +774,18 @@ update=1000000
 n.iter=50000
 thin=100
 
+# temp for testing
+n.adapt=1000
+update=10000
+n.iter=500
+thin=10
+
+
 jags<-c()
 jags <- jags.model(file=textConnection(full_model_string),
                    data = SVY,
                    n.chains = 1,
                    n.adapt=n.adapt)
-
 
 update(jags,n.iter=update)
 
@@ -836,6 +896,12 @@ Thetaic=grep("ThetaT\\[",rownames(ic))
 Theta2ic=grep("ThetaT2\\[",rownames(ic))
 itnDic=grep("itnD\\[",rownames(ic))
 llinDic=grep("llinD\\[",rownames(ic))
+
+sigmoid<-function(t,k,L){
+  v<-exp(k-k/(1-(t/L)^2))
+  v[t>L]<-0
+  return(v)	
+}
 
 half_lifes<-c()
 for(i in 1:18){
