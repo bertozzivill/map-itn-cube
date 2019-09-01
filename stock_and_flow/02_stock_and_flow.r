@@ -301,7 +301,7 @@ moving_avg_weights <- prop.table(movingavg_indicators, 2) # scale to one in each
 # add to svy list
 SVY$moving_avg_weights <- moving_avg_weights
 SVY$nrow_moving_avg <- nrow(moving_avg_weights)
-SVY$quarter_count <- SVY$year_count*4 + 1 # TODO: why add 1? think it's to initialize, but don't think it's necessary 
+SVY$quarter_count <- SVY$year_count*4 
 
 ### Scale NMCP to nets per person, save summary stats  #####----------------------------------------------------------------------------------------------------------------------------------
 
@@ -322,8 +322,7 @@ if(sum(is.na(nmcp_citn))==SVY$year_count){
 nmcp_citn_pp <- nmcp_citn/SVY$year_population
 nmcp_total_pp <- nmcp_total/SVY$year_population
 
-# TODO: ask sam what this is
-##### gp NMCP module - this replaces the previous continent wide stuff
+##### prep for GP priors for NMCP module
 llin_year_indices=1:length(nmcp_llin_pp)
 citn_year_indices=1:length(nmcp_citn_pp)
 
@@ -360,6 +359,16 @@ SVY$citnlimL[SVY$citnlimL<0]=0
 SVY$citnlimH<- SVY$mTot_citn + 3*SVY$sTot_citn
 SVY$citnlimH[SVY$citnlimH<0]=0
 
+### create "counter" matrix that marks time since net distribution for each quarter   #####----------------------------------------------------------------------------------------------------------------------------------
+
+quarter_count <- SVY$quarter_count
+time_since_distribution <- matrix(rep(NA, quarter_count^2), ncol=quarter_count)
+for (i in 1:quarter_count){
+  for (j in 1:quarter_count){
+    time_since_distribution[i,j] <- ifelse(j>i, -9, ifelse(j==i, 0, time_since_distribution[i-1, j]+0.25)) 
+  }
+}
+SVY$time_since_distribution <- time_since_distribution
 
 ### BIG model string to disentangle  #####----------------------------------------------------------------------------------------------------------------------------------
 
@@ -503,45 +512,41 @@ manu_nmcp_init <- "
 
 # try my own
 llin_testing <- 
-" for(i in 1:4){ # change according to size of moving_avg_weights
+" for(i in 1:nrow_moving_avg){ 
 						k[1,i]~dunif(16,18) 
-						L[1,i]~dunif(1,20.7)		
+						L[1,i]~dunif(4,20.7)	# changed this back from either (1, 20.7) or (3, 20.7) to avoid an error
 
 					}
-										
-					for(i in 5:nrow_moving_avg){ # change according to size of moving_avg_weights
-						k[1,i]~dunif(16,18) 
-						L[1,i]~dunif(4,20.7)
-					}
 					
+# vectors of length year_count
 mv_k <- k%*%moving_avg_weights		
 mv_L <- L%*%moving_avg_weights
 
 for(j in 1:year_count){
   
-  quarter_fractions_llin[j,1] ~ dunif(0,1)
-  quarter_fractions_llin[j,2] ~ dunif(0,1)
-  quarter_fractions_llin[j,3] ~ dunif(0,1)
-  quarter_fractions_llin[j,4] ~ dunif(0,1)
+  quarter_draws_llin[j,1] ~ dunif(0,1)
+  quarter_draws_llin[j,2] ~ dunif(0,1)
+  quarter_draws_llin[j,3] ~ dunif(0,1)
+  quarter_draws_llin[j,4] ~ dunif(0,1)
+  quarter_draws_llin[j,5] <- sum(quarter_draws_llin[j,1:4])
   
-  quarter_fractions_llin[j,5] <- sum(quarter_fractions_llin[j,1:4])
-  quarter_fractions_llin[j,6] <- quarter_fractions_llin[j,1]/quarter_fractions_llin[j,5]
-  quarter_fractions_llin[j,7] <- quarter_fractions_llin[j,2]/quarter_fractions_llin[j,5]
-  quarter_fractions_llin[j,8] <- quarter_fractions_llin[j,3]/quarter_fractions_llin[j,5]
-  quarter_fractions_llin[j,9] <- quarter_fractions_llin[j,4]/quarter_fractions_llin[j,5]
-  
-  xx1[1,j] <- (-0.25)
-  
-  for(i in 1:quarter_count){
-    ind1[i,j]<-ifelse(((i-1)/4)<(j-1+0.25),0,1)
-    ind_delta1[i,j]<-ifelse(((i-1)/4)==(j-1+0.25),1,0)
-    xx1[i+1,j]<-ifelse(ind1[i,j]==1,xx1[i,j]+0.25,xx1[i,j]+0)
-    nets1[i,j]<-ifelse(xx1[i+1,j]>=mv_L[j],0,ind1[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,6])*exp(mv_k[j]-mv_k[j]/(1-(xx1[i+1,j]/mv_L[j])^2)))
+  quarter_fractions_llin[j,1] <- quarter_draws_llin[j,1]/quarter_draws_llin[j,5]
+  quarter_fractions_llin[j,2] <- quarter_draws_llin[j,2]/quarter_draws_llin[j,5]
+  quarter_fractions_llin[j,3] <- quarter_draws_llin[j,3]/quarter_draws_llin[j,5]
+  quarter_fractions_llin[j,4] <- quarter_draws_llin[j,4]/quarter_draws_llin[j,5]
+}
+
+for (j in 1:quarter_count){
+  llins_distributed[j] <- delta_adjusted[(round(j/4+0.3))] * quarter_fractions_llin[(round(j/4+0.3)), (((j/4)-(round(j/4+0.3)-1))*4) ] # todo: find easier math
+  for (i in 1:quarter_count){
+    net_count_llin[i,j] <- ifelse(j>i, 0, ifelse(time_since_distribution[i,j] >= mv_L[(round(j/4+0.3))], 0, llins_distributed[j] * exp(mv_k[(round(j/4+0.3))]-mv_k[(round(j/4+0.3))]/(1-(time_since_distribution[i,j]/mv_L[(round(j/4+0.3))])^2))))
   }
+}
   
-}"
+"
 
 # test_snippet(paste( model_preface, llin_prior, citn_prior, manu_nmcp_init, llin_testing, model_suffix), test_data = SVY)
+
 
 # loss functions-- see section 3.2.2.3
 llin_main <- "
@@ -614,7 +619,7 @@ llin_main <- "
 
 # testing to find bug
 year_count <- SVY$year_count
-quarter_count <- year_count*4+1
+quarter_count <- year_count*4
 moving_avg_weights <- SVY$moving_avg_weights
 delta_adjusted <- SVY$nmcp_llin_pp * SVY$year_population # number of nets distributed
 delta_adjusted[1:4] <- c(25, 342, 560, 90) # make nonzero to make calculations clearer
@@ -624,6 +629,20 @@ L <- c(runif(4, 1, 20.7), runif(SVY$nrow_moving_avg-4, 4, 20.7))
 mv_k <- k%*%moving_avg_weights		
 mv_L <- L%*%moving_avg_weights
 
+quarter_draws_llin <- matrix(runif(year_count*4), ncol=4)
+quarter_fractions_llin <- prop.table(quarter_draws_llin, 1)
+
+llins_distributed <- matrix(rep(NA, quarter_count), ncol=1)
+net_count_llin <- matrix(rep(NA, quarter_count^2), ncol=quarter_count)
+# todo: replace ceiling with round
+for (j in 1:quarter_count){
+  llins_distributed[j] <- delta_adjusted[(round(j/4+0.3))] * quarter_fractions_llin[(round(j/4+0.3)), (((j/4)-(round(j/4+0.3)-1))*4) ] # todo: find easier math
+  for (i in 1:quarter_count){
+    net_count_llin[i,j] <- ifelse(j>i, 0, ifelse(time_since_distribution[i,j] >= mv_L[(round(j/4+0.3))], 0, llins_distributed[j] * exp(mv_k[(round(j/4+0.3))]-mv_k[(round(j/4+0.3))]/(1-(time_since_distribution[i,j]/mv_L[(round(j/4+0.3))])^2))))
+  }
+}
+
+quarter_count <- year_count*4+1
 xx1 <- matrix(rep(NA, year_count*(quarter_count+1)), ncol=year_count)
 ind1 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
 ind_delta1 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
@@ -634,27 +653,56 @@ ind2 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
 ind_delta2 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
 nets2 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
 
-quarter_fractions_llin <- matrix(runif(year_count*4), ncol=4)
-quarter_fractions_llin.scaled <- prop.table(quarter_fractions_llin, 1)
-quarter_fractions_llin <- cbind(quarter_fractions_llin, rowSums(quarter_fractions_llin), quarter_fractions_llin.scaled)
+xx3 <- matrix(rep(NA, year_count*(quarter_count+1)), ncol=year_count)
+ind3 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
+ind_delta3 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
+nets3 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
+
+xx4 <- matrix(rep(NA, year_count*(quarter_count+1)), ncol=year_count)
+ind4 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
+ind_delta4 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
+nets4 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
+
+delta_store <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
+ThetaM<-matrix(rep(NA, year_count*quarter_count), ncol=year_count)
 
 for (j in 1:year_count){
   xx1[1,j]<-(-0.25)
   xx2[1,j] <-(-0.25)
+  xx3[1,j]<-(-0.25)
+  xx4[1,j] <-(-0.25)
   for (i in 1:quarter_count){
     ind1[i,j]<-ifelse(((i-1)/4)<(j-1+0.25),0,1)
     ind_delta1[i,j]<-ifelse(((i-1)/4)==(j-1+0.25),1,0) # counter to set zero if not the right time
     xx1[i+1,j]<-ifelse(ind1[i,j]==1,xx1[i,j]+0.25,xx1[i,j]+0) # counts the loss function
-    nets1[i,j]<-ifelse(xx1[i+1,j]>=mv_L[j],0,ind1[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,6])*exp(mv_k[j]-mv_k[j]/(1-(xx1[i+1,j]/mv_L[j])^2)))
+    nets1[i,j]<-ifelse(xx1[i+1,j]>=mv_L[j],0,ind1[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,1])*exp(mv_k[j]-mv_k[j]/(1-(xx1[i+1,j]/mv_L[j])^2)))
     
     ind2[i,j]<-ifelse(((i-1)/4)<(j-1+0.5),0,1)
     ind_delta2[i,j]<-ifelse(((i-1)/4)==(j-1+0.5),1,0)
     xx2[i+1,j]<-ifelse(ind2[i,j]==1,xx2[i,j]+0.25,xx2[i,j]+0)
-    nets2[i,j]<-ifelse(xx2[i+1,j]>=mv_L[j],0,ind2[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,7])*exp(mv_k[j]-mv_k[j]/(1-(xx2[i+1,j]/mv_L[j])^2)))
+    nets2[i,j]<-ifelse(xx2[i+1,j]>=mv_L[j],0,ind2[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,2])*exp(mv_k[j]-mv_k[j]/(1-(xx2[i+1,j]/mv_L[j])^2)))
+    
+    ind3[i,j]<-ifelse(((i-1)/4)<(j-1+0.75),0,1) # counter to set zero if not the right time
+    ind_delta3[i,j]<-ifelse(((i-1)/4)==(j-1+0.75),1,0) # counter to set zero if not the right time
+    xx3[i+1,j]<-ifelse(ind3[i,j]==1,xx3[i,j]+0.25,xx3[i,j]+0) # counts the loss function
+    nets3[i,j]<-ifelse(xx3[i+1,j]>=mv_L[j],0,ind3[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,3])*exp(mv_k[j]-mv_k[j]/(1-(xx3[i+1,j]/mv_L[j])^2))) #multiplies the loss function
+    
+    ind4[i,j]<-ifelse(((i-1)/4)<(j-1+1),0,1) # counter to set zero if not the right time
+    ind_delta4[i,j]<-ifelse(((i-1)/4)==(j-1+1),1,0) # counter to set zero if not the right time
+    xx4[i+1,j]<-ifelse(ind4[i,j]==1,xx4[i,j]+0.25,xx4[i,j]+0) # counts the loss function
+    nets4[i,j]<-ifelse(xx4[i+1,j]>=mv_L[j],0,ind4[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,4])*exp(mv_k[j]-mv_k[j]/(1-(xx4[i+1,j]/mv_L[j])^2))) #multiplies the loss function
+    
+    delta_store[i,j]<-ind_delta1[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,1]) + ind_delta2[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,2]) + ind_delta3[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,3]) + ind_delta4[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,4])
+    
+    ThetaM[i,j]<-nets1[i,j]+nets2[i,j]+nets3[i,j]+nets4[i,j] # starts discounting
     
   }
 }
 
+# show that the new version produces the same result as the old
+totals_old <- rowSums(ThetaM)
+totals_new <- rowSums(net_count_llin)
+totals_old[2:73]-totals_new
 
 itn_main <- "	for(i in 1:nrow_moving_avg){
 						k2[1,i]~dunif(16,18) 
