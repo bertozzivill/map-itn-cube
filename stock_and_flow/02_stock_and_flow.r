@@ -155,7 +155,7 @@ this_survey_data <- data[ISO3 %in% this_country,]
 
 this_manufacturer_data<- unlist(manufacturer_data[ISO3==this_country, as.character(min_year:max_year), with=F])
 
-nmcp_itn<-nmcp_data[ISO3==this_country]$ITN # why not include year?
+nmcp_citn<-nmcp_data[ISO3==this_country]$ITN # why not include year?
 nmcp_total<-nmcp_data[ISO3==this_country]$TOT
 nmcp_llin<-nmcp_data[ISO3==this_country]$LLIN
 
@@ -170,8 +170,8 @@ if(nrow(this_survey_data)==0){
   
   SVY <- list(    mTot_llin = NA,
                   sTot_llin = NA,
-                  mTot_itn = NA,
-                  sTot_itn = NA,
+                  mTot_citn = NA,
+                  sTot_citn = NA,
                   quarter_start_indices = 1,
                   quarter_end_indices = 0,
                   quarter_prop_completed = 1,
@@ -246,10 +246,12 @@ if(nrow(this_survey_data)==0){
   
   sample_times <- seq(min_year, max_year+1, 0.25) 
   
+  # TODO: change "itn" to "citn" everywhere above here
+  
   SVY <- list(    mTot_llin = as.numeric(nTotal_llin_mean),
                   sTot_llin = as.numeric(nTotal_llin_sd),
-                  mTot_itn = as.numeric(nTotal_itn_mean),
-                  sTot_itn = as.numeric(nTotal_itn_sd),
+                  mTot_citn = as.numeric(nTotal_itn_mean),
+                  sTot_citn = as.numeric(nTotal_itn_sd),
                   # TODO: these are not always identical to the ones in Sam's original code (see Ghana eg)
                   quarter_start_indices = sapply(floor(totnet_calc_list$date/0.25) * 0.25, function(time){which(time==sample_times)}), # floor yearquarter index
                   quarter_end_indices = sapply(ceiling(totnet_calc_list$date/0.25) * 0.25, function(time){which(time==sample_times)}), # ceiling yearquarter index
@@ -297,8 +299,9 @@ movingavg_indicators <- do.call(rbind, rows)
 moving_avg_weights <- prop.table(movingavg_indicators, 2) # scale to one in each column
 
 # add to svy list
-SVY$moving_avg_weight_matrix <- (moving_avg_weights)
+SVY$moving_avg_weights <- moving_avg_weights
 SVY$nrow_moving_avg <- nrow(moving_avg_weights)
+SVY$quarter_count <- SVY$year_count*4 + 1 # TODO: why add 1? think it's to initialize, but don't think it's necessary 
 
 ### Scale NMCP to nets per person, save summary stats  #####----------------------------------------------------------------------------------------------------------------------------------
 
@@ -310,26 +313,26 @@ nmcp_llin_pp[this_manufacturer_data==0] <- 0
 
 # todo: remove or fix this
 # a hack if all NMCP itns are NAs - for example for chad.
-if(sum(is.na(nmcp_itn))==SVY$year_count){
-  print("SETTING ITNS TO ZERO IN LATER YEARS: WHY???")
-  nmcp_itn[14:17]=0
+if(sum(is.na(nmcp_citn))==SVY$year_count){
+  print("SETTING cITNS TO ZERO IN LATER YEARS: WHY???")
+  nmcp_citn[14:17]=0
 }
 
 # I removed dropna values from this that feel like they could result in year mismatches
-nmcp_itn_pp <- nmcp_itn/SVY$year_population
+nmcp_citn_pp <- nmcp_citn/SVY$year_population
 nmcp_total_pp <- nmcp_total/SVY$year_population
 
 # TODO: ask sam what this is
 ##### gp NMCP module - this replaces the previous continent wide stuff
 llin_year_indices=1:length(nmcp_llin_pp)
-itn_year_indices=1:length(nmcp_itn_pp)
+citn_year_indices=1:length(nmcp_citn_pp)
 
 SVY$nmcp_llin_pp <- nmcp_llin_pp[!is.na(nmcp_llin_pp)] # non-null llins
 SVY$llin_year_indices <- llin_year_indices[!is.na(nmcp_llin_pp)] # index of non-null llins
-SVY$nmcp_itn_pp <- nmcp_itn_pp[!is.na(nmcp_itn_pp)] # non-null itns
-SVY$itn_year_indices <- itn_year_indices[!is.na(nmcp_itn_pp)] # index of non-null itns
+SVY$nmcp_citn_pp <- nmcp_citn_pp[!is.na(nmcp_citn_pp)] # non-null itns
+SVY$citn_year_indices <- citn_year_indices[!is.na(nmcp_citn_pp)] # index of non-null itns
 SVY$llin_year_count <- sum(!is.na(nmcp_llin_pp)) # non-null year count for llins
-SVY$itn_year_count <- sum(!is.na(nmcp_itn_pp)) # non-null year count for itns
+SVY$citn_year_count <- sum(!is.na(nmcp_citn_pp)) # non-null year count for itns
 
 ### Store population at risk, and IRS parameters. TODO: update IRS, find PAR for surveys more rigorously  #####----------------------------------------------------------------------------------------------------------------------------------
 # store population at risk parameter 
@@ -351,11 +354,11 @@ SVY$llinlimL[SVY$llinlimL<0]=0
 SVY$llinlimH<- SVY$mTot_llin + 3*SVY$sTot_llin
 SVY$llinlimH[SVY$llinlimH<0]=0
 
-SVY$itnlimL<- SVY$mTot_itn - 3*SVY$sTot_itn
-SVY$itnlimL[SVY$itnlimL<0]=0
+SVY$citnlimL<- SVY$mTot_citn - 3*SVY$sTot_citn
+SVY$citnlimL[SVY$citnlimL<0]=0
 
-SVY$itnlimH<- SVY$mTot_itn + 3*SVY$sTot_itn
-SVY$itnlimH[SVY$itnlimH<0]=0
+SVY$citnlimH<- SVY$mTot_citn + 3*SVY$sTot_citn
+SVY$citnlimH[SVY$citnlimH<0]=0
 
 
 ### BIG model string to disentangle  #####----------------------------------------------------------------------------------------------------------------------------------
@@ -374,93 +377,129 @@ test_snippet <- function(string, test_data){
 }
 
 
-data_string <- "data{
-						quarter_count <- (year_count*4+1)	# modeling a quarter per year, plus one more
-						moving_avg_weights <- moving_avg_weight_matrix  # weights for the rolling average
-				}"
 model_preface <- "model {"
 model_suffix <- "}"
 
 # NMCP GP priors-- replace equations 14 and 15? 
-# TODO: I'm almost positive this should be pulling from nmcp_llin_pp (the actual nets/capita) rather than llin_year_indices
-llin_prior <- "for (llin_year_row in 1:llin_year_count) {
+
+llin_prior <- "
+            rho_sq_llin ~ dunif(0,1) # restricted to prevent over-smoothing
+	    			tau_llin ~ dunif(0,0.1)
+
+            # specify covariance function for GP (squared exponential?)
+            for (llin_year_row in 1:llin_year_count) {
 						for (llin_year_column in 1:llin_year_count) {
-							Sigma1[llin_year_row, llin_year_column] <-  exp(-( (llin_year_indices[llin_year_row] - llin_year_indices[llin_year_column]) / rho_sq1)^2) + ifelse(llin_year_row==llin_year_column, tau1, 0) 
+							Sigma_gp_llin[llin_year_row, llin_year_column] <-  exp(-( (llin_year_indices[llin_year_row] - llin_year_indices[llin_year_column]) / rho_sq_llin)^2) + ifelse(llin_year_row==llin_year_column, tau_llin, 0) 
 						}
 					  }
-					  rho_sq1 ~ dunif(0,1) # restricted to prevent over smoothing
-	    			tau1 ~ dunif(0,0.1)
-
+					  
+            # set GP means to zero
 					  for (llin_year_idx in 1:llin_year_count) {
-						 mu1[llin_year_idx] <- 0
+						 mu_gp_llin[llin_year_idx] <- 0
 					  }
-					  y1~ dmnorm(mu1,Sigma1) 
+					  
+					  # todo: don't you need to invert before going into dmnorm?
+					  dist_gp_llin~ dmnorm(mu_gp_llin,Sigma_gp_llin) 
 	  
+	          # todo: still don't quite get this
 					  for (year_idx in 1:year_count) {
 						for (llin_year_idx in 1:llin_year_count) {
-							Sigma_pred1[year_idx, llin_year_idx] <-  exp(-((year_idx - llin_year_indices[llin_year_idx])/rho_sq1)^2)
+							Sigma_prediction_llin[year_idx, llin_year_idx] <-  exp(-((year_idx - llin_year_indices[llin_year_idx])/rho_sq_llin)^2)
 						}
 					  }			  
-						p1 <- Sigma_pred1%*%inverse(Sigma1)%*%y1" # what does this do?
+					  
+					  # prior estimate of llins per capita distributed by nmcp
+						gp_prior_llin <- Sigma_prediction_llin%*%inverse(Sigma_gp_llin)%*%dist_gp_llin" # what does this do?
 
-# test_snippet(paste(data_string, model_preface, llin_prior, model_suffix), test_data = SVY)
+# test_snippet(paste(model_preface, llin_prior, model_suffix), test_data = SVY)
 
-itn_prior <- "for (itn_year_row in 1:itn_year_count) {
-						for (itn_year_column in 1:itn_year_count) {
-							Sigma2[itn_year_row, itn_year_column] <-  exp(-((itn_year_indices[itn_year_row] - itn_year_indices[itn_year_column])/rho_sq2)^2)  +ifelse(itn_year_row==itn_year_column,tau2,0) 
+citn_prior <- "
+            rho_sq_citn ~ dunif(0,1)
+  					tau_citn ~ dunif(0,0.1)
+            
+            # specify covariance function for GP (squared exponential?)
+            for (citn_year_row in 1:citn_year_count) {
+						for (citn_year_column in 1:citn_year_count) {
+							Sigma_gp_citn[citn_year_row, citn_year_column] <-  exp(-((citn_year_indices[citn_year_row] - citn_year_indices[citn_year_column])/rho_sq_citn)^2)  +ifelse(citn_year_row==citn_year_column,tau_citn,0) 
 						}
 					  }
-					  rho_sq2 ~ dunif(0,1)
-  					  tau2 ~ dunif(0,0.1)
-	  
-					  for (itn_year_idx in 1:itn_year_count) {
-						 mu2[itn_year_idx] <- 0
+					  
+					  # set GP means to zero
+					  for (citn_year_index in 1:citn_year_count) {
+						 mu_gp_itn[citn_year_index] <- 0
 					  }
-					  y2~ dmnorm(mu2,Sigma2) 
+					  
+					  dist_gp_citn~ dmnorm(mu_gp_itn,Sigma_gp_citn) 
 	  
 					  for (year_idx in 1:year_count) {
-						for (itn_year_idx in 1:itn_year_count) {
-							Sigma_pred2[year_idx, itn_year_idx] <- exp(-((year_idx - itn_year_indices[itn_year_idx])/rho_sq2)^2)
+						for (citn_year_index in 1:citn_year_count) {
+							Sigma_prediction_citn[year_idx, citn_year_index] <- exp(-((year_idx - citn_year_indices[citn_year_index])/rho_sq_citn)^2)
 						}
 					  }			  
-					p2 <- Sigma_pred2%*%inverse(Sigma2)%*%y2"
+					  
+					# prior estimate of itns per capita distributed by nmcp
+					gp_prior_citn <- Sigma_prediction_citn%*%inverse(Sigma_gp_citn)%*%dist_gp_citn"
 
-# test_snippet(paste(data_string, model_preface, itn_prior, model_suffix), test_data = SVY)
+# test_snippet(paste(model_preface, citn_prior, model_suffix), test_data = SVY)
 
 
 # see equations 5, and 17-22 of supplement
-manu_nmcp_init <- " #initialise manufacturer and NMCP
+manu_nmcp_init <- "
 					for(year_idx in 1:year_count){
 						
-						s_m[year_idx] ~ dunif(0, 0.075) 	 # error in llin manufacturer	
-						mu[year_idx]~dnorm(manufacturer_data[year_idx],((manufacturer_data[year_idx]+1e-12)*s_m[year_idx])^-2) T(0,)
-						s_d[year_idx] ~ dunif(0, 0.01) 	 # error in llin NMCP				
-						s_d2[year_idx] ~ dunif(0, 0.01) 	 # error in ITN NMCP		
+						manufacturer_sigma[year_idx] ~ dunif(0, 0.075) 	 # error in llin manufacturer	
+						# mu: # of manufacturer LLINs
+						mu[year_idx] ~ dnorm(manufacturer_data[year_idx], ((manufacturer_data[year_idx]+1e-12)*manufacturer_sigma[year_idx])^-2) T(0,)
+						
+						# TODO: are these ever used?
+						nmcp_sigma_llin[year_idx] ~ dunif(0, 0.01) 	 # error in llin NMCP				
+						nmcp_sigma_citn[year_idx] ~ dunif(0, 0.01) 	 # error in ITN NMCP		
 
-						delta_raw[year_idx]<-ifelse(p1[year_idx]>0,p1[year_idx]*year_population[year_idx],0)
-						delta2_raw[year_idx]<-ifelse(p2[year_idx]>0,p2[year_idx]*year_population[year_idx],0)					
+            # Deltas refer to the *number of NMCP nets delivered in a given year*
+            # start with priors from GP
+						delta_prior_llin[year_idx] <- ifelse(gp_prior_llin[year_idx]>0, gp_prior_llin[year_idx]*year_population[year_idx],0)
+						delta_prior_citn[year_idx] <- ifelse(gp_prior_citn[year_idx]>0, gp_prior_citn[year_idx]*year_population[year_idx],0)					
 										
 					}
 							
-					#initialise with zero stock
-					delta[1] <- ifelse(delta_raw[1]>mu[1],mu[1],delta_raw[1])
-					able[1]<-mu[1]
-					par2[1]~dunif(1,24)
-					extra[1]~dbeta(2,par2[1])
-					delta_l[1]<-delta[1]+((able[1]-delta[1])*extra[1])
-					Psi[1] <- able[1]-delta_l[1]		
+					##### initialise with zero stock
+					# initial distribution count: smaller of manufacturer count or nmcp count
+					delta[1] <- ifelse(delta_prior_llin[1]>mu[1], mu[1], delta_prior_llin[1]) 
+					
+					# initial stock: number of nets from manufacturer 
+					initial_stock[1] <- mu[1] 
+					
+					# add some uncertainty about additional nets distributed
+					par2[1] ~ dunif(1,24) # ? 
+					extra[1] ~ dbeta(2,par2[1]) # ? 
+					
+					# initial distribution count, with uncertainty
+					delta_adjusted[1] <- delta[1] + ((initial_stock[1]-delta[1])*extra[1]) 
+					
+					# final stock (initial stock minus distribution for the year)
+					final_stock[1] <- initial_stock[1] - delta_adjusted[1]
 				
-					#loop to get stocks and capped deltas
+					##### loop to get stocks and capped deltas
 					for(year_idx in 2:year_count){
-						delta[year_idx] <- ifelse(delta_raw[year_idx]>(mu[year_idx]+Psi[year_idx-1]),mu[year_idx]+Psi[year_idx-1],delta_raw[year_idx])					
-						able[year_idx] <- Psi[year_idx-1] + mu[year_idx]	
+					  
+					  # net distribution count: smaller of (manufacturer count + stock) or nmcp count
+						delta[year_idx] <- ifelse(delta_prior_llin[year_idx] > (mu[year_idx]+final_stock[year_idx-1]), mu[year_idx]+final_stock[year_idx-1], delta_prior_llin[year_idx])					
+						
+						# initial stock: last year's final stock + nets from manufacturer 
+						initial_stock[year_idx] <- final_stock[year_idx-1] + mu[year_idx]	
+						
+						# add some uncertainty about additional nets distributed
 						par2[year_idx]~dunif(3,24)
 						extra[year_idx]~dbeta(2,par2[year_idx])
-						delta_l[year_idx]<-delta[year_idx]+((able[year_idx]-delta[year_idx])*extra[year_idx])
-						Psi[year_idx] <- able[year_idx]-delta_l[year_idx]	
+						
+						# net distribution count, with uncertainty 
+						delta_adjusted[year_idx] <- delta[year_idx] + ((initial_stock[year_idx]-delta[year_idx]) * extra[year_idx])
+						
+						# final stock for the year (initial stock minus distribution for the year)
+						final_stock[year_idx] <- initial_stock[year_idx]-delta_adjusted[year_idx]	
 					}"
 
-# test_snippet(paste(data_string, model_preface, llin_prior, itn_prior, manu_nmcp_init, model_suffix), test_data = SVY)
+# test_snippet(paste(model_preface, llin_prior, citn_prior, manu_nmcp_init, model_suffix), test_data = SVY)
 
 # try my own
 llin_testing <- 
@@ -480,16 +519,16 @@ mv_L <- L%*%moving_avg_weights
 
 for(j in 1:year_count){
   
-  g.m[j,1] ~ dunif(0,1)
-  g.m[j,2] ~ dunif(0,1)
-  g.m[j,3] ~ dunif(0,1)
-  g.m[j,4] ~ dunif(0,1)
+  quarter_fractions_llin[j,1] ~ dunif(0,1)
+  quarter_fractions_llin[j,2] ~ dunif(0,1)
+  quarter_fractions_llin[j,3] ~ dunif(0,1)
+  quarter_fractions_llin[j,4] ~ dunif(0,1)
   
-  g.m[j,5] <- sum(g.m[j,1:4])
-  g.m[j,6] <- g.m[j,1]/g.m[j,5]
-  g.m[j,7] <- g.m[j,2]/g.m[j,5]
-  g.m[j,8] <- g.m[j,3]/g.m[j,5]
-  g.m[j,9] <- g.m[j,4]/g.m[j,5]
+  quarter_fractions_llin[j,5] <- sum(quarter_fractions_llin[j,1:4])
+  quarter_fractions_llin[j,6] <- quarter_fractions_llin[j,1]/quarter_fractions_llin[j,5]
+  quarter_fractions_llin[j,7] <- quarter_fractions_llin[j,2]/quarter_fractions_llin[j,5]
+  quarter_fractions_llin[j,8] <- quarter_fractions_llin[j,3]/quarter_fractions_llin[j,5]
+  quarter_fractions_llin[j,9] <- quarter_fractions_llin[j,4]/quarter_fractions_llin[j,5]
   
   xx1[1,j] <- (-0.25)
   
@@ -497,15 +536,18 @@ for(j in 1:year_count){
     ind1[i,j]<-ifelse(((i-1)/4)<(j-1+0.25),0,1)
     ind_delta1[i,j]<-ifelse(((i-1)/4)==(j-1+0.25),1,0)
     xx1[i+1,j]<-ifelse(ind1[i,j]==1,xx1[i,j]+0.25,xx1[i,j]+0)
-    nets1[i,j]<-ifelse(xx1[i+1,j]>=mv_L[j],0,ind1[i,j]*(delta_l[j]*g.m[j,6])*exp(mv_k[j]-mv_k[j]/(1-(xx1[i+1,j]/mv_L[j])^2)))
+    nets1[i,j]<-ifelse(xx1[i+1,j]>=mv_L[j],0,ind1[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,6])*exp(mv_k[j]-mv_k[j]/(1-(xx1[i+1,j]/mv_L[j])^2)))
   }
   
 }"
 
-# test_snippet(paste(data_string, model_preface, llin_prior, itn_prior, manu_nmcp_init, llin_testing, model_suffix), test_data = SVY)
+# test_snippet(paste( model_preface, llin_prior, citn_prior, manu_nmcp_init, llin_testing, model_suffix), test_data = SVY)
 
 # loss functions-- see section 3.2.2.3
-llin_main <- "for(i in 1:nrow_moving_avg){ 
+llin_main <- "
+
+        # k & L are parameters for the loss function -- L is a time horizon and k is an exponential scaling factor
+         for(i in 1:nrow_moving_avg){ 
 						k[1,i]~dunif(16,18) 
 						L[1,i]~dunif(4,20.7)	# changed this back from either (1, 20.7) or (3, 20.7) to avoid an error
 
@@ -515,61 +557,67 @@ llin_main <- "for(i in 1:nrow_moving_avg){
 					mv_L <- L%*%moving_avg_weights
 
 
-					#llins
+					# distribute llins across quarters. TODO: transform into a three-dimensional array
 					for(j in 1:year_count){
 	
+	          # xx1-4 are timestep matrices, they track how long it's been since a net distribution
 						xx1[1,j]<-(-0.25)
 						xx2[1,j]<-(-0.25)
 						xx3[1,j]<-(-0.25)
 						xx4[1,j]<-(-0.25)
 					
-						g.m[j,1]~dunif(0,1)
-						g.m[j,2]~dunif(0,1)
-						g.m[j,3]~dunif(0,1)
-						g.m[j,4]~dunif(0,1)
+					  # Uniformly distribute the fraction of nets distributed in each quarter of the year
+						quarter_fractions_llin[j,1]~dunif(0,1)
+						quarter_fractions_llin[j,2]~dunif(0,1)
+						quarter_fractions_llin[j,3]~dunif(0,1)
+						quarter_fractions_llin[j,4]~dunif(0,1)
 			
-						g.m[j,5]<-sum(g.m[j,1:4])
-						g.m[j,6]<-g.m[j,1]/g.m[j,5]
-						g.m[j,7]<-g.m[j,2]/g.m[j,5]
-						g.m[j,8]<-g.m[j,3]/g.m[j,5]
-						g.m[j,9]<-g.m[j,4]/g.m[j,5]
+						quarter_fractions_llin[j,5]<-sum(quarter_fractions_llin[j,1:4])
+						quarter_fractions_llin[j,6]<-quarter_fractions_llin[j,1]/quarter_fractions_llin[j,5]
+						quarter_fractions_llin[j,7]<-quarter_fractions_llin[j,2]/quarter_fractions_llin[j,5]
+						quarter_fractions_llin[j,8]<-quarter_fractions_llin[j,3]/quarter_fractions_llin[j,5]
+						quarter_fractions_llin[j,9]<-quarter_fractions_llin[j,4]/quarter_fractions_llin[j,5]
 			
 						for(i in 1:quarter_count){
+						
+						  # ind1-4 count if nets have been distributed at any point before the quarter of interest
 							ind1[i,j]<-ifelse(((i-1)/4)<(j-1+0.25),0,1) # counter to set zero if not the right time
 							ind2[i,j]<-ifelse(((i-1)/4)<(j-1+0.5),0,1) # counter to set zero if not the right time
 							ind3[i,j]<-ifelse(((i-1)/4)<(j-1+0.75),0,1) # counter to set zero if not the right time
 							ind4[i,j]<-ifelse(((i-1)/4)<(j-1+1),0,1) # counter to set zero if not the right time
 
+              # ind_delta1-4 count if nets are being distributed in this quarter specifically
 							ind_delta1[i,j]<-ifelse(((i-1)/4)==(j-1+0.25),1,0) # counter to set zero if not the right time
 							ind_delta2[i,j]<-ifelse(((i-1)/4)==(j-1+0.5),1,0) # counter to set zero if not the right time
 							ind_delta3[i,j]<-ifelse(((i-1)/4)==(j-1+0.75),1,0) # counter to set zero if not the right time
 							ind_delta4[i,j]<-ifelse(((i-1)/4)==(j-1+1),1,0) # counter to set zero if not the right time
 
-							delta_store[i,j]<-ind_delta1[i,j]*(delta_l[j]*g.m[j,6]) + ind_delta2[i,j]*(delta_l[j]*g.m[j,7]) + ind_delta3[i,j]*(delta_l[j]*g.m[j,8]) + ind_delta4[i,j]*(delta_l[j]*g.m[j,9])
+							delta_store[i,j]<-ind_delta1[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,6]) + ind_delta2[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,7]) + ind_delta3[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,8]) + ind_delta4[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,9])
 				
 							xx1[i+1,j]<-ifelse(ind1[i,j]==1,xx1[i,j]+0.25,xx1[i,j]+0) # counts the loss function
 							xx2[i+1,j]<-ifelse(ind2[i,j]==1,xx2[i,j]+0.25,xx2[i,j]+0) # counts the loss function
 							xx3[i+1,j]<-ifelse(ind3[i,j]==1,xx3[i,j]+0.25,xx3[i,j]+0) # counts the loss function
 							xx4[i+1,j]<-ifelse(ind4[i,j]==1,xx4[i,j]+0.25,xx4[i,j]+0) # counts the loss function
 				
-							nets1[i,j]<-ifelse(xx1[i+1,j]>=mv_L[j],0,ind1[i,j]*(delta_l[j]*g.m[j,6])*exp(mv_k[j]-mv_k[j]/(1-(xx1[i+1,j]/mv_L[j])^2))) #multiplies the loss function
-							nets2[i,j]<-ifelse(xx2[i+1,j]>=mv_L[j],0,ind2[i,j]*(delta_l[j]*g.m[j,7])*exp(mv_k[j]-mv_k[j]/(1-(xx2[i+1,j]/mv_L[j])^2))) #multiplies the loss function
-							nets3[i,j]<-ifelse(xx3[i+1,j]>=mv_L[j],0,ind3[i,j]*(delta_l[j]*g.m[j,8])*exp(mv_k[j]-mv_k[j]/(1-(xx3[i+1,j]/mv_L[j])^2))) #multiplies the loss function
-							nets4[i,j]<-ifelse(xx4[i+1,j]>=mv_L[j],0,ind4[i,j]*(delta_l[j]*g.m[j,9])*exp(mv_k[j]-mv_k[j]/(1-(xx4[i+1,j]/mv_L[j])^2))) #multiplies the loss function
+				      # nets1-4 both assign nets to each quarter and track their loss 
+							nets1[i,j]<-ifelse(xx1[i+1,j]>=mv_L[j],0,ind1[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,6])*exp(mv_k[j]-mv_k[j]/(1-(xx1[i+1,j]/mv_L[j])^2))) #multiplies the loss function
+							nets2[i,j]<-ifelse(xx2[i+1,j]>=mv_L[j],0,ind2[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,7])*exp(mv_k[j]-mv_k[j]/(1-(xx2[i+1,j]/mv_L[j])^2))) #multiplies the loss function
+							nets3[i,j]<-ifelse(xx3[i+1,j]>=mv_L[j],0,ind3[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,8])*exp(mv_k[j]-mv_k[j]/(1-(xx3[i+1,j]/mv_L[j])^2))) #multiplies the loss function
+							nets4[i,j]<-ifelse(xx4[i+1,j]>=mv_L[j],0,ind4[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,9])*exp(mv_k[j]-mv_k[j]/(1-(xx4[i+1,j]/mv_L[j])^2))) #multiplies the loss function
 				
 							ThetaM[i,j]<-nets1[i,j]+nets2[i,j]+nets3[i,j]+nets4[i,j] # starts discounting
 				
 						}
 					}"
 
-# test_snippet(paste(data_string, model_preface, llin_prior, itn_prior, manu_nmcp_init, llin_main, model_suffix), test_data = SVY)
+# test_snippet(paste(model_preface, llin_prior, citn_prior, manu_nmcp_init, llin_main, model_suffix), test_data = SVY)
 
 # testing to find bug
 year_count <- SVY$year_count
 quarter_count <- year_count*4+1
-moving_avg_weights <- SVY$moving_avg_weight_matrix
-delta_l <- SVY$nmcp_llin_pp * SVY$year_population # number of nets distributed
-delta_l[1:4] <- c(25, 342, 560, 90) # make nonzero to make calculations clearer
+moving_avg_weights <- SVY$moving_avg_weights
+delta_adjusted <- SVY$nmcp_llin_pp * SVY$year_population # number of nets distributed
+delta_adjusted[1:4] <- c(25, 342, 560, 90) # make nonzero to make calculations clearer
 
 k <- runif(SVY$nrow_moving_avg, 16, 18)
 L <- c(runif(4, 1, 20.7), runif(SVY$nrow_moving_avg-4, 4, 20.7))
@@ -581,17 +629,29 @@ ind1 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
 ind_delta1 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
 nets1 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
 
-g.m <- matrix(runif(year_count*4), ncol=4)
-g.m.scaled <- prop.table(g.m, 1)
-g.m <- cbind(g.m, rowSums(g.m), g.m.scaled)
+xx2 <- matrix(rep(NA, year_count*(quarter_count+1)), ncol=year_count)
+ind2 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
+ind_delta2 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
+nets2 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
+
+quarter_fractions_llin <- matrix(runif(year_count*4), ncol=4)
+quarter_fractions_llin.scaled <- prop.table(quarter_fractions_llin, 1)
+quarter_fractions_llin <- cbind(quarter_fractions_llin, rowSums(quarter_fractions_llin), quarter_fractions_llin.scaled)
 
 for (j in 1:year_count){
   xx1[1,j]<-(-0.25)
+  xx2[1,j] <-(-0.25)
   for (i in 1:quarter_count){
     ind1[i,j]<-ifelse(((i-1)/4)<(j-1+0.25),0,1)
     ind_delta1[i,j]<-ifelse(((i-1)/4)==(j-1+0.25),1,0) # counter to set zero if not the right time
     xx1[i+1,j]<-ifelse(ind1[i,j]==1,xx1[i,j]+0.25,xx1[i,j]+0) # counts the loss function
-    nets1[i,j]<-ifelse(xx1[i+1,j]>=mv_L[j],0,ind1[i,j]*(delta_l[j]*g.m[j,6])*exp(mv_k[j]-mv_k[j]/(1-(xx1[i+1,j]/mv_L[j])^2)))
+    nets1[i,j]<-ifelse(xx1[i+1,j]>=mv_L[j],0,ind1[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,6])*exp(mv_k[j]-mv_k[j]/(1-(xx1[i+1,j]/mv_L[j])^2)))
+    
+    ind2[i,j]<-ifelse(((i-1)/4)<(j-1+0.5),0,1)
+    ind_delta2[i,j]<-ifelse(((i-1)/4)==(j-1+0.5),1,0)
+    xx2[i+1,j]<-ifelse(ind2[i,j]==1,xx2[i,j]+0.25,xx2[i,j]+0)
+    nets2[i,j]<-ifelse(xx2[i+1,j]>=mv_L[j],0,ind2[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,7])*exp(mv_k[j]-mv_k[j]/(1-(xx2[i+1,j]/mv_L[j])^2)))
+    
   }
 }
 
@@ -634,7 +694,7 @@ itn_main <- "	for(i in 1:nrow_moving_avg){
 							ind_itn_delta3[i,j]<-ifelse(((i-1)/4)==(j-1+0.75),1,0) # counter to set zero if not the right time
 							ind_itn_delta4[i,j]<-ifelse(((i-1)/4)==(j-1+1),1,0) # counter to set zero if not the right time
 
-							delta_store2[i,j]<-ind_itn_delta1[i,j]*(delta2_raw[j]*g2.m[j,6])+ind_itn_delta2[i,j]*(delta2_raw[j]*g2.m[j,7])+ind_itn_delta3[i,j]*(delta2_raw[j]*g2.m[j,8])+ind_itn_delta4[i,j]*(delta2_raw[j]*g2.m[j,9])
+							delta_store2[i,j]<-ind_itn_delta1[i,j]*(delta_prior_citn[j]*g2.m[j,6])+ind_itn_delta2[i,j]*(delta_prior_citn[j]*g2.m[j,7])+ind_itn_delta3[i,j]*(delta_prior_citn[j]*g2.m[j,8])+ind_itn_delta4[i,j]*(delta_prior_citn[j]*g2.m[j,9])
 
 				
 							xx1_itn[i+1,j]<-ifelse(ind1_itn[i,j]==1,xx1_itn[i,j]+0.25,xx1_itn[i,j]+0) # counts the loss function
@@ -642,16 +702,16 @@ itn_main <- "	for(i in 1:nrow_moving_avg){
 							xx3_itn[i+1,j]<-ifelse(ind3_itn[i,j]==1,xx3_itn[i,j]+0.25,xx3_itn[i,j]+0) # counts the loss function
 							xx4_itn[i+1,j]<-ifelse(ind4_itn[i,j]==1,xx4_itn[i,j]+0.25,xx4_itn[i,j]+0) # counts the loss function
 				
-							nets1_itn[i,j]<-ifelse(xx1_itn[i+1,j]>=mv_L2[j],0,ind1_itn[i,j]*(delta2_raw[j]*g2.m[j,6])*exp(mv_k2[j]-mv_k2[j]/(1-(xx1_itn[i+1,j]/mv_L2[j])^2)))
-							nets2_itn[i,j]<-ifelse(xx2_itn[i+1,j]>=mv_L2[j],0,ind2_itn[i,j]*(delta2_raw[j]*g2.m[j,7])*exp(mv_k2[j]-mv_k2[j]/(1-(xx2_itn[i+1,j]/mv_L2[j])^2)))
-							nets3_itn[i,j]<-ifelse(xx3_itn[i+1,j]>=mv_L2[j],0,ind3_itn[i,j]*(delta2_raw[j]*g2.m[j,8])*exp(mv_k2[j]-mv_k2[j]/(1-(xx3_itn[i+1,j]/mv_L2[j])^2)))
-							nets4_itn[i,j]<-ifelse(xx4_itn[i+1,j]>=mv_L2[j],0,ind4_itn[i,j]*(delta2_raw[j]*g2.m[j,9])*exp(mv_k2[j]-mv_k2[j]/(1-(xx4_itn[i+1,j]/mv_L2[j])^2)))
+							nets1_itn[i,j]<-ifelse(xx1_itn[i+1,j]>=mv_L2[j],0,ind1_itn[i,j]*(delta_prior_citn[j]*g2.m[j,6])*exp(mv_k2[j]-mv_k2[j]/(1-(xx1_itn[i+1,j]/mv_L2[j])^2)))
+							nets2_itn[i,j]<-ifelse(xx2_itn[i+1,j]>=mv_L2[j],0,ind2_itn[i,j]*(delta_prior_citn[j]*g2.m[j,7])*exp(mv_k2[j]-mv_k2[j]/(1-(xx2_itn[i+1,j]/mv_L2[j])^2)))
+							nets3_itn[i,j]<-ifelse(xx3_itn[i+1,j]>=mv_L2[j],0,ind3_itn[i,j]*(delta_prior_citn[j]*g2.m[j,8])*exp(mv_k2[j]-mv_k2[j]/(1-(xx3_itn[i+1,j]/mv_L2[j])^2)))
+							nets4_itn[i,j]<-ifelse(xx4_itn[i+1,j]>=mv_L2[j],0,ind4_itn[i,j]*(delta_prior_citn[j]*g2.m[j,9])*exp(mv_k2[j]-mv_k2[j]/(1-(xx4_itn[i+1,j]/mv_L2[j])^2)))
 
 							ThetaM2[i,j]<-nets1_itn[i,j]+nets2_itn[i,j]+nets3_itn[i,j]+nets4_itn[i,j] # starts discounting
 						}
 					}	"
 
- #test_snippet(paste(data_string, model_preface, llin_prior, itn_prior, manu_nmcp_init, itn_main, model_suffix), test_data = SVY) # this one runs without changing the priors on L, huh
+ #test_snippet(paste(model_preface, llin_prior, citn_prior, manu_nmcp_init, itn_main, model_suffix), test_data = SVY) # this one runs without changing the priors on L, huh
 
 accounting <- "for(i in 1:quarter_count){
 				ThetaT[i]<-sum(ThetaM[i,1:year_count])
@@ -660,7 +720,7 @@ accounting <- "for(i in 1:quarter_count){
 				itnD[i]<-sum(delta_store2[i,1:year_count])
 			}"
 
-# triggered if there are no nulls in survey data (sTot_llin or sTot_itn) ## WHY? are we losing a lot of survey data?
+# triggered if there are no nulls in survey data (sTot_llin or sTot_citn) ## WHY? are we losing a lot of survey data?
 # is the survey mean never actually used for fitting? why not?
 surveys <- "for(i in 1:survey_count){
 				quarter_start_index[i] <- quarter_start_indices[i]	 
@@ -671,7 +731,7 @@ surveys <- "for(i in 1:survey_count){
 				pred3[i] <- pred1[i] + pred2[i]
 					
 				mTot_llin[i] ~ dnorm(pred1[i], sTot_llin[i]^-2)	T(llinlimL[i], llinlimH[i])
-				mTot_itn[i] ~ dnorm(pred2[i], sTot_itn[i]^-2) T(itnlimL[i], itnlimH[i])
+				mTot_citn[i] ~ dnorm(pred2[i], sTot_citn[i]^-2) T(citnlimL[i], citnlimH[i])
 			}"
 
 # for fitting the model. todo: undersrtand these priors 
@@ -733,11 +793,10 @@ updating <- "
 			}"
 
 
-if(any(is.na(SVY$sTot_llin)) | any(is.na(SVY$sTot_itn))){
-  full_model_string <- paste(data_string,
-                             model_preface, 
+if(any(is.na(SVY$sTot_llin)) | any(is.na(SVY$sTot_citn))){
+  full_model_string <- paste(model_preface, 
                              llin_prior, 
-                             itn_prior, 
+                             citn_prior, 
                              manu_nmcp_init, 
                              llin_main, 
                              itn_main, 
@@ -746,10 +805,9 @@ if(any(is.na(SVY$sTot_llin)) | any(is.na(SVY$sTot_itn))){
                              model_suffix,
                              sep="\n")
 }else{
-  full_model_string <- paste(data_string,
-                             model_preface, 
+  full_model_string <- paste(model_preface, 
                              llin_prior, 
-                             itn_prior, 
+                             citn_prior, 
                              manu_nmcp_init, 
                              llin_main, 
                              itn_main, 
@@ -792,8 +850,8 @@ update(jags,n.iter=update)
 
 # extract needed variables (TODO: make a function for this, remove year hard-coding)
 jdat <- coda.samples(jags,variable.names=c('extra',
-                                           'delta_l',
-                                           'able',
+                                           'delta_adjusted',
+                                           'initial_stock',
                                            'nets1',
                                            'nets2',
                                            'nets3',
@@ -810,7 +868,7 @@ jdat <- coda.samples(jags,variable.names=c('extra',
                                            'xx2_itn',
                                            'xx3_itn',
                                            'xx4_itn',
-                                           'g.m',
+                                           'quarter_fractions_llin',
                                            'g2.m',
                                            'delta_store',
                                            'llinD',
@@ -823,12 +881,12 @@ jdat <- coda.samples(jags,variable.names=c('extra',
                                            'ThetaT2',
                                            'ThetaM2',
                                            'delta',
-                                           'delta2_raw',
-                                           'delta_raw',
+                                           'delta_prior_citn',
+                                           'delta_prior_llin',
                                            'mu',
-                                           'Psi',
-                                           's_m',
-                                           's_d',
+                                           'final_stock',
+                                           'manufacturer_sigma',
+                                           'nmcp_sigma_llin',
                                            'ThetaT',
                                            'ThetaM',
                                            'mv_k',
@@ -837,7 +895,7 @@ jdat <- coda.samples(jags,variable.names=c('extra',
 
 
 var<-colMeans(jdat[[1]])
-g.m=grep("g.m",names(var))
+quarter_fractions_llin=grep("quarter_fractions_llin",names(var))
 
 prop1=grep("^prop1\\[",names(var))
 prop0=grep("^prop0\\[",names(var))
@@ -856,25 +914,25 @@ ThetaT=grep("ThetaT\\[",names(var))
 ThetaT2=grep("ThetaT2\\[",names(var))
 
 mu=grep("mu",names(var))
-s_m=grep("s_m",names(var))
-s_d=grep("s_d",names(var))
+manufacturer_sigma=grep("manufacturer_sigma",names(var))
+nmcp_sigma_llin=grep("nmcp_sigma_llin",names(var))
 delta=grep("^delta\\[",names(var))
-delta_l=grep("^delta_l\\[",names(var))
+delta_adjusted=grep("^delta_adjusted\\[",names(var))
 
 delta_tot=grep("^delta_tot\\[",names(var))
 
-able=grep("^able\\[",names(var))
+initial_stock=grep("^initial_stock\\[",names(var))
 underdist=grep("^underdist\\[",names(var))
 
 
 llinD=grep("^llinD\\[",names(var))
 itnD=grep("^itnD\\[",names(var))
 
-delta_raw=grep("^delta_raw\\[",names(var))
-delta2_raw=grep("^delta2_raw\\[",names(var))
+delta_prior_llin=grep("^delta_prior_llin\\[",names(var))
+delta_prior_citn=grep("^delta_prior_citn\\[",names(var))
 delta_store=grep("^delta_store\\[",names(var))
 
-Psi=grep("Psi",names(var))
+final_stock=grep("final_stock",names(var))
 k=grep("mv_k\\[",names(var))
 L=grep("mv_L\\[",names(var))
 k2=grep("mv_k2\\[",names(var))
