@@ -510,20 +510,22 @@ manu_nmcp_init <- "
 
 # test_snippet(paste(model_preface, llin_prior, citn_prior, manu_nmcp_init, model_suffix), test_data = SVY)
 
-# try my own
-llin_testing <- 
-" for(i in 1:nrow_moving_avg){ 
-						k[1,i]~dunif(16,18) 
-						L[1,i]~dunif(4,20.7)	# changed this back from either (1, 20.7) or (3, 20.7) to avoid an error
+# loss functions and quarterly distribution-- see section 3.2.2.3
+llin_quarterly <- 
+" 
+# k & L are parameters for the loss function -- L is a time horizon and k is an exponential scaling factor
+for(i in 1:nrow_moving_avg){ 
+						k_llin[1,i]~dunif(16,18) 
+						L_llin[1,i]~dunif(4,20.7)	# changed this back from either (1, 20.7) or (3, 20.7) to avoid an error
 
 					}
 					
 # vectors of length year_count
-mv_k <- k%*%moving_avg_weights		
-mv_L <- L%*%moving_avg_weights
+mv_k_llin <- k_llin%*%moving_avg_weights		
+mv_L_llin <- L_llin%*%moving_avg_weights
 
+# find proportions for quarterly llin distributions
 for(j in 1:year_count){
-  
   quarter_draws_llin[j,1] ~ dunif(0,1)
   quarter_draws_llin[j,2] ~ dunif(0,1)
   quarter_draws_llin[j,3] ~ dunif(0,1)
@@ -536,250 +538,76 @@ for(j in 1:year_count){
   quarter_fractions_llin[j,4] <- quarter_draws_llin[j,4]/quarter_draws_llin[j,5]
 }
 
+# distribute llins across quarters
 for (j in 1:quarter_count){
   llins_distributed[j] <- delta_adjusted[(round(j/4+0.3))] * quarter_fractions_llin[(round(j/4+0.3)), (((j/4)-(round(j/4+0.3)-1))*4) ] # todo: find easier math
   for (i in 1:quarter_count){
-    net_count_llin[i,j] <- ifelse(j>i, 0, ifelse(time_since_distribution[i,j] >= mv_L[(round(j/4+0.3))], 0, llins_distributed[j] * exp(mv_k[(round(j/4+0.3))]-mv_k[(round(j/4+0.3))]/(1-(time_since_distribution[i,j]/mv_L[(round(j/4+0.3))])^2))))
+    quarterly_net_count_llin[i,j] <- ifelse(j>i, 0, ifelse(time_since_distribution[i,j] >= mv_L_llin[(round(j/4+0.3))], 0, llins_distributed[j] * exp(mv_k_llin[(round(j/4+0.3))]-mv_k_llin[(round(j/4+0.3))]/(1-(time_since_distribution[i,j]/mv_L_llin[(round(j/4+0.3))])^2))))
   }
 }
   
 "
 
-# test_snippet(paste( model_preface, llin_prior, citn_prior, manu_nmcp_init, llin_testing, model_suffix), test_data = SVY)
+# test_snippet(paste( model_preface, llin_prior, citn_prior, manu_nmcp_init, llin_quarterly, model_suffix), test_data = SVY)
 
-
-# loss functions-- see section 3.2.2.3
-llin_main <- "
-
-        # k & L are parameters for the loss function -- L is a time horizon and k is an exponential scaling factor
-         for(i in 1:nrow_moving_avg){ 
-						k[1,i]~dunif(16,18) 
-						L[1,i]~dunif(4,20.7)	# changed this back from either (1, 20.7) or (3, 20.7) to avoid an error
+citn_quarterly <- 
+" 
+# k & L are parameters for the loss function -- L is a time horizon and k is an exponential scaling factor
+for(i in 1:nrow_moving_avg){ 
+						k_citn[1,i]~dunif(16,18) 
+						L_citn[1,i]~dunif(4,20.7)	# changed this back from either (1, 20.7) or (3, 20.7) to avoid an error
 
 					}
-										
-					mv_k <- k%*%moving_avg_weights		
-					mv_L <- L%*%moving_avg_weights
-
-
-					# distribute llins across quarters. TODO: transform into a three-dimensional array
-					for(j in 1:year_count){
-	
-	          # xx1-4 are timestep matrices, they track how long it's been since a net distribution
-						xx1[1,j]<-(-0.25)
-						xx2[1,j]<-(-0.25)
-						xx3[1,j]<-(-0.25)
-						xx4[1,j]<-(-0.25)
 					
-					  # Uniformly distribute the fraction of nets distributed in each quarter of the year
-						quarter_fractions_llin[j,1]~dunif(0,1)
-						quarter_fractions_llin[j,2]~dunif(0,1)
-						quarter_fractions_llin[j,3]~dunif(0,1)
-						quarter_fractions_llin[j,4]~dunif(0,1)
-			
-						quarter_fractions_llin[j,5]<-sum(quarter_fractions_llin[j,1:4])
-						quarter_fractions_llin[j,6]<-quarter_fractions_llin[j,1]/quarter_fractions_llin[j,5]
-						quarter_fractions_llin[j,7]<-quarter_fractions_llin[j,2]/quarter_fractions_llin[j,5]
-						quarter_fractions_llin[j,8]<-quarter_fractions_llin[j,3]/quarter_fractions_llin[j,5]
-						quarter_fractions_llin[j,9]<-quarter_fractions_llin[j,4]/quarter_fractions_llin[j,5]
-			
-						for(i in 1:quarter_count){
-						
-						  # ind1-4 count if nets have been distributed at any point before the quarter of interest
-							ind1[i,j]<-ifelse(((i-1)/4)<(j-1+0.25),0,1) # counter to set zero if not the right time
-							ind2[i,j]<-ifelse(((i-1)/4)<(j-1+0.5),0,1) # counter to set zero if not the right time
-							ind3[i,j]<-ifelse(((i-1)/4)<(j-1+0.75),0,1) # counter to set zero if not the right time
-							ind4[i,j]<-ifelse(((i-1)/4)<(j-1+1),0,1) # counter to set zero if not the right time
+# vectors of length year_count
+mv_k_citn <- k_citn%*%moving_avg_weights		
+mv_L_citn <- L_citn%*%moving_avg_weights
 
-              # ind_delta1-4 count if nets are being distributed in this quarter specifically
-							ind_delta1[i,j]<-ifelse(((i-1)/4)==(j-1+0.25),1,0) # counter to set zero if not the right time
-							ind_delta2[i,j]<-ifelse(((i-1)/4)==(j-1+0.5),1,0) # counter to set zero if not the right time
-							ind_delta3[i,j]<-ifelse(((i-1)/4)==(j-1+0.75),1,0) # counter to set zero if not the right time
-							ind_delta4[i,j]<-ifelse(((i-1)/4)==(j-1+1),1,0) # counter to set zero if not the right time
+# find proportions for quarterly citn distributions
+for(j in 1:year_count){
+  quarter_draws_citn[j,1] ~ dunif(0,1)
+  quarter_draws_citn[j,2] ~ dunif(0,1)
+  quarter_draws_citn[j,3] ~ dunif(0,1)
+  quarter_draws_citn[j,4] ~ dunif(0,1)
+  quarter_draws_citn[j,5] <- sum(quarter_draws_citn[j,1:4])
+  
+  quarter_fractions_citn[j,1] <- quarter_draws_citn[j,1]/quarter_draws_citn[j,5]
+  quarter_fractions_citn[j,2] <- quarter_draws_citn[j,2]/quarter_draws_citn[j,5]
+  quarter_fractions_citn[j,3] <- quarter_draws_citn[j,3]/quarter_draws_citn[j,5]
+  quarter_fractions_citn[j,4] <- quarter_draws_citn[j,4]/quarter_draws_citn[j,5]
+}
 
-							delta_store[i,j]<-ind_delta1[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,6]) + ind_delta2[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,7]) + ind_delta3[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,8]) + ind_delta4[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,9])
-				
-							xx1[i+1,j]<-ifelse(ind1[i,j]==1,xx1[i,j]+0.25,xx1[i,j]+0) # counts the loss function
-							xx2[i+1,j]<-ifelse(ind2[i,j]==1,xx2[i,j]+0.25,xx2[i,j]+0) # counts the loss function
-							xx3[i+1,j]<-ifelse(ind3[i,j]==1,xx3[i,j]+0.25,xx3[i,j]+0) # counts the loss function
-							xx4[i+1,j]<-ifelse(ind4[i,j]==1,xx4[i,j]+0.25,xx4[i,j]+0) # counts the loss function
-				
-				      # nets1-4 both assign nets to each quarter and track their loss 
-							nets1[i,j]<-ifelse(xx1[i+1,j]>=mv_L[j],0,ind1[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,6])*exp(mv_k[j]-mv_k[j]/(1-(xx1[i+1,j]/mv_L[j])^2))) #multiplies the loss function
-							nets2[i,j]<-ifelse(xx2[i+1,j]>=mv_L[j],0,ind2[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,7])*exp(mv_k[j]-mv_k[j]/(1-(xx2[i+1,j]/mv_L[j])^2))) #multiplies the loss function
-							nets3[i,j]<-ifelse(xx3[i+1,j]>=mv_L[j],0,ind3[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,8])*exp(mv_k[j]-mv_k[j]/(1-(xx3[i+1,j]/mv_L[j])^2))) #multiplies the loss function
-							nets4[i,j]<-ifelse(xx4[i+1,j]>=mv_L[j],0,ind4[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,9])*exp(mv_k[j]-mv_k[j]/(1-(xx4[i+1,j]/mv_L[j])^2))) #multiplies the loss function
-				
-							ThetaM[i,j]<-nets1[i,j]+nets2[i,j]+nets3[i,j]+nets4[i,j] # starts discounting
-				
-						}
-					}"
-
-# test_snippet(paste(model_preface, llin_prior, citn_prior, manu_nmcp_init, llin_main, model_suffix), test_data = SVY)
-
-# testing to find bug
-year_count <- SVY$year_count
-quarter_count <- year_count*4
-moving_avg_weights <- SVY$moving_avg_weights
-delta_adjusted <- SVY$nmcp_llin_pp * SVY$year_population # number of nets distributed
-delta_adjusted[1:4] <- c(25, 342, 560, 90) # make nonzero to make calculations clearer
-
-k <- runif(SVY$nrow_moving_avg, 16, 18)
-L <- c(runif(4, 1, 20.7), runif(SVY$nrow_moving_avg-4, 4, 20.7))
-mv_k <- k%*%moving_avg_weights		
-mv_L <- L%*%moving_avg_weights
-
-quarter_draws_llin <- matrix(runif(year_count*4), ncol=4)
-quarter_fractions_llin <- prop.table(quarter_draws_llin, 1)
-
-llins_distributed <- matrix(rep(NA, quarter_count), ncol=1)
-net_count_llin <- matrix(rep(NA, quarter_count^2), ncol=quarter_count)
-# todo: replace ceiling with round
+# distribute citns across quarters
 for (j in 1:quarter_count){
-  llins_distributed[j] <- delta_adjusted[(round(j/4+0.3))] * quarter_fractions_llin[(round(j/4+0.3)), (((j/4)-(round(j/4+0.3)-1))*4) ] # todo: find easier math
+  citns_distributed[j] <- delta_adjusted[(round(j/4+0.3))] * quarter_fractions_citn[(round(j/4+0.3)), (((j/4)-(round(j/4+0.3)-1))*4) ] # todo: find easier math
   for (i in 1:quarter_count){
-    net_count_llin[i,j] <- ifelse(j>i, 0, ifelse(time_since_distribution[i,j] >= mv_L[(round(j/4+0.3))], 0, llins_distributed[j] * exp(mv_k[(round(j/4+0.3))]-mv_k[(round(j/4+0.3))]/(1-(time_since_distribution[i,j]/mv_L[(round(j/4+0.3))])^2))))
+    quarterly_net_count_citn[i,j] <- ifelse(j>i, 0, ifelse(time_since_distribution[i,j] >= mv_L_citn[(round(j/4+0.3))], 0, citns_distributed[j] * exp(mv_k_citn[(round(j/4+0.3))]-mv_k_citn[(round(j/4+0.3))]/(1-(time_since_distribution[i,j]/mv_L_citn[(round(j/4+0.3))])^2))))
   }
 }
+  
+"
 
-quarter_count <- year_count*4+1
-xx1 <- matrix(rep(NA, year_count*(quarter_count+1)), ncol=year_count)
-ind1 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
-ind_delta1 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
-nets1 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
-
-xx2 <- matrix(rep(NA, year_count*(quarter_count+1)), ncol=year_count)
-ind2 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
-ind_delta2 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
-nets2 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
-
-xx3 <- matrix(rep(NA, year_count*(quarter_count+1)), ncol=year_count)
-ind3 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
-ind_delta3 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
-nets3 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
-
-xx4 <- matrix(rep(NA, year_count*(quarter_count+1)), ncol=year_count)
-ind4 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
-ind_delta4 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
-nets4 <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
-
-delta_store <- matrix(rep(NA, year_count*quarter_count), ncol=year_count)
-ThetaM<-matrix(rep(NA, year_count*quarter_count), ncol=year_count)
-
-for (j in 1:year_count){
-  xx1[1,j]<-(-0.25)
-  xx2[1,j] <-(-0.25)
-  xx3[1,j]<-(-0.25)
-  xx4[1,j] <-(-0.25)
-  for (i in 1:quarter_count){
-    ind1[i,j]<-ifelse(((i-1)/4)<(j-1+0.25),0,1)
-    ind_delta1[i,j]<-ifelse(((i-1)/4)==(j-1+0.25),1,0) # counter to set zero if not the right time
-    xx1[i+1,j]<-ifelse(ind1[i,j]==1,xx1[i,j]+0.25,xx1[i,j]+0) # counts the loss function
-    nets1[i,j]<-ifelse(xx1[i+1,j]>=mv_L[j],0,ind1[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,1])*exp(mv_k[j]-mv_k[j]/(1-(xx1[i+1,j]/mv_L[j])^2)))
-    
-    ind2[i,j]<-ifelse(((i-1)/4)<(j-1+0.5),0,1)
-    ind_delta2[i,j]<-ifelse(((i-1)/4)==(j-1+0.5),1,0)
-    xx2[i+1,j]<-ifelse(ind2[i,j]==1,xx2[i,j]+0.25,xx2[i,j]+0)
-    nets2[i,j]<-ifelse(xx2[i+1,j]>=mv_L[j],0,ind2[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,2])*exp(mv_k[j]-mv_k[j]/(1-(xx2[i+1,j]/mv_L[j])^2)))
-    
-    ind3[i,j]<-ifelse(((i-1)/4)<(j-1+0.75),0,1) # counter to set zero if not the right time
-    ind_delta3[i,j]<-ifelse(((i-1)/4)==(j-1+0.75),1,0) # counter to set zero if not the right time
-    xx3[i+1,j]<-ifelse(ind3[i,j]==1,xx3[i,j]+0.25,xx3[i,j]+0) # counts the loss function
-    nets3[i,j]<-ifelse(xx3[i+1,j]>=mv_L[j],0,ind3[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,3])*exp(mv_k[j]-mv_k[j]/(1-(xx3[i+1,j]/mv_L[j])^2))) #multiplies the loss function
-    
-    ind4[i,j]<-ifelse(((i-1)/4)<(j-1+1),0,1) # counter to set zero if not the right time
-    ind_delta4[i,j]<-ifelse(((i-1)/4)==(j-1+1),1,0) # counter to set zero if not the right time
-    xx4[i+1,j]<-ifelse(ind4[i,j]==1,xx4[i,j]+0.25,xx4[i,j]+0) # counts the loss function
-    nets4[i,j]<-ifelse(xx4[i+1,j]>=mv_L[j],0,ind4[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,4])*exp(mv_k[j]-mv_k[j]/(1-(xx4[i+1,j]/mv_L[j])^2))) #multiplies the loss function
-    
-    delta_store[i,j]<-ind_delta1[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,1]) + ind_delta2[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,2]) + ind_delta3[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,3]) + ind_delta4[i,j]*(delta_adjusted[j]*quarter_fractions_llin[j,4])
-    
-    ThetaM[i,j]<-nets1[i,j]+nets2[i,j]+nets3[i,j]+nets4[i,j] # starts discounting
-    
-  }
-}
-
-# show that the new version produces the same result as the old
-totals_old <- rowSums(ThetaM)
-totals_new <- rowSums(net_count_llin)
-totals_old[2:73]-totals_new
-
-itn_main <- "	for(i in 1:nrow_moving_avg){
-						k2[1,i]~dunif(16,18) 
-						L2[1,i]~dunif(1.5,20.7)	
-					}
-					mv_k2 <- k2%*%moving_avg_weights
-					mv_L2 <- L2%*%moving_avg_weights
-
-		
-					for(j in 1:year_count){
-
-						xx1_itn[1,j]<-(-0.25)
-						xx2_itn[1,j]<-(-0.25)
-						xx3_itn[1,j]<-(-0.25)
-						xx4_itn[1,j]<-(-0.25)
-			
-						g2.m[j,1]~dunif(0,1)
-						g2.m[j,2]~dunif(0,1)
-						g2.m[j,3]~dunif(0,1)
-						g2.m[j,4]~dunif(0,1)
-			
-						g2.m[j,5]<-sum(g2.m[j,1:4])
-						g2.m[j,6]<-g2.m[j,1]/g2.m[j,5]
-						g2.m[j,7]<-g2.m[j,2]/g2.m[j,5]
-						g2.m[j,8]<-g2.m[j,3]/g2.m[j,5]
-						g2.m[j,9]<-g2.m[j,4]/g2.m[j,5]			
-
-						for(i in 1:quarter_count){
-							ind1_itn[i,j]<-ifelse(((i-1)/4)<(j-1+0.25),0,1) # counter to set zero if not the right time
-							ind2_itn[i,j]<-ifelse(((i-1)/4)<(j-1+0.5),0,1) # counter to set zero if not the right time
-							ind3_itn[i,j]<-ifelse(((i-1)/4)<(j-1+0.75),0,1) # counter to set zero if not the right time
-							ind4_itn[i,j]<-ifelse(((i-1)/4)<(j-1+1),0,1) # counter to set zero if not the right time
-
-
-							ind_itn_delta1[i,j]<-ifelse(((i-1)/4)==(j-1+0.25),1,0) # counter to set zero if not the right time
-							ind_itn_delta2[i,j]<-ifelse(((i-1)/4)==(j-1+0.5),1,0) # counter to set zero if not the right time
-							ind_itn_delta3[i,j]<-ifelse(((i-1)/4)==(j-1+0.75),1,0) # counter to set zero if not the right time
-							ind_itn_delta4[i,j]<-ifelse(((i-1)/4)==(j-1+1),1,0) # counter to set zero if not the right time
-
-							delta_store2[i,j]<-ind_itn_delta1[i,j]*(delta_prior_citn[j]*g2.m[j,6])+ind_itn_delta2[i,j]*(delta_prior_citn[j]*g2.m[j,7])+ind_itn_delta3[i,j]*(delta_prior_citn[j]*g2.m[j,8])+ind_itn_delta4[i,j]*(delta_prior_citn[j]*g2.m[j,9])
-
-				
-							xx1_itn[i+1,j]<-ifelse(ind1_itn[i,j]==1,xx1_itn[i,j]+0.25,xx1_itn[i,j]+0) # counts the loss function
-							xx2_itn[i+1,j]<-ifelse(ind2_itn[i,j]==1,xx2_itn[i,j]+0.25,xx2_itn[i,j]+0) # counts the loss function
-							xx3_itn[i+1,j]<-ifelse(ind3_itn[i,j]==1,xx3_itn[i,j]+0.25,xx3_itn[i,j]+0) # counts the loss function
-							xx4_itn[i+1,j]<-ifelse(ind4_itn[i,j]==1,xx4_itn[i,j]+0.25,xx4_itn[i,j]+0) # counts the loss function
-				
-							nets1_itn[i,j]<-ifelse(xx1_itn[i+1,j]>=mv_L2[j],0,ind1_itn[i,j]*(delta_prior_citn[j]*g2.m[j,6])*exp(mv_k2[j]-mv_k2[j]/(1-(xx1_itn[i+1,j]/mv_L2[j])^2)))
-							nets2_itn[i,j]<-ifelse(xx2_itn[i+1,j]>=mv_L2[j],0,ind2_itn[i,j]*(delta_prior_citn[j]*g2.m[j,7])*exp(mv_k2[j]-mv_k2[j]/(1-(xx2_itn[i+1,j]/mv_L2[j])^2)))
-							nets3_itn[i,j]<-ifelse(xx3_itn[i+1,j]>=mv_L2[j],0,ind3_itn[i,j]*(delta_prior_citn[j]*g2.m[j,8])*exp(mv_k2[j]-mv_k2[j]/(1-(xx3_itn[i+1,j]/mv_L2[j])^2)))
-							nets4_itn[i,j]<-ifelse(xx4_itn[i+1,j]>=mv_L2[j],0,ind4_itn[i,j]*(delta_prior_citn[j]*g2.m[j,9])*exp(mv_k2[j]-mv_k2[j]/(1-(xx4_itn[i+1,j]/mv_L2[j])^2)))
-
-							ThetaM2[i,j]<-nets1_itn[i,j]+nets2_itn[i,j]+nets3_itn[i,j]+nets4_itn[i,j] # starts discounting
-						}
-					}	"
-
- #test_snippet(paste(model_preface, llin_prior, citn_prior, manu_nmcp_init, itn_main, model_suffix), test_data = SVY) # this one runs without changing the priors on L, huh
+# test_snippet(paste( model_preface, llin_prior, citn_prior, manu_nmcp_init, citn_quarterly, model_suffix), test_data = SVY)
 
 accounting <- "for(i in 1:quarter_count){
-				ThetaT[i]<-sum(ThetaM[i,1:year_count])
-				ThetaT2[i]<-sum(ThetaM2[i,1:year_count])
-				llinD[i]<-sum(delta_store[i,1:year_count])
-				itnD[i]<-sum(delta_store2[i,1:year_count])
+				tot_nets_perquarter_llin[i]<-sum(quarterly_net_count_llin[i,1:quarter_count])
+				tot_nets_perquarter_citn[i]<-sum(quarterly_net_count_citn[i,1:quarter_count])
 			}"
 
-# triggered if there are no nulls in survey data (sTot_llin or sTot_citn) ## WHY? are we losing a lot of survey data?
+# triggered if there are no nulls in survey data (sTot_llin or sTot_citn). pretty sure this only happens when there are no surveys, but need to confirm
 # is the survey mean never actually used for fitting? why not?
 surveys <- "for(i in 1:survey_count){
 				quarter_start_index[i] <- quarter_start_indices[i]	 
 				quarter_end_index[i] <- quarter_end_indices[i]	 	
 				
-				pred1[i] <- quarter_prop_completed[i] * ThetaT[quarter_start_index[i]] + quarter_prop_remaining[i] * ThetaT[quarter_end_index[i]]	
-				pred2[i] <- quarter_prop_completed[i] * ThetaT2[quarter_start_index[i]] + quarter_prop_remaining[i] * ThetaT2[quarter_end_index[i]]	
-				pred3[i] <- pred1[i] + pred2[i]
-					
-				mTot_llin[i] ~ dnorm(pred1[i], sTot_llin[i]^-2)	T(llinlimL[i], llinlimH[i])
-				mTot_citn[i] ~ dnorm(pred2[i], sTot_citn[i]^-2) T(citnlimL[i], citnlimH[i])
+				# to estimate # of nets at time of survey, linearly interpolate between the surrounding quartrly estimates 
+				survey_prior_llin[i] <- quarter_prop_completed[i] * tot_nets_perquarter_llin[quarter_start_index[i]] + quarter_prop_remaining[i] * tot_nets_perquarter_llin[quarter_end_index[i]]	
+				survey_prior_citn[i] <- quarter_prop_completed[i] * tot_nets_perquarter_citn[quarter_start_index[i]] + quarter_prop_remaining[i] * tot_nets_perquarter_citn[quarter_end_index[i]]	
+				survey_prior_total[i] <- survey_prior_llin[i] + survey_prior_citn[i] # TODO: never used
+				
+				# TODO: why aren't these originally extracted from the model outputs?
+				survey_estimated_llin[i] ~ dnorm(survey_prior_llin[i], sTot_llin[i]^-2)	T(llinlimL[i], llinlimH[i])
+				survey_estimated_citn[i] ~ dnorm(survey_prior_citn[i], sTot_citn[i]^-2) T(citnlimL[i], citnlimH[i])
 			}"
 
 # for fitting the model. todo: undersrtand these priors 
@@ -823,7 +651,7 @@ updating <- "
 			
 			
 			for(i in 1:quarter_count){	
-				ThetaT3[i]<-ifelse(((ThetaT[i]+ThetaT2[i])/(PAR*IRS*population[i]))<0,0,((ThetaT[i]+ThetaT2[i])/(PAR*IRS*population[i])))
+				ThetaT3[i]<-ifelse(((tot_nets_perquarter_llin[i]+tot_nets_perquarter_citn[i])/(PAR*IRS*population[i]))<0,0,((tot_nets_perquarter_llin[i]+tot_nets_perquarter_citn[i])/(PAR*IRS*population[i])))
 				T3_p0[i]<-log(ThetaT3[i]/(1-ThetaT3[i]))
 				for(j in 1:10){
 						prop0[i,j]<-p0_i1 + p0_p1*j + p0_p2*pow(j,2) + p0_b1*ThetaT3[i] + p0_b2*pow(ThetaT3[i],2) + p0_b3*pow(ThetaT3[i],3)	
@@ -846,8 +674,8 @@ if(any(is.na(SVY$sTot_llin)) | any(is.na(SVY$sTot_citn))){
                              llin_prior, 
                              citn_prior, 
                              manu_nmcp_init, 
-                             llin_main, 
-                             itn_main, 
+                             llin_quarterly, 
+                             citn_quarterly, 
                              accounting, 
                              updating, 
                              model_suffix,
@@ -857,8 +685,8 @@ if(any(is.na(SVY$sTot_llin)) | any(is.na(SVY$sTot_citn))){
                              llin_prior, 
                              citn_prior, 
                              manu_nmcp_init, 
-                             llin_main, 
-                             itn_main, 
+                             llin_quarterly, 
+                             citn_quarterly, 
                              accounting, 
                              surveys,  # this is the only difference
                              updating, 
@@ -897,48 +725,40 @@ update(jags,n.iter=update)
 
 
 # extract needed variables (TODO: make a function for this, remove year hard-coding)
-jdat <- coda.samples(jags,variable.names=c('extra',
+jdat <- coda.samples(jags,variable.names=c('manufacturer_sigma',
+                                           'nmcp_sigma_llin',
+                                           'extra',
                                            'delta_adjusted',
                                            'initial_stock',
-                                           'nets1',
-                                           'nets2',
-                                           'nets3',
-                                           'nets4',
-                                           'nets1_itn',
-                                           'nets2_itn',
-                                           'nets3_itn',
-                                           'nets4_itn',
-                                           'xx1',
-                                           'xx2',
-                                           'xx3',
-                                           'xx4',
-                                           'xx1_itn',
-                                           'xx2_itn',
-                                           'xx3_itn',
-                                           'xx4_itn',
-                                           'quarter_fractions_llin',
-                                           'g2.m',
-                                           'delta_store',
-                                           'llinD',
-                                           'itnD',
-                                           'ThetaT3',
-                                           'prop1',
-                                           'prop0',
-                                           'mv_k2',
-                                           'mv_L2',
-                                           'ThetaT2',
-                                           'ThetaM2',
+                                           'final_stock',
+                                           'mu',
                                            'delta',
                                            'delta_prior_citn',
                                            'delta_prior_llin',
-                                           'mu',
-                                           'final_stock',
-                                           'manufacturer_sigma',
-                                           'nmcp_sigma_llin',
-                                           'ThetaT',
-                                           'ThetaM',
-                                           'mv_k',
-                                           'mv_L'),
+                                           
+                                           'mv_k_llin',
+                                           'mv_L_llin',
+                                           'quarter_fractions_llin',
+                                           'llins_distributed',
+                                           'quarterly_net_count_llin',
+                                           
+                                           'mv_k_citn',
+                                           'mv_L_citn',
+                                           'quarter_fractions_citn',
+                                           'citns_distributed',
+                                           'quarterly_net_count_citn',
+                                           
+                                           'tot_nets_perquarter_llin',
+                                           'tot_nets_perquarter_citn',
+                                           'ThetaT3',
+                                           
+                                           'survey_estimated_llin',
+                                           'survey_estimated_citn',
+                                           
+                                           'prop1',
+                                           'prop0'
+                                           
+                                           ),
                      n.iter=n.iter,thin=thin) 
 
 
@@ -981,8 +801,8 @@ delta_prior_citn=grep("^delta_prior_citn\\[",names(var))
 delta_store=grep("^delta_store\\[",names(var))
 
 final_stock=grep("final_stock",names(var))
-k=grep("mv_k\\[",names(var))
-L=grep("mv_L\\[",names(var))
+k_llin=grep("mv_k_llin\\[",names(var))
+L=grep("mv_L_llin\\[",names(var))
 k2=grep("mv_k2\\[",names(var))
 L2=grep("mv_L2\\[",names(var))
 ind=grep("ind",names(var))
