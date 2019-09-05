@@ -338,6 +338,7 @@ SVY$citn_year_count <- sum(!is.na(nmcp_citn_pp)) # non-null year count for itns
 SVY$PAR<-PAR
 
 # set IRS values. todo: update these from WHO data or anita work
+# "IRS" refers to the proportion of the population *not* covered by IRS
 if(this_country=='Mozambique'){ SVY$IRS=(1-0.1)
 }else if(this_country=='Madagascar'){ SVY$IRS=(1-0.24)
 }else if(this_country=='Zimbabwe'){ SVY$IRS=(1-0.48)
@@ -592,6 +593,7 @@ for (j in 1:quarter_count){
 accounting <- "for(i in 1:quarter_count){
 				tot_nets_perquarter_llin[i]<-sum(quarterly_net_count_llin[i,1:quarter_count])
 				tot_nets_perquarter_citn[i]<-sum(quarterly_net_count_citn[i,1:quarter_count])
+				ThetaT3[i] <- max( (tot_nets_perquarter_llin[i]+tot_nets_perquarter_citn[i])/(PAR*IRS*population[i]), 0) # ThetaT3 is the percapita net count in the true population-at-risk (accounting for IRS)
 			}"
 
 # triggered if there are no nulls in survey data (sTot_llin or sTot_citn). pretty sure this only happens when there are no surveys, but need to confirm
@@ -610,7 +612,7 @@ surveys <- "for(i in 1:survey_count){
 				survey_estimated_citn[i] ~ dnorm(survey_prior_citn[i], sTot_citn[i]^-2) T(citnlimL[i], citnlimH[i])
 			}"
 
-# for fitting the model. todo: undersrtand these priors 
+# for fitting the model. see equations 34 and 35
 updating <- "
 			trace~dunif(1,5000)
 			sample<-round(trace)
@@ -618,6 +620,7 @@ updating <- "
 			trace2~dunif(1,5000)
 			sample2<-round(trace2)
 			
+			# betas and intercepts for mean nets/hh regression
 			p1_b1<-prop1_b1[sample]
 			p1_b2<-prop1_b2[sample]
 			p1_b3<-prop1_b3[sample]
@@ -640,6 +643,7 @@ updating <- "
 			p1_i9<-prop1_i9[sample]
 			p1_i10<-prop1_i10[sample]
 
+      # parameters for % hh's with no nets model
 			p0_b1<-prop0_b1[sample2]
 			p0_b2<-prop0_b2[sample2]
 			p0_b3<-prop0_b3[sample2]
@@ -651,8 +655,6 @@ updating <- "
 			
 			
 			for(i in 1:quarter_count){	
-				ThetaT3[i]<-ifelse(((tot_nets_perquarter_llin[i]+tot_nets_perquarter_citn[i])/(PAR*IRS*population[i]))<0,0,((tot_nets_perquarter_llin[i]+tot_nets_perquarter_citn[i])/(PAR*IRS*population[i])))
-				T3_p0[i]<-log(ThetaT3[i]/(1-ThetaT3[i]))
 				for(j in 1:10){
 						prop0[i,j]<-p0_i1 + p0_p1*j + p0_p2*pow(j,2) + p0_b1*ThetaT3[i] + p0_b2*pow(ThetaT3[i],2) + p0_b3*pow(ThetaT3[i],3)	
 				}
