@@ -127,30 +127,30 @@ no_nets_model <- "data {
             real emplogit_prop_no_net[N]; // z
             }
         parameters {
-            real a0_prop; // i1
-            real b1_prop;
-            real b2_prop;
-            real b3_prop;
-            real p1_prop;
-            real p2_prop;
-            real<lower=0> tau_prop;
+            real alpha_nonet_prop; // i1
+            real b1_nonet_prop;
+            real b2_nonet_prop;
+            real b3_nonet_prop;
+            real p1_nonet_prop;
+            real p2_nonet_prop;
+            real<lower=0> tau_nonet_prop;
          } 
 
          model {
              vector[N] mu_hat;
 
-      			a0_prop ~ uniform(-50,50);
-      			b1_prop ~ uniform(-100,100);
-      			b2_prop ~ uniform(-300,300);
-      			b3_prop ~ uniform(-300,300);
-      			p1_prop ~ uniform(-3,3);
-      			p2_prop ~ uniform(-1,1);		
-      			tau_prop ~ gamma(0.1,0.1); 			
+      			alpha_nonet_prop ~ uniform(-50,50);
+      			b1_nonet_prop ~ uniform(-100,100);
+      			b2_nonet_prop ~ uniform(-300,300);
+      			b3_nonet_prop ~ uniform(-300,300);
+      			p1_nonet_prop ~ uniform(-3,3);
+      			p2_nonet_prop ~ uniform(-1,1);		
+      			tau_nonet_prop ~ gamma(0.1,0.1); 			
 
              for(i in 1:N){
-                 mu_hat[i] = a0_prop + p1_prop*hhsize[i] + p2_prop*pow(hhsize[i], 2) + b1_prop*nets_pc[i] + b2_prop*pow(nets_pc[i], 2) + b3_prop*pow(nets_pc[i], 3) ;
+                 mu_hat[i] = alpha_nonet_prop + p1_nonet_prop*hhsize[i] + p2_nonet_prop*pow(hhsize[i], 2) + b1_nonet_prop*nets_pc[i] + b2_nonet_prop*pow(nets_pc[i], 2) + b3_nonet_prop*pow(nets_pc[i], 3) ;
              }               
-              emplogit_prop_no_net ~ normal(mu_hat, tau_prop);
+              emplogit_prop_no_net ~ normal(mu_hat, tau_nonet_prop);
 
         }"
 
@@ -167,16 +167,16 @@ mean_nets_model <- "data {
             vector[N] adj_mean_nets; //formerly z1-10
             }
         parameters {
-            real alpha_mean; //formerly i1-10
-            real beta_mean; //fomerly b1-10
-            real<lower=0> tau_mean; //formerly tau_mean1-10
+            real alpha_mean_nets; //formerly i1-10
+            real beta_mean_nets; //fomerly b1-10
+            real<lower=0> tau_mean_nets; //formerly tau1-10
          } 
 
          model {
-      			alpha_mean ~ uniform(-20,20);
-      			beta_mean ~ uniform(-20,20);
-			      tau_mean ~ gamma(0.1,0.1);
-			      adj_mean_nets ~ normal(alpha_mean + beta_mean*nets_pc, tau_mean);
+      			alpha_mean_nets ~ uniform(-20,20);
+      			beta_mean_nets ~ uniform(-20,20);
+			      tau_mean_nets ~ gamma(0.1,0.1);
+			      adj_mean_nets ~ normal(alpha_mean_nets + beta_mean_nets*nets_pc, tau_mean_nets);
         }"
 
 
@@ -196,7 +196,7 @@ mean_net_fit <- lapply(1:hh_size_max, function(this_hhsize){
 
 ### Extract model outputs #####----------------------------------------------------------------------------------------------------------------------------------
 
-format_stan_output <- function(stan_fit, aggregate=F){
+format_stan_output <- function(stan_fit, aggregate=T){
   
   outputs <- data.table(as.data.frame(extract(stan_fit , permuted = FALSE)))
   
@@ -220,6 +220,7 @@ format_stan_output <- function(stan_fit, aggregate=F){
 # Prop w/o nets
 traceplot(no_net_fit)
 no_net_outputs <- format_stan_output(no_net_fit)
+no_net_outputs[, model_type:="no_net_prob"]
 
 # TODO: diagnostic plot
 # test_plot_nonets <- var0[i1] + var0[b1]*data2$y + var0[p1]*data2$x + var0[b2]*(data2$y^2) + var0[b3]*(data2$y^3) + var0[p2]*(data2$x^2)
@@ -235,6 +236,10 @@ mean_net_outputs <- lapply(1:hh_size_max, function(this_hhsize){
 })
 
 mean_net_outputs <- rbindlist(mean_net_outputs)
+mean_net_outputs[, model_type:="mean_net_count"]
+
+all_outputs <- rbind(no_net_outputs, mean_net_outputs, fill=T)
+write.csv(all_outputs, file=file.path(main_dir, "AMELIA_GENERATED_indicator_priors.csv"), row.names = F)
 
 # todo: diagnostic plots
 # lp1<-var1[i1] + var1[b1]*data1$y1 

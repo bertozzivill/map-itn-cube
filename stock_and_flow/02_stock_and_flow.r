@@ -273,17 +273,22 @@ SVY$population <- c( rep(SVY$year_population, each=4), SVY$year_population[lengt
 
 ### process priors #####----------------------------------------------------------------------------------------------------------------------------------
 
-# priors list from script sam sent. todo: explore.
+extract_prior <- function(varname, data){
+  subset <- data[variable==varname]
+  this_list <- list(mean=subset$mean, sd=subset$sd)
+  names(this_list) <- c(paste0(varname, "_mean"), paste0(varname, "_sd"))
+  return(this_list)
+}
 
-# test: is anything used besides trace0 and trace1?
-load(file.path(main_dir,'poissonPriors.RData'))
+indicator_priors <- fread(file.path(main_dir, "AMELIA_GENERATED_indicator_priors.csv"))
 
-trace1_priors <- trace1[, c(paste0("chain:1.b",1:10), paste0("chain:1.i", 1:10))]
-setnames(trace1_priors, names(trace1_priors), gsub("chain\\:1\\.", "prop1_", names(trace1_priors)) ) 
-trace0_priors <- trace0[, c(paste0("chain:1.", c("b1", "b2", "b3", "p1", "p2", "i1")))]
-setnames(trace0_priors, names(trace0_priors), gsub("chain\\:1\\.", "prop0_", names(trace0_priors)) ) 
+no_net_props <- dcast.data.table(indicator_priors[model_type=="no_net_prob"], variable  ~ metric, value.var = "value")
+no_net_prop_priors <- unlist(lapply(unique(no_net_props$variable), extract_prior, no_net_props))
 
-SVY <- c(SVY, as.list(trace1_priors), as.list(trace0_priors))
+mean_net_counts <- dcast.data.table(indicator_priors[model_type=="mean_net_count"], variable + hhsize ~ metric, value.var = "value")
+mean_net_count_priors <- unlist(lapply(unique(mean_net_counts$variable), extract_prior, mean_net_counts), recursive = F)
+
+SVY <- c(SVY, as.list(no_net_prop_priors), mean_net_count_priors, list(max_hhsize=10))
 
 ### prep moving average for jags run #####----------------------------------------------------------------------------------------------------------------------------------
 
@@ -593,7 +598,7 @@ for (j in 1:quarter_count){
 accounting <- "for(i in 1:quarter_count){
 				tot_nets_perquarter_llin[i]<-sum(quarterly_net_count_llin[i,1:quarter_count])
 				tot_nets_perquarter_citn[i]<-sum(quarterly_net_count_citn[i,1:quarter_count])
-				ThetaT3[i] <- max( (tot_nets_perquarter_llin[i]+tot_nets_perquarter_citn[i])/(PAR*IRS*population[i]), 0) # ThetaT3 is the percapita net count in the true population-at-risk (accounting for IRS)
+				net_count_percapita[i] <- max( (tot_nets_perquarter_llin[i]+tot_nets_perquarter_citn[i])/(PAR*IRS*population[i]), 0) # net_count_percapita is the percapita net count in the true population-at-risk (accounting for IRS)
 			}"
 
 # triggered if there are no nulls in survey data (sTot_llin or sTot_citn). pretty sure this only happens when there are no surveys, but need to confirm
@@ -612,63 +617,33 @@ surveys <- "for(i in 1:survey_count){
 				survey_estimated_citn[i] ~ dnorm(survey_prior_citn[i], sTot_citn[i]^-2) T(citnlimL[i], citnlimH[i])
 			}"
 
-# for fitting the model. see equations 34 and 35
-updating <- "
-			trace~dunif(1,5000)
-			sample<-round(trace)
+indicators <- "
 
-			trace2~dunif(1,5000)
-			sample2<-round(trace2)
-			
-			# betas and intercepts for mean nets/hh regression
-			p1_b1<-prop1_b1[sample]
-			p1_b2<-prop1_b2[sample]
-			p1_b3<-prop1_b3[sample]
-			p1_b4<-prop1_b4[sample]
-			p1_b5<-prop1_b5[sample]
-			p1_b6<-prop1_b6[sample]
-			p1_b7<-prop1_b7[sample]
-			p1_b8<-prop1_b8[sample]
-			p1_b9<-prop1_b9[sample]
-			p1_b10<-prop1_b10[sample]
-			
-			p1_i1<-prop1_i1[sample]
-			p1_i2<-prop1_i2[sample]
-			p1_i3<-prop1_i3[sample]
-			p1_i4<-prop1_i4[sample]
-			p1_i5<-prop1_i5[sample]
-			p1_i6<-prop1_i6[sample]
-			p1_i7<-prop1_i7[sample]
-			p1_i8<-prop1_i8[sample]
-			p1_i9<-prop1_i9[sample]
-			p1_i10<-prop1_i10[sample]
+      # priors for nonet prop
+      alpha_nonet_prop ~ dnorm(alpha_nonet_prop_mean, alpha_nonet_prop_sd) I(0,)
+      p1_nonet_prop ~ dnorm(p1_nonet_prop_mean, p1_nonet_prop_sd) I(0,)
+      p2_nonet_prop ~ dnorm(p2_nonet_prop_mean, p2_nonet_prop_sd) I(0,)
+      b1_nonet_prop ~ dnorm(b1_nonet_prop_mean, b1_nonet_prop_sd) I(0,)
+      b2_nonet_prop ~ dnorm(b2_nonet_prop_mean, b2_nonet_prop_sd) I(0,)
+      b3_nonet_prop ~ dnorm(b3_nonet_prop_mean, b3_nonet_prop_sd) I(0,)
+      
+      # priors for mean nets
+      for(i in 1:max_hhsize){
+			  alpha_mean_nets[i] ~ dnorm(alpha_mean_nets_mean[i], alpha_mean_nets_sd[i]) I(0,)
+			  beta_mean_nets[i] ~ dnorm(beta_mean_nets_mean[i], beta_mean_nets_sd[i]) I(0,)
+			}
+      
+      
+      for (i in 1:quarter_count){
+        for (j in 1:max_hhsize){
+        
+          nonet_prop[i,j] <- alpha_nonet_prop + p1_nonet_prop*j + p2_nonet_prop*pow(j,2) + b1_nonet_prop*net_count_percapita[i] + b2_nonet_prop*pow(net_count_percapita[i],2) + b3_nonet_prop*pow(net_count_percapita[i],3)
+          mean_net_count[i,j] <- alpha_mean_nets[j] + beta_mean_nets[j]*net_count_percapita[i]
+        }
+      }
 
-      # parameters for % hh's with no nets model
-			p0_b1<-prop0_b1[sample2]
-			p0_b2<-prop0_b2[sample2]
-			p0_b3<-prop0_b3[sample2]
-			
-			p0_p1<-prop0_p1[sample2]
-			p0_p2<-prop0_p2[sample2]
-			
-			p0_i1<-prop0_i1[sample2]	
-			
-			
-			for(i in 1:quarter_count){	
-				for(j in 1:10){
-						prop0[i,j]<-p0_i1 + p0_p1*j + p0_p2*pow(j,2) + p0_b1*ThetaT3[i] + p0_b2*pow(ThetaT3[i],2) + p0_b3*pow(ThetaT3[i],3)	
-				}
-				prop1[i,1]<-p1_i1 + p1_b1*ThetaT3[i]
-				prop1[i,2]<-p1_i2 + p1_b2*ThetaT3[i]
-				prop1[i,3]<-p1_i3 + p1_b3*ThetaT3[i]
-				prop1[i,4]<-p1_i4 + p1_b4*ThetaT3[i]
-				prop1[i,5]<-p1_i5 + p1_b5*ThetaT3[i]
-				prop1[i,6]<-p1_i6 + p1_b6*ThetaT3[i]
-				prop1[i,7]<-p1_i7 + p1_b7*ThetaT3[i]
-				prop1[i,8]<-p1_i8 + p1_b8*ThetaT3[i]
-				prop1[i,9]<-p1_i9 + p1_b9*ThetaT3[i]
-				prop1[i,10]<-p1_i10 + p1_b10*ThetaT3[i]		
-			}"
+"
+# test_snippet(paste( model_preface, llin_prior, citn_prior, manu_nmcp_init, llin_quarterly, citn_quarterly, accounting, indicators, model_suffix), test_data = SVY)
 
 
 if(any(is.na(SVY$sTot_llin)) | any(is.na(SVY$sTot_citn))){
@@ -679,7 +654,7 @@ if(any(is.na(SVY$sTot_llin)) | any(is.na(SVY$sTot_citn))){
                              llin_quarterly, 
                              citn_quarterly, 
                              accounting, 
-                             updating, 
+                             indicators, 
                              model_suffix,
                              sep="\n")
 }else{
@@ -691,7 +666,7 @@ if(any(is.na(SVY$sTot_llin)) | any(is.na(SVY$sTot_citn))){
                              citn_quarterly, 
                              accounting, 
                              surveys,  # this is the only difference
-                             updating, 
+                             indicators, 
                              model_suffix,
                              sep="\n")
   
@@ -752,7 +727,7 @@ jdat <- coda.samples(jags,variable.names=c('manufacturer_sigma',
                                            
                                            'tot_nets_perquarter_llin',
                                            'tot_nets_perquarter_citn',
-                                           'ThetaT3',
+                                           'net_count_percapita',
                                            
                                            'survey_estimated_llin',
                                            'survey_estimated_citn',
@@ -771,7 +746,7 @@ prop1=grep("^prop1\\[",names(var))
 prop0=grep("^prop0\\[",names(var))
 
 
-ThetaT3=grep("ThetaT3\\[",names(var))
+net_count_percapita=grep("net_count_percapita\\[",names(var))
 
 p0<-matrix(plogis(var[prop0]),ncol=10,nrow=73)
 p1<-matrix(var[prop1],ncol=10,nrow=73)
