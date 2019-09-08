@@ -244,8 +244,8 @@ if(nrow(this_survey_data)==0){
     nTotal_itn_sd <- varsd[dTotitn]
   }
   
-  sample_times <- seq(min_year, max_year+1, 0.25) 
-  
+  quarter_timesteps <- seq(min_year, max_year + 0.75, 0.25)
+
   # TODO: change "itn" to "citn" everywhere above here
   
   SVY <- list(    mTot_llin = as.numeric(nTotal_llin_mean),
@@ -253,8 +253,8 @@ if(nrow(this_survey_data)==0){
                   mTot_citn = as.numeric(nTotal_itn_mean),
                   sTot_citn = as.numeric(nTotal_itn_sd),
                   # TODO: these are not always identical to the ones in Sam's original code (see Ghana eg)
-                  quarter_start_indices = sapply(floor(totnet_calc_list$date/0.25) * 0.25, function(time){which(time==sample_times)}), # floor yearquarter index
-                  quarter_end_indices = sapply(ceiling(totnet_calc_list$date/0.25) * 0.25, function(time){which(time==sample_times)}), # ceiling yearquarter index
+                  quarter_start_indices = sapply(floor(totnet_calc_list$date/0.25) * 0.25, function(time){which(time==quarter_timesteps)}), # floor yearquarter index
+                  quarter_end_indices = sapply(ceiling(totnet_calc_list$date/0.25) * 0.25, function(time){which(time==quarter_timesteps)}), # ceiling yearquarter index
                   quarter_prop_completed = (totnet_calc_list$date - floor(totnet_calc_list$date/0.25) * 0.25)/0.25, # % of quarter elapsed
                   quarter_prop_remaining = 1- (totnet_calc_list$date - floor(totnet_calc_list$date/0.25) * 0.25)/0.25, # % of quarter yet to come
                   manufacturer_data = this_manufacturer_data,
@@ -306,7 +306,7 @@ moving_avg_weights <- prop.table(movingavg_indicators, 2) # scale to one in each
 # add to svy list
 SVY$moving_avg_weights <- moving_avg_weights
 SVY$nrow_moving_avg <- nrow(moving_avg_weights)
-SVY$quarter_count <- SVY$year_count*4 
+SVY$quarter_count <- length(quarter_timesteps)
 
 ### Scale NMCP to nets per person, save summary stats  #####----------------------------------------------------------------------------------------------------------------------------------
 
@@ -319,7 +319,7 @@ nmcp_llin_pp[this_manufacturer_data==0] <- 0
 # todo: remove or fix this
 # a hack if all NMCP itns are NAs - for example for chad.
 if(sum(is.na(nmcp_citn))==SVY$year_count){
-  print("SETTING cITNS TO ZERO IN LATER YEARS: WHY???")
+  warning("SETTING cITNS TO ZERO IN LATER YEARS: WHY???")
   nmcp_citn[14:17]=0
 }
 
@@ -685,13 +685,13 @@ update=1000000
 n.iter=50000
 thin=100
 
-# temp for testing
-n.adapt=1000
-update=10000
-n.iter=500
-thin=10
+# # temp for testing
+# n.adapt=1000
+# update=10000
+# n.iter=500
+# thin=10
 
-
+tic <- Sys.time()
 jags<-c()
 jags <- jags.model(file=textConnection(full_model_string),
                    data = SVY,
@@ -700,121 +700,140 @@ jags <- jags.model(file=textConnection(full_model_string),
 
 update(jags,n.iter=update)
 
+names_to_extract <- c('delta_prior_llin',
+                      'delta_adjusted',
+                      'final_stock',
 
-# extract needed variables (TODO: make a function for this, remove year hard-coding)
-jdat <- coda.samples(jags,variable.names=c('manufacturer_sigma',
-                                           'nmcp_sigma_llin',
-                                           'extra',
-                                           'delta_adjusted',
-                                           'initial_stock',
-                                           'final_stock',
-                                           'mu',
-                                           'delta',
-                                           'delta_prior_citn',
-                                           'delta_prior_llin',
-                                           
-                                           'mv_k_llin',
-                                           'mv_L_llin',
-                                           'quarter_fractions_llin',
-                                           'llins_distributed',
-                                           'quarterly_net_count_llin',
-                                           
-                                           'mv_k_citn',
-                                           'mv_L_citn',
-                                           'quarter_fractions_citn',
-                                           'citns_distributed',
-                                           'quarterly_net_count_citn',
-                                           
-                                           'tot_nets_perquarter_llin',
-                                           'tot_nets_perquarter_citn',
-                                           'net_count_percapita',
-                                           
-                                           'survey_estimated_llin',
-                                           'survey_estimated_citn',
-                                           
-                                           'prop1',
-                                           'prop0'
-                                           
-                                           ),
+                      'llins_distributed',
+                      'citns_distributed',
+                      
+                      'tot_nets_perquarter_llin',
+                      'tot_nets_perquarter_citn',
+
+                      'nonet_prop',
+                      'mean_net_count'
+)
+
+jdat <- coda.samples(jags,variable.names=names_to_extract,
                      n.iter=n.iter,thin=thin) 
 
+toc <- Sys.time()
 
-var<-colMeans(jdat[[1]])
-quarter_fractions_llin=grep("quarter_fractions_llin",names(var))
+time_elapsed <- toc-tic
 
-prop1=grep("^prop1\\[",names(var))
-prop0=grep("^prop0\\[",names(var))
+### Extract values  #####----------------------------------------------------------------------------------------------------------------------------------
 
+raw_estimates <-colMeans(jdat[[1]])
 
-net_count_percapita=grep("net_count_percapita\\[",names(var))
+model_estimates <- lapply(names_to_extract, function(this_name){
+  estimates <- raw_estimates[names(raw_estimates) %like% this_name]
+  if (names(estimates)[[1]] %like% ","){
+    print("extracting matrix")
+    
+    full_names <- names(estimates)
+    rowmax <- max(as.integer(gsub(".*\\[([0-9]+),.*", "\\1", full_names)))
+    colmax <- max(as.integer(gsub(".*,([0-9]+)\\].*", "\\1", full_names)))
+    estimates <- matrix(estimates, nrow=rowmax, ncol=colmax)
+  }else{
+    print("extracting vector")
+    estimates <- as.numeric(estimates)
+  }
+  
+  return(estimates)
+})
+names(model_estimates) <- names_to_extract
 
-p0<-matrix(plogis(var[prop0]),ncol=10,nrow=73)
-p1<-matrix(var[prop1],ncol=10,nrow=73)
+model_estimates[["nonet_prop"]] <- plogis(model_estimates[["nonet_prop"]])
 
+# uncertainty for some values
+raw_posterior_densities <- HPDinterval(jdat)[[1]]
 
-ThetaM2=grep("ThetaM2\\[",names(var))
+uncertainty_vals <- c('llins_distributed',
+                      'citns_distributed',
+                      'tot_nets_perquarter_llin',
+                      'tot_nets_perquarter_citn')
 
-ThetaM=grep("ThetaM\\[",names(var))
-ThetaT=grep("ThetaT\\[",names(var))
-ThetaT2=grep("ThetaT2\\[",names(var))
+posterior_densities <- lapply(uncertainty_vals, function(this_name){
+  posteriors <- raw_posterior_densities[rownames(raw_posterior_densities) %like% this_name,]
+  posteriors <- data.table(posteriors)
+  if (nrow(posteriors)==length(quarter_timesteps)){
+    posteriors[, year:=quarter_timesteps]
+  }
+  posteriors[, metric:=this_name]
+  return(posteriors)
+})
+posterior_densities <- rbindlist(posterior_densities)
 
-mu=grep("mu",names(var))
-manufacturer_sigma=grep("manufacturer_sigma",names(var))
-nmcp_sigma_llin=grep("nmcp_sigma_llin",names(var))
-delta=grep("^delta\\[",names(var))
-delta_adjusted=grep("^delta_adjusted\\[",names(var))
+# todo: net half-lives
+# todo: other indicators
 
-delta_tot=grep("^delta_tot\\[",names(var))
+### Indicators  #####----------------------------------------------------------------------------------------------------------------------------------
 
-initial_stock=grep("^initial_stock\\[",names(var))
-underdist=grep("^underdist\\[",names(var))
-
-
-llinD=grep("^llinD\\[",names(var))
-itnD=grep("^itnD\\[",names(var))
-
-delta_prior_llin=grep("^delta_prior_llin\\[",names(var))
-delta_prior_citn=grep("^delta_prior_citn\\[",names(var))
-delta_store=grep("^delta_store\\[",names(var))
-
-final_stock=grep("final_stock",names(var))
-k_llin=grep("mv_k_llin\\[",names(var))
-L=grep("mv_L_llin\\[",names(var))
-k2=grep("mv_k2\\[",names(var))
-L2=grep("mv_L2\\[",names(var))
-ind=grep("ind",names(var))
-ind2=grep("ind2",names(var))
-zz=grep("zz",names(var))
-
-
-p.v2=grep("p.v2",names(var))
-xx=grep("xx",names(var))
-yy=grep("yy",names(var))
-
-M<-matrix(var[ThetaM],nrow=73,ncol=18)
-M2<-matrix(var[ThetaM2],nrow=73,ncol=18)
-
-ic<- HPDinterval(jdat)[[1]]
-Thetaic=grep("ThetaT\\[",rownames(ic))
-Theta2ic=grep("ThetaT2\\[",rownames(ic))
-itnDic=grep("itnD\\[",rownames(ic))
-llinDic=grep("llinD\\[",rownames(ic))
-
-sigmoid<-function(t,k,L){
-  v<-exp(k-k/(1-(t/L)^2))
-  v[t>L]<-0
-  return(v)	
-}
-
-half_lifes<-c()
-for(i in 1:18){
-  t=seq(0,10,.01)
-  sig<-sigmoid(t,var[k][i],var[L][i])
-  half_lifes[i]<-(t[which.min(abs(sig-0.5))])
-}
-
-hl=cbind(2000:2017,half_lifes,SVY$nmcp_llin)
+## Actually, no indicators for now-- I don't think I want to maintain the same ones anyway
 
 
-# then: plotting, saving
+### Plotting  #####----------------------------------------------------------------------------------------------------------------------------------
+
+quarterly_nets <- as.data.table(model_estimates[c("llins_distributed", 
+                                                  "citns_distributed", 
+                                                  "tot_nets_perquarter_llin", 
+                                                  "tot_nets_perquarter_citn")])
+quarterly_nets[, year:=quarter_timesteps]
+quarterly_nets <- melt(quarterly_nets, id.vars = "year", variable.name="metric", value.name="mean")
+quarterly_nets <- merge(quarterly_nets, posterior_densities, by=c("year", "metric"), all=T)
+
+
+quarterly_totals <- quarterly_nets[metric %like% "tot"]
+quarterly_totals[, net_type:=ifelse(metric %like% "citn", "citn", "llin")]
+setnames(quarterly_totals, "mean", "model_net_count")
+
+survey_data <- data.table(year=this_survey_data$date,
+                          llin=SVY$mTot_llin,
+                          citn=SVY$mTot_citn)
+survey_data <- melt(survey_data, id.vars = "year", variable.name = "net_type", value.name = "survey_net_count")
+
+
+annual_estimates <- data.table(year=min_year:max_year,
+                               manufacturer_counts=SVY$manufacturer_data,
+                               model_stock=model_estimates$final_stock)
+
+
+ggplot(data=quarterly_totals, aes(x=year)) +
+  geom_ribbon(aes(ymin=lower, ymax=upper, fill=net_type), alpha=0.3) + 
+  geom_line(aes(y=model_net_count, color=net_type), size=1) +
+  geom_point(data=survey_data, aes(y=survey_net_count, color=net_type), size=3) +
+  labs(title= paste("Total nets:", this_country),
+       x="Year",
+       y="Net Count")
+
+
+# not sure these should go together? todo: add nmcp distribution 
+ggplot(data=annual_estimates, aes(x=year)) +
+  geom_point(aes(y=manufacturer_counts), color='green',size=4,alpha=0.6) +
+  geom_point(aes(y=model_stock),color='black',size=3,alpha=0.9)  +
+  geom_line(aes(y=model_stock),color='black',size=1,alpha=0.4,linetype="dotted")  +
+  labs(title= paste("Manufacturer and Distribution:", this_country),
+       x="Year",
+       y="Net Count")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
