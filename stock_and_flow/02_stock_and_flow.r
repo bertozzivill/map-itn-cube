@@ -585,7 +585,7 @@ for(j in 1:year_count){
 
 # distribute citns across quarters
 for (j in 1:quarter_count){
-  citns_distributed[j] <- delta_adjusted[(round(j/4+0.3))] * quarter_fractions_citn[(round(j/4+0.3)), (((j/4)-(round(j/4+0.3)-1))*4) ] # todo: find easier math
+  citns_distributed[j] <- delta_prior_citn[(round(j/4+0.3))] * quarter_fractions_citn[(round(j/4+0.3)), (((j/4)-(round(j/4+0.3)-1))*4) ] # todo: find easier math
   for (i in 1:quarter_count){
     quarterly_net_count_citn[i,j] <- ifelse(j>i, 0, ifelse(time_since_distribution[i,j] >= mv_L_citn[(round(j/4+0.3))], 0, citns_distributed[j] * exp(mv_k_citn[(round(j/4+0.3))]-mv_k_citn[(round(j/4+0.3))]/(1-(time_since_distribution[i,j]/mv_L_citn[(round(j/4+0.3))])^2))))
   }
@@ -808,13 +808,13 @@ ggplot(data=quarterly_totals, aes(x=year)) +
 
 
 # not sure these should go together? todo: add nmcp distribution 
-ggplot(data=annual_estimates, aes(x=year)) +
-  geom_point(aes(y=manufacturer_counts), color='green',size=4,alpha=0.6) +
-  geom_point(aes(y=model_stock),color='black',size=3,alpha=0.9)  +
-  geom_line(aes(y=model_stock),color='black',size=1,alpha=0.4,linetype="dotted")  +
-  labs(title= paste("Manufacturer and Distribution:", this_country),
-       x="Year",
-       y="Net Count")
+# ggplot(data=annual_estimates, aes(x=year)) +
+#   geom_point(aes(y=manufacturer_counts), color='green',size=4,alpha=0.6) +
+#   geom_point(aes(y=model_stock),color='black',size=3,alpha=0.9)  +
+#   geom_line(aes(y=model_stock),color='black',size=1,alpha=0.4,linetype="dotted")  +
+#   labs(title= paste("Manufacturer and Distribution:", this_country),
+#        x="Year",
+#        y="Net Count")
 
 
 
