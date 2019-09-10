@@ -750,7 +750,11 @@ names_to_extract <- c('bounded_est_nmcp_nets_percapita_llin',
                       'nmcp_net_count_citn',
   
                       'adjusted_llins_distributed',
+                      'initial_stock',
                       'final_stock',
+                      
+                      'survey_estimated_llin',
+                      'survey_estimated_citn',
 
                       'llins_distributed_quarterly',
                       'citns_distributed_quarterly',
@@ -829,25 +833,52 @@ quarterly_nets <- melt(quarterly_nets, id.vars = "year", variable.name="metric",
 quarterly_nets <- merge(quarterly_nets, posterior_densities, by=c("year", "metric"), all=T)
 quarterly_nets[, type:=ifelse(metric %like% "citn", "citn", "llin")]
 
-# survey_data <- data.table(year=this_survey_data$date,
-#                           llin=main_input_list$survey_llin_count,
-#                           citn=main_input_list$survey_citn_count)
-# survey_data <- melt(survey_data, id.vars = "year", variable.name = "type", value.name = "survey_net_count")
-# 
+annual_nets <- copy(quarterly_nets)
+annual_nets[, year:=floor(year)]
+annual_nets <- annual_nets[,  lapply(.SD, sum), by=c("metric", "year", "type")]
 
-annual_estimates <- data.table(year=start_year:end_year,
-                               manufacturer_counts=main_input_list$manufacturer_data,
-                               model_stock=model_estimates$final_stock,
-                               citns_distributed_quarterly=this_nmcp[type=="citn"]$nmcp_count)
+survey_model_estimates[, type:=gsub("_count", "", variable)]
+
+ggplot(data=annual_nets[metric %like% "tot"], aes(x=year)) +
+  geom_ribbon(aes(ymin=lower, ymax=upper, fill=type), alpha=0.3) + 
+  geom_line(aes(y=mean, color=type), size=1) +
+  geom_point(data=survey_model_estimates, aes(y=mean, color=type), size=2) +
+  labs(title= paste("Nets in Houses:", this_country),
+       x="Year",
+       y="Net Count")
 
 
-ggplot(data=quarterly_nets[metric %like% "distributed"], aes(x=year)) +
+survey_fits <- survey_model_estimates[, list(year, type, data_mean=mean)]
+survey_fits[, model_mean:=c(model_estimates$survey_estimated_llin, model_estimates$survey_estimated_citn)]
+survey_fits <- melt(survey_fits, id.vars=c("year", "type"))
+
+ggplot(survey_fits, aes(x=year, y=value, color=type, shape=variable)) +
+  geom_point(size=3, alpha=0.75)
+
+
+ggplot(data=annual_nets[metric %like% "distributed"], aes(x=year)) +
   geom_ribbon(aes(ymin=lower, ymax=upper, fill=type), alpha=0.3) + 
   geom_line(aes(y=mean, color=type), size=1) +
   geom_point(data=this_nmcp, aes(y=nmcp_count, color=type), size=2) +
-  labs(title= paste("Total nets:", this_country),
+  labs(title= paste("Nets Distributed:", this_country),
        x="Year",
        y="Net Count")
+
+
+stock_metrics <- data.table(year=years,
+                            model_stock_initial=model_estimates$initial_stock,
+                            model_stock_final=model_estimates$final_stock,
+                            model_distributed=model_estimates$adjusted_llins_distributed,
+                            data_manu=this_manufacturer_data$llins,
+                            data_nmcp=this_nmcp[type=="llin"]$nmcp_count)
+
+stock_metrics[, data_max_stock:=cumsum(data_manu)]
+
+ggplot(stock_metrics, aes(x=year)) + 
+  geom_ribbon(aes(ymin=data_nmcp, ymax=data_max_stock), alpha=0.3) + 
+  geom_line(aes(y=model_stock_initial))
+
+
 
 
 # not sure these should go together? todo: add nmcp distribution 
