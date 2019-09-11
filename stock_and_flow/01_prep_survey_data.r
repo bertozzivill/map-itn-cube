@@ -204,6 +204,21 @@ for_cube <- for_cube[complete.cases(for_cube)]
 write.csv(for_cube, file.path(main_dir, "../results/itn_survey_data.csv"), row.names=F) # TODO: compare this to the net data currently being used
 
 
+
+
+## Find household size distributions for surveys  ----------------------------------------------------------------------------------------------------------------------
+
+for_cube[, sample_prop:= hh_sample_wt/sum(hh_sample_wt), by="SurveyId"]
+
+hh_size_props <- for_cube[n_defacto_pop>0, list(hh_prop=sum(sample_prop)), by=list(SurveyId, n_defacto_pop)]
+full_hh_dist <- data.table(expand.grid(unique(hh_size_props$SurveyId), 1:100))
+names(full_hh_dist) <- c("SurveyId", "n_defacto_pop")
+hh_size_props <- merge(hh_size_props, full_hh_dist, by=c("SurveyId", "n_defacto_pop"), all=T)
+hh_size_props[is.na(hh_prop), hh_prop:=0]
+
+write.csv(hh_size_props, file.path(main_dir, "../results/HHsize.csv"), row.names=F)
+
+
 ## SUMMARIZE DATA FOR STOCK AND FLOW  ----------------------------------------------------------------------------------------------------------------------
 
 # todo: drop non-african countries
