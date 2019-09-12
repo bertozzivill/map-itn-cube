@@ -403,14 +403,15 @@ model_suffix <- "}"
 
 # NMCP GP priors-- replace equations 14 and 15? 
 
-llin_prior_older <- "
+llin_prior <- "
             rho_sq_llin ~ dunif(0,1) # restricted to prevent over-smoothing
 	    			tau_llin ~ dunif(0,0.1)
+	    			sigma_sq_llin ~ dunif(0,1000)
 
             # specify covariance function for GP (squared exponential?)
             for (llin_year_row in 1:nmcp_year_count_llin) {
 						for (llin_year_column in 1:nmcp_year_count_llin) {
-							Sigma_gp_llin[llin_year_row, llin_year_column] <-  exp(-( (nmcp_year_indices_llin[llin_year_row] - nmcp_year_indices_llin[llin_year_column]) / rho_sq_llin)^2) + ifelse(llin_year_row==llin_year_column, tau_llin, 0) 
+							Sigma_gp_llin[llin_year_row, llin_year_column] <- sigma_sq_llin * exp(-( (nmcp_year_indices_llin[llin_year_row] - nmcp_year_indices_llin[llin_year_column]) / rho_sq_llin)^2) + ifelse(llin_year_row==llin_year_column, tau_llin, 0) 
 						}
 					  }
 					  
@@ -419,50 +420,29 @@ llin_prior_older <- "
 						 mu_gp_llin[llin_year_idx] <- 0
 					  }
 					  
-					  # todo: don't you need to invert before going into dmnorm?
-					  dist_gp_llin~ dmnorm(mu_gp_llin,Sigma_gp_llin) 
+					  # multivariate normal around nmcp values
+					  nmcp_nets_percapita_llin ~ dmnorm(mu_gp_llin,inverse(Sigma_gp_llin)) 
 	  
 	          # todo: still don't quite get this
 					  for (year_idx in 1:year_count) {
 						for (llin_year_idx in 1:nmcp_year_count_llin) {
-							Sigma_prediction_llin[year_idx, llin_year_idx] <-  exp(-((year_idx - nmcp_year_indices_llin[llin_year_idx])/rho_sq_llin)^2)
+							Sigma_prediction_llin[year_idx, llin_year_idx] <-  sigma_sq_llin * exp(-((year_idx - nmcp_year_indices_llin[llin_year_idx])/rho_sq_llin)^2)
 						}
 					  }			  
 					  
 					  # prior estimate of llins per capita distributed by nmcp
-						est_nmcp_nets_percapita_llin <- Sigma_prediction_llin%*%inverse(Sigma_gp_llin)%*%dist_gp_llin" # what does this do?
-# test_snippet(paste(model_preface, llin_prior_older, model_suffix), test_data = main_input_list)
+						bounded_est_nmcp_nets_percapita_llin <- Sigma_prediction_llin%*%inverse(Sigma_gp_llin)%*%nmcp_nets_percapita_llin" # what does this do?
+# test_snippet(paste(model_preface, llin_prior, model_suffix), test_data = main_input_list)
 
-llin_prior <- "
-            rho_sq_llin ~ dunif(0,1) # restricted to prevent over-smoothing
-	    			tau_llin ~ dunif(0,0.1)
-
-            # specify covariance function for GP (squared exponential?)
-            for (llin_year_row in 1:nmcp_year_count_llin) {
-						for (llin_year_column in 1:nmcp_year_count_llin) {
-							Sigma_gp_llin[llin_year_row, llin_year_column] <-  exp(-( (nmcp_year_indices_llin[llin_year_row] - nmcp_year_indices_llin[llin_year_column]) / rho_sq_llin)^2) + ifelse(llin_year_row==llin_year_column, tau_llin, 0) 
-						}
-					  }
-					  
-            # set GP means to nmcp means
-					  for (llin_year_idx in 1:nmcp_year_count_llin) {
-						 mu_gp_llin[llin_year_idx] <- nmcp_nets_percapita_llin[llin_year_idx]
-					  }
-					  
-					  # todo: don't you need to invert before going into dmnorm?
-					  est_nmcp_nets_percapita_llin ~ dmnorm(mu_gp_llin, inverse(Sigma_gp_llin))
-	  
-" 
-#test_snippet(paste(model_preface, llin_prior, model_suffix), test_data = main_input_list)
-
-citn_prior_older <- "
+citn_prior <- "
             rho_sq_citn ~ dunif(0,1)
   					tau_citn ~ dunif(0,0.1)
+  					sigma_sq_citn ~ dunif(0,1000)
             
             # specify covariance function for GP (squared exponential?)
             for (citn_year_row in 1:nmcp_year_count_citn) {
 						for (citn_year_column in 1:nmcp_year_count_citn) {
-							Sigma_gp_citn[citn_year_row, citn_year_column] <-  exp(-((nmcp_year_indices_citn[citn_year_row] - nmcp_year_indices_citn[citn_year_column])/rho_sq_citn)^2)  +ifelse(citn_year_row==citn_year_column,tau_citn,0) 
+							Sigma_gp_citn[citn_year_row, citn_year_column] <- sigma_sq_citn *  exp(-((nmcp_year_indices_citn[citn_year_row] - nmcp_year_indices_citn[citn_year_column])/rho_sq_citn)^2)  +ifelse(citn_year_row==citn_year_column,tau_citn,0) 
 						}
 					  }
 					  
@@ -471,39 +451,18 @@ citn_prior_older <- "
 						 mu_gp_citn[citn_year_index] <- 0
 					  }
 					  
-					  dist_gp_citn~ dmnorm(mu_gp_citn,Sigma_gp_citn) 
+					  nmcp_nets_percapita_citn~ dmnorm(mu_gp_citn,inverse(Sigma_gp_citn) )
 	  
 					  for (year_idx in 1:year_count) {
 						for (citn_year_index in 1:nmcp_year_count_citn) {
-							Sigma_prediction_citn[year_idx, citn_year_index] <- exp(-((year_idx - nmcp_year_indices_citn[citn_year_index])/rho_sq_citn)^2)
+							Sigma_prediction_citn[year_idx, citn_year_index] <- sigma_sq_citn * exp(-((year_idx - nmcp_year_indices_citn[citn_year_index])/rho_sq_citn)^2)
 						}
 					  }			  
 					  
 					# prior estimate of itns per capita distributed by nmcp
-					est_nmcp_nets_percapita_citn <- Sigma_prediction_citn%*%inverse(Sigma_gp_citn)%*%dist_gp_citn"
+					bounded_est_nmcp_nets_percapita_citn <- Sigma_prediction_citn%*%inverse(Sigma_gp_citn)%*%nmcp_nets_percapita_citn"
 
 # test_snippet(paste(model_preface, citn_prior, model_suffix), test_data = main_input_list)
-
-citn_prior <- "
-            rho_sq_citn ~ dunif(0,1) # restricted to prevent over-smoothing
-	    			tau_citn ~ dunif(0,0.1)
-
-            # specify covariance function for GP (squared exponential?)
-            for (citn_year_row in 1:nmcp_year_count_citn) {
-						for (citn_year_column in 1:nmcp_year_count_citn) {
-							Sigma_gp_citn[citn_year_row, citn_year_column] <-  exp(-( (nmcp_year_indices_citn[citn_year_row] - nmcp_year_indices_citn[citn_year_column]) / rho_sq_citn)^2) + ifelse(citn_year_row==citn_year_column, tau_citn, 0) 
-						}
-					  }
-					  
-            # set GP means to nmcp means
-					  for (citn_year_idx in 1:nmcp_year_count_citn) {
-						 mu_gp_citn[citn_year_idx] <- nmcp_nets_percapita_citn[citn_year_idx]
-					  }
-					  
-					  # todo: don't you need to invert before going into dmnorm?
-					  est_nmcp_nets_percapita_citn ~ dmnorm(mu_gp_citn, inverse(Sigma_gp_citn))
-	  
-" 
 
 # leave GP priors out of it until you talk to Sam
 
@@ -520,9 +479,8 @@ manu_nmcp_init <- "
 						nmcp_sigma_citn[year_idx] ~ dunif(0, 0.01) 	 # error in ITN NMCP
 						
             # start with priors from GP
-            # bounded_est_nmcp_nets_percapita_llin[year_idx] <- max(est_nmcp_nets_percapita_llin[year_idx], 0)
-            # bounded_est_nmcp_nets_percapita_citn[year_idx] <- max(est_nmcp_nets_percapita_citn[year_idx], 0)
-            
+
+            # NMCP nets from simple normal, ignore for now
             bounded_est_nmcp_nets_percapita_llin[year_idx] ~ dnorm(nmcp_nets_percapita_llin[year_idx], nmcp_sigma_llin[year_idx]^-2) T(0,)
             bounded_est_nmcp_nets_percapita_citn[year_idx] ~ dnorm(nmcp_nets_percapita_citn[year_idx], nmcp_sigma_citn[year_idx]^-2) T(0,)
             
@@ -662,13 +620,12 @@ surveys <- "for(i in 1:survey_count){
 				quarter_end_index[i] <- quarter_end_indices[i]	 	
 				
 				# to estimate # of nets at time of survey, linearly interpolate between the surrounding quartrly estimates 
-				survey_prior_llin[i] <- quarter_prop_completed[i] * tot_nets_perquarter_llin[quarter_start_index[i]] + quarter_prop_remaining[i] * tot_nets_perquarter_llin[quarter_end_index[i]]	
-				survey_prior_citn[i] <- quarter_prop_completed[i] * tot_nets_perquarter_citn[quarter_start_index[i]] + quarter_prop_remaining[i] * tot_nets_perquarter_citn[quarter_end_index[i]]	
-				survey_prior_total[i] <- survey_prior_llin[i] + survey_prior_citn[i] # TODO: never used
+				est_survey_llin_count[i] <- quarter_prop_completed[i] * tot_nets_perquarter_llin[quarter_start_index[i]] + quarter_prop_remaining[i] * tot_nets_perquarter_llin[quarter_end_index[i]]	
+				est_survey_citn_count[i] <- quarter_prop_completed[i] * tot_nets_perquarter_citn[quarter_start_index[i]] + quarter_prop_remaining[i] * tot_nets_perquarter_citn[quarter_end_index[i]]	
+				est_survey_total[i] <- est_survey_llin_count[i] + est_survey_citn_count[i] # TODO: never used
 				
-				# TODO: why aren't these originally extracted from the model outputs?
-				survey_estimated_llin[i] ~ dnorm(survey_prior_llin[i], survey_llin_sd[i]^-2)	T(survey_llin_lowerlim[i], survey_llin_upperlim[i])
-				survey_estimated_citn[i] ~ dnorm(survey_prior_citn[i], survey_citn_sd[i]^-2) T(survey_citn_lowerlim[i], survey_citn_upperlim[i])
+				survey_llin_count[i] ~ dnorm(est_survey_llin_count[i], survey_llin_sd[i]^-2)	T(survey_llin_lowerlim[i], survey_llin_upperlim[i])
+				survey_citn_count[i] ~ dnorm(est_survey_citn_count[i], survey_citn_sd[i]^-2) T(survey_citn_lowerlim[i], survey_citn_upperlim[i])
 			}"
 
 indicators <- "
@@ -753,8 +710,8 @@ names_to_extract <- c('bounded_est_nmcp_nets_percapita_llin',
                       'initial_stock',
                       'final_stock',
                       
-                      'survey_estimated_llin',
-                      'survey_estimated_citn',
+                      'est_survey_llin_count',
+                      'est_survey_citn_count',
 
                       'llins_distributed_quarterly',
                       'citns_distributed_quarterly',
@@ -838,18 +795,21 @@ annual_nets[, year:=floor(year)]
 annual_nets <- annual_nets[,  lapply(.SD, sum), by=c("metric", "year", "type")]
 
 survey_model_estimates[, type:=gsub("_count", "", variable)]
+survey_model_estimates[, model_mean:=c(model_estimates$est_survey_llin_count, model_estimates$est_survey_citn_count)]
 
-ggplot(data=annual_nets[metric %like% "tot"], aes(x=year)) +
+ggplot(data=quarterly_nets[metric %like% "tot"], aes(x=year)) +
   geom_ribbon(aes(ymin=lower, ymax=upper, fill=type), alpha=0.3) + 
   geom_line(aes(y=mean, color=type), size=1) +
   geom_point(data=survey_model_estimates, aes(y=mean, color=type), size=2) +
+  geom_linerange(data=survey_model_estimates, aes(ymin=lower_limit, ymax=upper_limit, color=type)) +
+  geom_point(data=survey_model_estimates, aes(y=model_mean, color=type), shape=1, size=3) + 
   labs(title= paste("Nets in Houses:", this_country),
        x="Year",
        y="Net Count")
 
 
 survey_fits <- survey_model_estimates[, list(year, type, data_mean=mean)]
-survey_fits[, model_mean:=c(model_estimates$survey_estimated_llin, model_estimates$survey_estimated_citn)]
+survey_fits[, model_mean:=c(model_estimates$est_survey_llin_count, model_estimates$est_survey_citn_count)]
 survey_fits <- melt(survey_fits, id.vars=c("year", "type"))
 
 ggplot(survey_fits, aes(x=year, y=value, color=type, shape=variable)) +
