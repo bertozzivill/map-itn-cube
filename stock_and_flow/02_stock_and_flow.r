@@ -58,11 +58,6 @@ setnames(survey_data, "V1", "X")
 mics3_data <- fread(file.path(main_dir,'Aggregated_HH_Svy_indicators_MICS3_080817.csv'),stringsAsFactors=FALSE)
 no_report_surveydata <-fread(file.path(main_dir,'No Report SVYs_080817.csv'),stringsAsFactors=FALSE)
 
-# distribution of household sizes in surveys-- used in itn cube as well, where does it come from?
-# update: sam has send script for this, look thhrough it
-# note: not actually used in this script, keep it here anyway as a reminder
-household_sizes<-fread(file.path(main_dir, 'HHsize.csv'))
-
 # todo: get populations from database (frankenpop)
 # population_v1<-fread(file.path(main_dir,'Population_For_Sam.csv'),stringsAsFactors=FALSE)
 population_v2<-fread(file.path(main_dir,'Population_For_Sam_2017.csv'),stringsAsFactors=FALSE)
