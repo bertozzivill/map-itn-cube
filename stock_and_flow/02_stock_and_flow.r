@@ -6,99 +6,85 @@
 ## Main script for the stock and flow model
 ##############################################################################################################
 
-library(data.table)
-library(ggplot2)
-library(rjags)
-library(zoo)
-library(raster)
-library(RecordLinkage)
-
-rm(list=ls())
-
-# TODO: FIX THE WAY POPULATION IS USED
-
-### Set initial values #####----------------------------------------------------------------------------------------------------------------------------------
-
-main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/data_from_sam"
-
-start_year <- 2000
-end_year<- 2017
-this_country <- "GHA"
-
-years <- start_year:end_year
-quarter_timesteps <- seq(start_year, end_year + 0.75, 0.25)
-set.seed(084)
-
-n.adapt=10000
-update=1000000
-n.iter=50000
-thin=10
-
-### Read in all data #####----------------------------------------------------------------------------------------------------------------------------------
-
-# NMCP data from WHO
-nmcp_data<-fread(file.path(main_dir, 'NMCP_2018.csv'),stringsAsFactors=FALSE)
-setnames(nmcp_data, "ITN", "CITN")
-
-# Manufacturer data from WHO
-manufacturer_data<-fread(file.path(main_dir, 'MANU_2018.csv'),stringsAsFactors=FALSE)
-
-# todo: see if this formatting is necessary with 2019 data
-setnames(manufacturer_data, names(manufacturer_data), as.character(manufacturer_data[1,]))
-manufacturer_data <- manufacturer_data[2:nrow(manufacturer_data),]
-manufacturer_data <- manufacturer_data[Country!=""]
-manufacturer_data[, Country := NULL]
-manufacturer_data <- melt(manufacturer_data, id.vars=c("MAP_Country_Name", "ISO3"), value.name="llins", variable.name="year")
-
-# from dhs prep script
-survey_data <- fread(file.path(main_dir, 'Aggregated_HH_Svy_indicators_28052019.csv'),stringsAsFactors=FALSE)
-setnames(survey_data, "V1", "X")
-
-# MICS3 and nosurvey data both from Bonnie originally, defer to eLife paper to explain them
-mics3_data <- fread(file.path(main_dir,'Aggregated_HH_Svy_indicators_MICS3_080817.csv'),stringsAsFactors=FALSE)
-no_report_surveydata <-fread(file.path(main_dir,'No Report SVYs_080817.csv'),stringsAsFactors=FALSE)
-
-# todo: get populations from database (frankenpop)
-# population_v1<-fread(file.path(main_dir,'Population_For_Sam.csv'),stringsAsFactors=FALSE)
-population_v2<-fread(file.path(main_dir,'Population_For_Sam_2017.csv'),stringsAsFactors=FALSE)
-setnames(population_v2, "iso_3_code", "ISO3")
-
-# TODO: move mics3 and nosurvey processing to another script
-
-### Useful Function #####----------------------------------------------------------------------------------------------------------------------------------
-
-extract_jags <- function(varnames, jdata){
+run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out_dir){
   
-  all_estimates <- lapply(varnames, function(varname){
-    estimates <- jdata[names(jdata) %like% varname]
-    if (names(estimates)[[1]] %like% ","){
-      print("extracting matrix")
-      
-      full_names <- names(estimates)
-      rowmax <- max(as.integer(gsub(".*\\[([0-9]+),.*", "\\1", full_names)))
-      colmax <- max(as.integer(gsub(".*,([0-9]+)\\].*", "\\1", full_names)))
-      estimates <- matrix(estimates, nrow=rowmax, ncol=colmax)
-    }else{
-      print("extracting vector")
-      estimates <- as.numeric(estimates)
-    }
+  # TODO: FIX THE WAY POPULATION IS USED
+  
+  ### Set initial values #####----------------------------------------------------------------------------------------------------------------------------------
+  years <- start_year:end_year
+  quarter_timesteps <- seq(start_year, end_year + 0.75, 0.25)
+  set.seed(084)
+  
+  n.adapt=10000
+  update=1000000
+  n.iter=50000
+  thin=10
+  
+  ### Read in all data #####----------------------------------------------------------------------------------------------------------------------------------
+  
+  # NMCP data from WHO
+  nmcp_data<-fread(file.path(main_dir, 'NMCP_2018.csv'),stringsAsFactors=FALSE)
+  setnames(nmcp_data, "ITN", "CITN")
+  
+  # Manufacturer data from WHO
+  manufacturer_data<-fread(file.path(main_dir, 'MANU_2018.csv'),stringsAsFactors=FALSE)
+  
+  # todo: see if this formatting is necessary with 2019 data
+  setnames(manufacturer_data, names(manufacturer_data), as.character(manufacturer_data[1,]))
+  manufacturer_data <- manufacturer_data[2:nrow(manufacturer_data),]
+  manufacturer_data <- manufacturer_data[Country!=""]
+  manufacturer_data[, Country := NULL]
+  manufacturer_data <- melt(manufacturer_data, id.vars=c("MAP_Country_Name", "ISO3"), value.name="llins", variable.name="year")
+  
+  # from dhs prep script
+  survey_data <- fread(file.path(main_dir, 'Aggregated_HH_Svy_indicators_28052019.csv'),stringsAsFactors=FALSE)
+  setnames(survey_data, "V1", "X")
+  
+  # MICS3 and nosurvey data both from Bonnie originally, defer to eLife paper to explain them
+  mics3_data <- fread(file.path(main_dir,'Aggregated_HH_Svy_indicators_MICS3_080817.csv'),stringsAsFactors=FALSE)
+  no_report_surveydata <-fread(file.path(main_dir,'No Report SVYs_080817.csv'),stringsAsFactors=FALSE)
+  
+  # todo: get populations from database (frankenpop)
+  # population_v1<-fread(file.path(main_dir,'Population_For_Sam.csv'),stringsAsFactors=FALSE)
+  population_v2<-fread(file.path(main_dir,'Population_For_Sam_2017.csv'),stringsAsFactors=FALSE)
+  setnames(population_v2, "iso_3_code", "ISO3")
+  
+  # TODO: move mics3 and nosurvey processing to another script
+  
+  ### Useful Function #####----------------------------------------------------------------------------------------------------------------------------------
+  
+  extract_jags <- function(varnames, jdata){
     
-    return(estimates)
-  })
+    all_estimates <- lapply(varnames, function(varname){
+      estimates <- jdata[names(jdata) %like% varname]
+      if (names(estimates)[[1]] %like% ","){
+        print("extracting matrix")
+        
+        full_names <- names(estimates)
+        rowmax <- max(as.integer(gsub(".*\\[([0-9]+),.*", "\\1", full_names)))
+        colmax <- max(as.integer(gsub(".*,([0-9]+)\\].*", "\\1", full_names)))
+        estimates <- matrix(estimates, nrow=rowmax, ncol=colmax)
+      }else{
+        print("extracting vector")
+        estimates <- as.numeric(estimates)
+      }
+      
+      return(estimates)
+    })
+    
+    names(all_estimates) <- varnames
+    
+    return(all_estimates)
+  }
   
-  names(all_estimates) <- varnames
   
-  return(all_estimates)
-}
-
-
-### preprocess MICS3 Data #####----------------------------------------------------------------------------------------------------------------------------------
-
-mics3_data[mics3_data==0] <- 1e-6 # jags dislikes zeros
-mics3_list <- as.list(mics3_data)
-mics3_list$survey_count <- nrow(mics3_data)
-
-mic3_model_string = "
+  ### preprocess MICS3 Data #####----------------------------------------------------------------------------------------------------------------------------------
+  
+  mics3_data[mics3_data==0] <- 1e-6 # jags dislikes zeros
+  mics3_list <- as.list(mics3_data)
+  mics3_list$survey_count <- nrow(mics3_data)
+  
+  mic3_model_string = "
 	model {
 		for(i in 1:survey_count){
 
@@ -117,109 +103,109 @@ mic3_model_string = "
 		}
 	}
 "
-
-mics3_model <- jags.model(textConnection(mic3_model_string),
-                   data = mics3_list,
-                   n.chains = 1,
-                   n.adapt = n.adapt)
-update(mics3_model,n.iter=update)
-mics3_model_output <- coda.samples(mics3_model,variable.names=c('nets_per_hh','llin','citn','tot','llin_per_hh','citn_per_hh'),n.iter=n.iter,thin=thin) 
-
-mics3_model_estimates <- 
-  rbind( as.data.table(c( metric = "mean" ,
-                          list(year = mics3_data$date),
-                          list(names = mics3_data$names),
-                          extract_jags(c("llin_per_hh", "citn_per_hh"), colMeans(mics3_model_output[[1]])))), 
-         as.data.table(c( metric = "sd" ,
-                          list(year = mics3_data$date),
-                          list(names = mics3_data$names),
-                          extract_jags(c("llin_per_hh", "citn_per_hh"), apply(mics3_model_output[[1]],2,sd))))
-  )
-
-mics3_estimates <-data.table(X=1:mics3_list$survey_count,
-                   names=mics3_data$names,
-                   Country=mics3_data$Country,
-                   ISO3=mics3_data$ISO3,
-                   date=mics3_data$date,
-                   avg.hh.size=mics3_data$avg.hh.size,
-                   se.hh.size=mics3_data$se.hh.size,
-                   avg.ITN.hh=mics3_model_estimates[metric=="mean"]$citn_per_hh,
-                   se.ITN.hh=mics3_model_estimates[metric=="sd"]$citn_per_hh,
-                   avg.LLIN.hh=mics3_model_estimates[metric=="mean"]$llin_per_hh,
-                   se.LLIN.hh=mics3_model_estimates[metric=="sd"]$llin_per_hh)
-
-### preprocess No Report Surveys #####----------------------------------------------------------------------------------------------------------------------------------
-
-# Justification for se calculation in eLife paper
-no_report_estimates <- no_report_surveydata[, list(X=1:nrow(no_report_surveydata),
-                                   names=paste(names, round(time)),
-                                   Country,
-                                   ISO3,
-                                   date=time,
-                                   avg.hh.size=average.household.size,
-                                   se.hh.size=average.household.size*0.01,
-                                   avg.ITN.hh=average.number.ofCITNs.per.household,
-                                   se.ITN.hh=average.number.ofCITNs.per.household*0.01,
-                                   avg.LLIN.hh=average.number.of.LLINs.per.household,
-                                   se.LLIN.hh=average.number.of.LLINs.per.household*0.01)]
-no_report_estimates[no_report_estimates==0]<-1e-12
-
-### Combine and process all surveys #####----------------------------------------------------------------------------------------------------------------------------------
-
-col_names<-c('X','names','Country','ISO3','date','avg.hh.size','se.hh.size','avg.ITN.hh','se.ITN.hh','avg.LLIN.hh','se.LLIN.hh')
-
-survey_data <- survey_data[, col_names, with=F]
-survey_data <- rbind(survey_data,mics3_estimates,no_report_estimates)
-survey_data <- survey_data[order(survey_data[,'date']),]
-
-### TODO: up to this point, there is no country subsetting, so all of the above can just happen once in a separate script#####----------------------------------------------------------------------------------------------------------------------------------
-
-# subset data
-this_survey_data <- survey_data[ISO3 %in% this_country,]
-this_manufacturer_data <- manufacturer_data[ISO3==this_country]
-this_pop <- population_v2[ISO3==this_country]
-this_nmcp <- nmcp_data[ISO3==this_country]
-
-# create blank dataframe if country has no surveys
-if(nrow(this_survey_data)==0){
   
-  main_input_list <- list(    survey_llin_count = NA,
-                  survey_llin_sd = NA,
-                  survey_llin_lowerlim = NA,
-                  survey_llin_upperlim = NA,
-                  survey_citn_count = NA,
-                  survey_citn_sd = NA,
-                  survey_citn_lowerlim = NA,
-                  survey_citn_upperlim = NA,
-                  quarter_start_indices = 1,
-                  quarter_end_indices = 0,
-                  quarter_prop_completed = 1,
-                  quarter_prop_remaining = 0,
-                  manufacturer_data = this_manufacturer_data$llins,
-                  year_count = length(years),
-                  quarter_count = length(quarter_timesteps),
-                  survey_count = 1,
-                  population = this_pop$total_population
-                  )
+  mics3_model <- jags.model(textConnection(mic3_model_string),
+                            data = mics3_list,
+                            n.chains = 1,
+                            n.adapt = n.adapt)
+  update(mics3_model,n.iter=update)
+  mics3_model_output <- coda.samples(mics3_model,variable.names=c('nets_per_hh','llin','citn','tot','llin_per_hh','citn_per_hh'),n.iter=n.iter,thin=thin) 
   
-}else { # calculate total nets from surveys 
+  mics3_model_estimates <- 
+    rbind( as.data.table(c( metric = "mean" ,
+                            list(year = mics3_data$date),
+                            list(names = mics3_data$names),
+                            extract_jags(c("llin_per_hh", "citn_per_hh"), colMeans(mics3_model_output[[1]])))), 
+           as.data.table(c( metric = "sd" ,
+                            list(year = mics3_data$date),
+                            list(names = mics3_data$names),
+                            extract_jags(c("llin_per_hh", "citn_per_hh"), apply(mics3_model_output[[1]],2,sd))))
+    )
   
-  this_survey_data[this_survey_data==0] <- 1e-6 # add small amount of precision
+  mics3_estimates <-data.table(X=1:mics3_list$survey_count,
+                               names=mics3_data$names,
+                               Country=mics3_data$Country,
+                               ISO3=mics3_data$ISO3,
+                               date=mics3_data$date,
+                               avg.hh.size=mics3_data$avg.hh.size,
+                               se.hh.size=mics3_data$se.hh.size,
+                               avg.ITN.hh=mics3_model_estimates[metric=="mean"]$citn_per_hh,
+                               se.ITN.hh=mics3_model_estimates[metric=="sd"]$citn_per_hh,
+                               avg.LLIN.hh=mics3_model_estimates[metric=="mean"]$llin_per_hh,
+                               se.LLIN.hh=mics3_model_estimates[metric=="sd"]$llin_per_hh)
   
-  totnet_calc_list <- list(survey_count = nrow(this_survey_data),
-                           population = this_pop[year %in% floor(this_survey_data$date)]$total_population
-                           )
+  ### preprocess No Report Surveys #####----------------------------------------------------------------------------------------------------------------------------------
   
-  totnet_calc_list <- c(as.list(this_survey_data), totnet_calc_list)
+  # Justification for se calculation in eLife paper
+  no_report_estimates <- no_report_surveydata[, list(X=1:nrow(no_report_surveydata),
+                                                     names=paste(names, round(time)),
+                                                     Country,
+                                                     ISO3,
+                                                     date=time,
+                                                     avg.hh.size=average.household.size,
+                                                     se.hh.size=average.household.size*0.01,
+                                                     avg.ITN.hh=average.number.ofCITNs.per.household,
+                                                     se.ITN.hh=average.number.ofCITNs.per.household*0.01,
+                                                     avg.LLIN.hh=average.number.of.LLINs.per.household,
+                                                     se.LLIN.hh=average.number.of.LLINs.per.household*0.01)]
+  no_report_estimates[no_report_estimates==0]<-1e-12
   
-  # TODO: update these with appropriate populations from surveys
-  ########### ADJUSTMENT FOR SURVEYS NOT CONDUCTED NATIONALLY BUT ON A POPULATION AT RISK BASIS
-  if(this_country=='Ethiopia') totnet_calc_list$population=c(68186507,75777180)
-  if(this_country=='Namibia') totnet_calc_list$population[totnet_calc_list$names%in%'Namibia 2009']=1426602
-  if(this_country=='Kenya') totnet_calc_list$population[totnet_calc_list$names%in%'Kenya 2007']=31148650
-  ###############################################################################################
+  ### Combine and process all surveys #####----------------------------------------------------------------------------------------------------------------------------------
   
-  survey_model_string = '
+  col_names<-c('X','names','Country','ISO3','date','avg.hh.size','se.hh.size','avg.ITN.hh','se.ITN.hh','avg.LLIN.hh','se.LLIN.hh')
+  
+  survey_data <- survey_data[, col_names, with=F]
+  survey_data <- rbind(survey_data,mics3_estimates,no_report_estimates)
+  survey_data <- survey_data[order(survey_data[,'date']),]
+  
+  ### TODO: up to this point, there is no country subsetting, so all of the above can just happen once in a separate script#####----------------------------------------------------------------------------------------------------------------------------------
+  
+  # subset data
+  this_survey_data <- survey_data[ISO3 %in% this_country,]
+  this_manufacturer_data <- manufacturer_data[ISO3==this_country]
+  this_pop <- population_v2[ISO3==this_country]
+  this_nmcp <- nmcp_data[ISO3==this_country]
+  
+  # create blank dataframe if country has no surveys
+  if(nrow(this_survey_data)==0){
+    
+    main_input_list <- list(    survey_llin_count = NA,
+                                survey_llin_sd = NA,
+                                survey_llin_lowerlim = NA,
+                                survey_llin_upperlim = NA,
+                                survey_citn_count = NA,
+                                survey_citn_sd = NA,
+                                survey_citn_lowerlim = NA,
+                                survey_citn_upperlim = NA,
+                                quarter_start_indices = 1,
+                                quarter_end_indices = 0,
+                                quarter_prop_completed = 1,
+                                quarter_prop_remaining = 0,
+                                manufacturer_data = this_manufacturer_data$llins,
+                                year_count = length(years),
+                                quarter_count = length(quarter_timesteps),
+                                survey_count = 1,
+                                population = this_pop$total_population
+    )
+    
+  }else { # calculate total nets from surveys 
+    
+    this_survey_data[this_survey_data==0] <- 1e-6 # add small amount of precision
+    
+    totnet_calc_list <- list(survey_count = nrow(this_survey_data),
+                             population = this_pop[year %in% floor(this_survey_data$date)]$total_population
+    )
+    
+    totnet_calc_list <- c(as.list(this_survey_data), totnet_calc_list)
+    
+    # TODO: update these with appropriate populations from surveys
+    ########### ADJUSTMENT FOR SURVEYS NOT CONDUCTED NATIONALLY BUT ON A POPULATION AT RISK BASIS
+    if(this_country=='Ethiopia') totnet_calc_list$population=c(68186507,75777180)
+    if(this_country=='Namibia') totnet_calc_list$population[totnet_calc_list$names%in%'Namibia 2009']=1426602
+    if(this_country=='Kenya') totnet_calc_list$population[totnet_calc_list$names%in%'Kenya 2007']=31148650
+    ###############################################################################################
+    
+    survey_model_string = '
 			model {
 				for(i in 1:survey_count){
 					hh[i] ~ dnorm(avg.hh.size[i], se.hh.size[i]^-2) I(0,)
@@ -232,173 +218,173 @@ if(nrow(this_survey_data)==0){
 				}
 			}
 		'
-  
-  survey_prep_model <- jags.model(textConnection(survey_model_string),
-                     data = totnet_calc_list,
-                     n.chains = 1,
-                     n.adapt = n.adapt)
-  update(survey_prep_model,n.iter=update)
-  
-  survey_model_output <- coda.samples(survey_prep_model,variable.names=c('llin_count','citn_count', 'avg_llin', 'avg_citn'),n.iter=n.iter, thin=50) 
-  
-  survey_model_estimates <- 
-    rbind( as.data.table(c( metric = "mean" ,
-                            list(year = totnet_calc_list$date),
-                          extract_jags(c("llin_count", "citn_count"), colMeans(survey_model_output[[1]])))), 
-         as.data.table(c( metric = "sd" ,
-                          list(year = totnet_calc_list$date),
-                          extract_jags(c("llin_count", "citn_count"), apply(survey_model_output[[1]],2,sd))))
-  )
-  
-  survey_model_estimates <- melt(survey_model_estimates, id.vars = c("metric", "year"), value.name="net_count")
-  survey_model_estimates <- dcast.data.table(survey_model_estimates, variable + year ~ metric)
-  
-  # add parameter limits for big model
-  survey_model_estimates <- survey_model_estimates[, list(variable, year, mean, sd, 
-                                                          lower_limit= pmax(mean - sd*3, 0),
-                                                          upper_limit= pmax(mean + sd*3, 0)
-                                                          )]
-  
-  ggplot(survey_model_estimates, aes(x=year, color=variable)) + 
-    geom_linerange(aes(ymin=lower_limit, ymax=upper_limit)) +
-    geom_point(aes(y=mean)) +
-    facet_grid(.~variable) +
-    labs(title= paste("Survey Data Estimates:", this_country),
-         x="Year",
-         y="Nets")
-  
-  main_input_list <- list(survey_llin_count = survey_model_estimates[variable=="llin_count"]$mean,
-                  survey_llin_sd = survey_model_estimates[variable=="llin_count"]$sd,
-                  survey_llin_lowerlim = survey_model_estimates[variable=="llin_count"]$lower_limit,
-                  survey_llin_upperlim = survey_model_estimates[variable=="llin_count"]$upper_limit,
-                  survey_citn_count = survey_model_estimates[variable=="citn_count"]$mean,
-                  survey_citn_sd = survey_model_estimates[variable=="citn_count"]$sd,
-                  survey_citn_lowerlim = survey_model_estimates[variable=="citn_count"]$lower_limit,
-                  survey_citn_upperlim = survey_model_estimates[variable=="citn_count"]$upper_limit,
-                  quarter_start_indices = sapply(floor(totnet_calc_list$date/0.25) * 0.25, function(time){which(time==quarter_timesteps)}), # floor yearquarter index
-                  quarter_end_indices = sapply(ceiling(totnet_calc_list$date/0.25) * 0.25, function(time){which(time==quarter_timesteps)}), # ceiling yearquarter index
-                  quarter_prop_completed = (totnet_calc_list$date - floor(totnet_calc_list$date/0.25) * 0.25)/0.25, # % of quarter elapsed
-                  quarter_prop_remaining = 1- (totnet_calc_list$date - floor(totnet_calc_list$date/0.25) * 0.25)/0.25, # % of quarter yet to come
-                  manufacturer_data = this_manufacturer_data$llins,
-                  year_count = length(years),
-                  quarter_count = length(quarter_timesteps),
-                  survey_count = totnet_calc_list$survey_count,
-                  population = this_pop$total_population # duplicate -- maybe they had it below st it would be included in the no-survey results. redo this. 
-              )
-  
-}
-
-
-### Format NMCP reports  #####----------------------------------------------------------------------------------------------------------------------------------
-
-# set llins to zero in early years for which manufacturers didn't report any nets 
-this_nmcp[this_manufacturer_data$llins==0, LLIN:=0]
-
-# find nets per person, drop NAs but log indices of non-null years for GP prior
-this_nmcp <- melt(this_nmcp, id.vars=c("MAP_Country_Name", "ISO3", "year"), measure.vars = c("LLIN", "CITN"), variable.name = "type", value.name = "nmcp_count")
-# TEST: set null values to zero
-this_nmcp[is.na(nmcp_count), nmcp_count:=0]
-
-this_nmcp <- merge(this_nmcp, this_pop[, list(ISO3, year, total_population)], by=c("ISO3", "year"), all=T)
-this_nmcp[, nmcp_nets_percapita := nmcp_count/total_population]
-this_nmcp[, type:=tolower(type)]
-this_nmcp[, nmcp_year_indices:= year-min(year)+1]
-
-nmcp_list <- lapply(c("llin", "citn"), function(net_type){
-  subset <- dcast.data.table(this_nmcp[type==net_type &  !is.na(nmcp_count)], year ~ type, value.var = c("nmcp_count", "nmcp_nets_percapita", "nmcp_year_indices"))
-  subset[, year:=NULL]
-  subset_list <- c(as.list(subset), year_count=nrow(subset))
-  names(subset_list) <- c(names(subset), paste0("nmcp_year_count_", net_type))
-  return(subset_list)
-})
-nmcp_list <- unlist(nmcp_list, recursive = F)
-
-main_input_list <- c(main_input_list, nmcp_list)
-
-
-### Store population at risk and IRS parameters. TODO: update IRS, find PAR for surveys more rigorously  #####----------------------------------------------------------------------------------------------------------------------------------
-# store population at risk parameter 
-main_input_list$PAR <- mean(this_pop$proportion_population_at_risk_pf)
-
-# set IRS values. todo: update these from WHO data or anita work
-# "IRS" refers to the proportion of the population *not* covered by IRS
-if(this_country=='Mozambique'){ main_input_list$IRS=(1-0.1)
-}else if(this_country=='Madagascar'){ main_input_list$IRS=(1-0.24)
-}else if(this_country=='Zimbabwe'){ main_input_list$IRS=(1-0.48)
-}else if(this_country=='Eritrea'){ main_input_list$IRS=(1-0.1)
-}else{ main_input_list$IRS=1}
-
-### create "counter" matrix that marks time since net distribution for each quarter   #####----------------------------------------------------------------------------------------------------------------------------------
-
-quarter_count <- main_input_list$quarter_count
-time_since_distribution <- matrix(rep(NA, quarter_count^2), ncol=quarter_count)
-for (i in 1:quarter_count){
-  for (j in 1:quarter_count){
-    time_since_distribution[i,j] <- ifelse(j>i, -9, ifelse(j==i, 0, time_since_distribution[i-1, j]+0.25)) 
+    
+    survey_prep_model <- jags.model(textConnection(survey_model_string),
+                                    data = totnet_calc_list,
+                                    n.chains = 1,
+                                    n.adapt = n.adapt)
+    update(survey_prep_model,n.iter=update)
+    
+    survey_model_output <- coda.samples(survey_prep_model,variable.names=c('llin_count','citn_count', 'avg_llin', 'avg_citn'),n.iter=n.iter, thin=50) 
+    
+    survey_model_estimates <- 
+      rbind( as.data.table(c( metric = "mean" ,
+                              list(year = totnet_calc_list$date),
+                              extract_jags(c("llin_count", "citn_count"), colMeans(survey_model_output[[1]])))), 
+             as.data.table(c( metric = "sd" ,
+                              list(year = totnet_calc_list$date),
+                              extract_jags(c("llin_count", "citn_count"), apply(survey_model_output[[1]],2,sd))))
+      )
+    
+    survey_model_estimates <- melt(survey_model_estimates, id.vars = c("metric", "year"), value.name="net_count")
+    survey_model_estimates <- dcast.data.table(survey_model_estimates, variable + year ~ metric)
+    
+    # add parameter limits for big model
+    survey_model_estimates <- survey_model_estimates[, list(variable, year, mean, sd, 
+                                                            lower_limit= pmax(mean - sd*3, 0),
+                                                            upper_limit= pmax(mean + sd*3, 0)
+    )]
+    
+    ggplot(survey_model_estimates, aes(x=year, color=variable)) + 
+      geom_linerange(aes(ymin=lower_limit, ymax=upper_limit)) +
+      geom_point(aes(y=mean)) +
+      facet_grid(.~variable) +
+      labs(title= paste("Survey Data Estimates:", this_country),
+           x="Year",
+           y="Nets")
+    
+    main_input_list <- list(survey_llin_count = survey_model_estimates[variable=="llin_count"]$mean,
+                            survey_llin_sd = survey_model_estimates[variable=="llin_count"]$sd,
+                            survey_llin_lowerlim = survey_model_estimates[variable=="llin_count"]$lower_limit,
+                            survey_llin_upperlim = survey_model_estimates[variable=="llin_count"]$upper_limit,
+                            survey_citn_count = survey_model_estimates[variable=="citn_count"]$mean,
+                            survey_citn_sd = survey_model_estimates[variable=="citn_count"]$sd,
+                            survey_citn_lowerlim = survey_model_estimates[variable=="citn_count"]$lower_limit,
+                            survey_citn_upperlim = survey_model_estimates[variable=="citn_count"]$upper_limit,
+                            quarter_start_indices = sapply(floor(totnet_calc_list$date/0.25) * 0.25, function(time){which(time==quarter_timesteps)}), # floor yearquarter index
+                            quarter_end_indices = sapply(ceiling(totnet_calc_list$date/0.25) * 0.25, function(time){which(time==quarter_timesteps)}), # ceiling yearquarter index
+                            quarter_prop_completed = (totnet_calc_list$date - floor(totnet_calc_list$date/0.25) * 0.25)/0.25, # % of quarter elapsed
+                            quarter_prop_remaining = 1- (totnet_calc_list$date - floor(totnet_calc_list$date/0.25) * 0.25)/0.25, # % of quarter yet to come
+                            manufacturer_data = this_manufacturer_data$llins,
+                            year_count = length(years),
+                            quarter_count = length(quarter_timesteps),
+                            survey_count = totnet_calc_list$survey_count,
+                            population = this_pop$total_population # duplicate -- maybe they had it below st it would be included in the no-survey results. redo this. 
+    )
+    
   }
-}
-main_input_list$time_since_distribution <- time_since_distribution
-
-
-### Prep moving average #####----------------------------------------------------------------------------------------------------------------------------------
-
-# binary matrix showing which years to average
-ncol <- length(years)
-rows <- lapply(1:(ncol-4), function(row_idx){
-  c( rep(0, row_idx-1),
-     rep(1, 5),
-     rep(0, ncol-5-row_idx+1)
-  )
-})
-movingavg_indicators <- do.call(rbind, rows)
-moving_avg_weights <- prop.table(movingavg_indicators, 2) # scale to one in each column
-
-# add to main_input_list list
-main_input_list$moving_avg_weights <- moving_avg_weights
-main_input_list$nrow_moving_avg <- nrow(moving_avg_weights)
-
-### load indicator priors #####----------------------------------------------------------------------------------------------------------------------------------
-
-extract_prior <- function(varname, data){
-  subset <- data[variable==varname]
-  this_list <- list(mean=subset$mean, sd=subset$sd)
-  names(this_list) <- c(paste0(varname, "_mean"), paste0(varname, "_sd"))
-  return(this_list)
-}
-
-indicator_priors <- fread(file.path(main_dir, "AMELIA_GENERATED_indicator_priors.csv"))
-
-no_net_props <- dcast.data.table(indicator_priors[model_type=="no_net_prob"], variable  ~ metric, value.var = "value")
-no_net_prop_priors <- unlist(lapply(unique(no_net_props$variable), extract_prior, no_net_props))
-
-mean_net_counts <- dcast.data.table(indicator_priors[model_type=="mean_net_count"], variable + hhsize ~ metric, value.var = "value")
-mean_net_count_priors <- unlist(lapply(unique(mean_net_counts$variable), extract_prior, mean_net_counts), recursive = F)
-
-main_input_list <- c(main_input_list, as.list(no_net_prop_priors), mean_net_count_priors, list(max_hhsize=10))
-
-
-### Main model string  #####----------------------------------------------------------------------------------------------------------------------------------
-
-test_snippet <- function(string, test_data){
-  n.adapt=10000
-  update=1000000
-  n.iter=50000
-  thin=100
   
-  jags<-c()
-  jags <- jags.model(file=textConnection(string),
-                     data = test_data,
-                     n.chains = 1,
-                     n.adapt=n.adapt)
-}
-
-
-model_preface <- "model {"
-model_suffix <- "}"
-
-# NMCP GP priors-- replace equations 14 and 15? 
-
-llin_prior <- "
+  
+  ### Format NMCP reports  #####----------------------------------------------------------------------------------------------------------------------------------
+  
+  # set llins to zero in early years for which manufacturers didn't report any nets 
+  this_nmcp[this_manufacturer_data$llins==0, LLIN:=0]
+  
+  # find nets per person, drop NAs but log indices of non-null years for GP prior
+  this_nmcp <- melt(this_nmcp, id.vars=c("MAP_Country_Name", "ISO3", "year"), measure.vars = c("LLIN", "CITN"), variable.name = "type", value.name = "nmcp_count")
+  # TEST: set null values to zero
+  this_nmcp[is.na(nmcp_count), nmcp_count:=0]
+  
+  this_nmcp <- merge(this_nmcp, this_pop[, list(ISO3, year, total_population)], by=c("ISO3", "year"), all=T)
+  this_nmcp[, nmcp_nets_percapita := nmcp_count/total_population]
+  this_nmcp[, type:=tolower(type)]
+  this_nmcp[, nmcp_year_indices:= year-min(year)+1]
+  
+  nmcp_list <- lapply(c("llin", "citn"), function(net_type){
+    subset <- dcast.data.table(this_nmcp[type==net_type &  !is.na(nmcp_count)], year ~ type, value.var = c("nmcp_count", "nmcp_nets_percapita", "nmcp_year_indices"))
+    subset[, year:=NULL]
+    subset_list <- c(as.list(subset), year_count=nrow(subset))
+    names(subset_list) <- c(names(subset), paste0("nmcp_year_count_", net_type))
+    return(subset_list)
+  })
+  nmcp_list <- unlist(nmcp_list, recursive = F)
+  
+  main_input_list <- c(main_input_list, nmcp_list)
+  
+  
+  ### Store population at risk and IRS parameters. TODO: update IRS, find PAR for surveys more rigorously  #####----------------------------------------------------------------------------------------------------------------------------------
+  # store population at risk parameter 
+  main_input_list$PAR <- mean(this_pop$proportion_population_at_risk_pf)
+  
+  # set IRS values. todo: update these from WHO data or anita work
+  # "IRS" refers to the proportion of the population *not* covered by IRS
+  if(this_country=='Mozambique'){ main_input_list$IRS=(1-0.1)
+  }else if(this_country=='Madagascar'){ main_input_list$IRS=(1-0.24)
+  }else if(this_country=='Zimbabwe'){ main_input_list$IRS=(1-0.48)
+  }else if(this_country=='Eritrea'){ main_input_list$IRS=(1-0.1)
+  }else{ main_input_list$IRS=1}
+  
+  ### create "counter" matrix that marks time since net distribution for each quarter   #####----------------------------------------------------------------------------------------------------------------------------------
+  
+  quarter_count <- main_input_list$quarter_count
+  time_since_distribution <- matrix(rep(NA, quarter_count^2), ncol=quarter_count)
+  for (i in 1:quarter_count){
+    for (j in 1:quarter_count){
+      time_since_distribution[i,j] <- ifelse(j>i, -9, ifelse(j==i, 0, time_since_distribution[i-1, j]+0.25)) 
+    }
+  }
+  main_input_list$time_since_distribution <- time_since_distribution
+  
+  
+  ### Prep moving average #####----------------------------------------------------------------------------------------------------------------------------------
+  
+  # binary matrix showing which years to average
+  ncol <- length(years)
+  rows <- lapply(1:(ncol-4), function(row_idx){
+    c( rep(0, row_idx-1),
+       rep(1, 5),
+       rep(0, ncol-5-row_idx+1)
+    )
+  })
+  movingavg_indicators <- do.call(rbind, rows)
+  moving_avg_weights <- prop.table(movingavg_indicators, 2) # scale to one in each column
+  
+  # add to main_input_list list
+  main_input_list$moving_avg_weights <- moving_avg_weights
+  main_input_list$nrow_moving_avg <- nrow(moving_avg_weights)
+  
+  ### load indicator priors #####----------------------------------------------------------------------------------------------------------------------------------
+  
+  extract_prior <- function(varname, data){
+    subset <- data[variable==varname]
+    this_list <- list(mean=subset$mean, sd=subset$sd)
+    names(this_list) <- c(paste0(varname, "_mean"), paste0(varname, "_sd"))
+    return(this_list)
+  }
+  
+  indicator_priors <- fread(file.path(main_dir, "AMELIA_GENERATED_indicator_priors.csv"))
+  
+  no_net_props <- dcast.data.table(indicator_priors[model_type=="no_net_prob"], variable  ~ metric, value.var = "value")
+  no_net_prop_priors <- unlist(lapply(unique(no_net_props$variable), extract_prior, no_net_props))
+  
+  mean_net_counts <- dcast.data.table(indicator_priors[model_type=="mean_net_count"], variable + hhsize ~ metric, value.var = "value")
+  mean_net_count_priors <- unlist(lapply(unique(mean_net_counts$variable), extract_prior, mean_net_counts), recursive = F)
+  
+  main_input_list <- c(main_input_list, as.list(no_net_prop_priors), mean_net_count_priors, list(max_hhsize=10))
+  
+  
+  ### Main model string  #####----------------------------------------------------------------------------------------------------------------------------------
+  
+  test_snippet <- function(string, test_data){
+    n.adapt=10000
+    update=1000000
+    n.iter=50000
+    thin=100
+    
+    jags<-c()
+    jags <- jags.model(file=textConnection(string),
+                       data = test_data,
+                       n.chains = 1,
+                       n.adapt=n.adapt)
+  }
+  
+  
+  model_preface <- "model {"
+  model_suffix <- "}"
+  
+  # NMCP GP priors-- replace equations 14 and 15? 
+  
+  llin_prior <- "
             rho_sq_llin ~ dunif(0,1) # restricted to prevent over-smoothing
 	    			tau_llin ~ dunif(0,0.1)
 	    			sigma_sq_llin ~ dunif(0,1000)
@@ -427,9 +413,9 @@ llin_prior <- "
 					  
 					  # prior estimate of llins per capita distributed by nmcp
 						bounded_est_nmcp_nets_percapita_llin <- Sigma_prediction_llin%*%inverse(Sigma_gp_llin)%*%nmcp_nets_percapita_llin" # what does this do?
-# test_snippet(paste(model_preface, llin_prior, model_suffix), test_data = main_input_list)
-
-citn_prior <- "
+  # test_snippet(paste(model_preface, llin_prior, model_suffix), test_data = main_input_list)
+  
+  citn_prior <- "
             rho_sq_citn ~ dunif(0,1)
   					tau_citn ~ dunif(0,0.1)
   					sigma_sq_citn ~ dunif(0,1000)
@@ -456,14 +442,14 @@ citn_prior <- "
 					  
 					# prior estimate of itns per capita distributed by nmcp
 					bounded_est_nmcp_nets_percapita_citn <- Sigma_prediction_citn%*%inverse(Sigma_gp_citn)%*%nmcp_nets_percapita_citn"
-
-# test_snippet(paste(model_preface, citn_prior, model_suffix), test_data = main_input_list)
-
-# leave GP priors out of it until you talk to Sam
-
-
-# see equations 5, and 17-22 of supplement
-manu_nmcp_init <- "
+  
+  # test_snippet(paste(model_preface, citn_prior, model_suffix), test_data = main_input_list)
+  
+  # leave GP priors out of it until you talk to Sam
+  
+  
+  # see equations 5, and 17-22 of supplement
+  manu_nmcp_init <- "
 					for(year_idx in 1:year_count){
 						
 						manufacturer_sigma[year_idx] ~ dunif(0, 0.075) 	 # error in llin manufacturer	
@@ -476,8 +462,8 @@ manu_nmcp_init <- "
             # start with priors from GP
 
             # NMCP nets from simple normal, ignore for now
-            bounded_est_nmcp_nets_percapita_llin[year_idx] ~ dnorm(nmcp_nets_percapita_llin[year_idx], nmcp_sigma_llin[year_idx]^-2) T(0,)
-            bounded_est_nmcp_nets_percapita_citn[year_idx] ~ dnorm(nmcp_nets_percapita_citn[year_idx], nmcp_sigma_citn[year_idx]^-2) T(0,)
+            # bounded_est_nmcp_nets_percapita_llin[year_idx] ~ dnorm(nmcp_nets_percapita_llin[year_idx], nmcp_sigma_llin[year_idx]^-2) T(0,)
+            # bounded_est_nmcp_nets_percapita_citn[year_idx] ~ dnorm(nmcp_nets_percapita_citn[year_idx], nmcp_sigma_citn[year_idx]^-2) T(0,)
             
 						nmcp_net_count_llin[year_idx] <- bounded_est_nmcp_nets_percapita_llin[year_idx]*population[year_idx]
 						nmcp_net_count_citn[year_idx] <- bounded_est_nmcp_nets_percapita_citn[year_idx]*population[year_idx]			
@@ -520,12 +506,12 @@ manu_nmcp_init <- "
 						# final stock for the year (initial stock minus distribution for the year)
 						final_stock[year_idx] <- initial_stock[year_idx]-adjusted_llins_distributed[year_idx]	
 					}"
-
-#test_snippet(paste(model_preface, llin_prior, citn_prior, manu_nmcp_init, model_suffix), test_data = main_input_list)
-
-# loss functions and quarterly distribution-- see section 3.2.2.3
-llin_quarterly <- 
-" 
+  
+  #test_snippet(paste(model_preface, llin_prior, citn_prior, manu_nmcp_init, model_suffix), test_data = main_input_list)
+  
+  # loss functions and quarterly distribution-- see section 3.2.2.3
+  llin_quarterly <- 
+    " 
 # k & L are parameters for the loss function -- L is a time horizon and k is an exponential scaling factor
 for(i in 1:nrow_moving_avg){ 
 						k_llin[1,i]~dunif(16,18) 
@@ -564,7 +550,7 @@ for (j in 1:quarter_count){
 # test_snippet(paste( model_preface, llin_prior, citn_prior, manu_nmcp_init, llin_quarterly, model_suffix), test_data = main_input_list)
 
 citn_quarterly <- 
-" 
+  " 
 # k & L are parameters for the loss function -- L is a time horizon and k is an exponential scaling factor
 for(i in 1:nrow_moving_avg){ 
 						k_citn[1,i]~dunif(16,18) 
@@ -654,8 +640,8 @@ indicators <- "
 
 if(any(is.na(main_input_list$survey_llin_sd)) | any(is.na(main_input_list$survey_citn_sd))){
   full_model_string <- paste(model_preface, 
-                             # llin_prior, 
-                             # citn_prior, 
+                             llin_prior, 
+                             citn_prior, 
                              manu_nmcp_init, 
                              llin_quarterly, 
                              citn_quarterly, 
@@ -665,8 +651,8 @@ if(any(is.na(main_input_list$survey_llin_sd)) | any(is.na(main_input_list$survey
                              sep="\n")
 }else{
   full_model_string <- paste(model_preface, 
-                             # llin_prior, 
-                             # citn_prior, 
+                             llin_prior, 
+                             citn_prior, 
                              manu_nmcp_init, 
                              llin_quarterly, 
                              citn_quarterly, 
@@ -679,7 +665,7 @@ if(any(is.na(main_input_list$survey_llin_sd)) | any(is.na(main_input_list$survey
 }
 
 # write to file. TODO: can write this to jags?
-fileConn<-file("~/Desktop/model.txt")
+fileConn<-file(file.path(out_dir, paste0(this_country, "_model.txt")))
 writeLines(full_model_string, fileConn)
 close(fileConn)
 
@@ -700,20 +686,20 @@ names_to_extract <- c('bounded_est_nmcp_nets_percapita_llin',
                       
                       'nmcp_net_count_llin',
                       'nmcp_net_count_citn',
-  
+                      
                       'adjusted_llins_distributed',
                       'initial_stock',
                       'final_stock',
                       
                       'est_survey_llin_count',
                       'est_survey_citn_count',
-
+                      
                       'llins_distributed_quarterly',
                       'citns_distributed_quarterly',
                       
                       'tot_nets_perquarter_llin',
                       'tot_nets_perquarter_citn',
-
+                      
                       'nonet_prop',
                       'mean_net_count'
 )
@@ -724,6 +710,8 @@ jdat <- coda.samples(jags,variable.names=names_to_extract,
 toc <- Sys.time()
 
 time_elapsed <- toc-tic
+print(paste("Time elapsed for model fitting:", time_elapsed))
+
 
 
 ### Extract values  #####----------------------------------------------------------------------------------------------------------------------------------
@@ -771,7 +759,7 @@ nmcp_outputs <- dcast.data.table(nmcp_outputs, year + type ~ metric)
 setnames(nmcp_outputs, "nmcp_net_count", "est_nmcp_net_count")
 nmcp_results <- merge(this_nmcp, nmcp_outputs, by=c("type", "year"), all=T)
 
-ggplot(nmcp_results, aes(x=year, color=type)) + 
+nmcp_fit_plot <- ggplot(nmcp_results, aes(x=year, color=type)) + 
   geom_line(aes(y=bounded_est_nmcp_nets_percapita), size=1) +
   geom_point(aes(y=nmcp_nets_percapita), size=2)
 
@@ -785,37 +773,16 @@ quarterly_nets <- melt(quarterly_nets, id.vars = "year", variable.name="metric",
 quarterly_nets <- merge(quarterly_nets, posterior_densities, by=c("year", "metric"), all=T)
 quarterly_nets[, type:=ifelse(metric %like% "citn", "citn", "llin")]
 
-annual_nets <- copy(quarterly_nets)
-annual_nets[, year:=floor(year)]
-annual_nets <- annual_nets[,  lapply(.SD, sum), by=c("metric", "year", "type")]
-
 survey_model_estimates[, type:=gsub("_count", "", variable)]
 survey_model_estimates[, model_mean:=c(model_estimates$est_survey_llin_count, model_estimates$est_survey_citn_count)]
 
-ggplot(data=quarterly_nets[metric %like% "tot"], aes(x=year)) +
+quarterly_timeseries_plot <- ggplot(data=quarterly_nets[metric %like% "tot"], aes(x=year)) +
   geom_ribbon(aes(ymin=lower, ymax=upper, fill=type), alpha=0.3) + 
   geom_line(aes(y=mean, color=type), size=1) +
   geom_point(data=survey_model_estimates, aes(y=mean, color=type), size=2) +
   geom_linerange(data=survey_model_estimates, aes(ymin=lower_limit, ymax=upper_limit, color=type)) +
   geom_point(data=survey_model_estimates, aes(y=model_mean, color=type), shape=1, size=3) + 
   labs(title= paste("Nets in Houses:", this_country),
-       x="Year",
-       y="Net Count")
-
-
-survey_fits <- survey_model_estimates[, list(year, type, data_mean=mean)]
-survey_fits[, model_mean:=c(model_estimates$est_survey_llin_count, model_estimates$est_survey_citn_count)]
-survey_fits <- melt(survey_fits, id.vars=c("year", "type"))
-
-ggplot(survey_fits, aes(x=year, y=value, color=type, shape=variable)) +
-  geom_point(size=3, alpha=0.75)
-
-
-ggplot(data=annual_nets[metric %like% "distributed"], aes(x=year)) +
-  geom_ribbon(aes(ymin=lower, ymax=upper, fill=type), alpha=0.3) + 
-  geom_line(aes(y=mean, color=type), size=1) +
-  geom_point(data=this_nmcp, aes(y=nmcp_count, color=type), size=2) +
-  labs(title= paste("Nets Distributed:", this_country),
        x="Year",
        y="Net Count")
 
@@ -829,34 +796,45 @@ stock_metrics <- data.table(year=years,
 
 stock_metrics[, data_max_stock:=cumsum(data_manu)]
 
-ggplot(stock_metrics, aes(x=year)) + 
+stock_plot <- ggplot(stock_metrics, aes(x=year)) + 
   geom_ribbon(aes(ymin=data_nmcp, ymax=data_max_stock), alpha=0.3) + 
   geom_line(aes(y=model_stock_initial))
 
+pdf(file.path(out_dir, paste0(this_country, "_all_plots.pdf")))
+print(nmcp_fit_plot)
+print(quarterly_timeseries_plot)
+print(stock_plot)
+graphics.off()
+
+save.image(file.path(out_dir, paste0(this_country, "_all_output.RData")))
+
+}
 
 
+# dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-16 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/data_from_sam --input CODE=gs://map_users/amelia/itn/code/stock_and_flow/02_stock_and_flow.r --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/intermediate_stockflow/ --command 'Rscript ${CODE}'
 
-# not sure these should go together? todo: add nmcp distribution 
-# ggplot(data=annual_estimates, aes(x=year)) +
-#   geom_point(aes(y=manufacturer_counts), color='green',size=4,alpha=0.6) +
-#   geom_point(aes(y=model_stock),color='black',size=3,alpha=0.9)  +
-#   geom_line(aes(y=model_stock),color='black',size=1,alpha=0.4,linetype="dotted")  +
-#   labs(title= paste("Manufacturer and Distribution:", this_country),
-#        x="Year",
-#        y="Net Count")
+package_load <- function(package_list){
+  # package installation/loading
+  new_packages <- package_list[!(package_list %in% installed.packages()[,"Package"])]
+  if(length(new_packages)) install.packages(new_packages)
+  lapply(package_list, library, character.only=T)
+}
 
+package_load(c("data.table","raster","rjags", "zoo", "RecordLinkage", "ggplot2"))
 
+if(Sys.getenv("main_dir")=="") {
+  main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/data_from_sam"
+  out_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/intermediate_stockflow"
+} else {
+  main_dir <- Sys.getenv("main_dir")
+  out_dir <- Sys.getenv("out_dir") 
+}
 
+start_year <- 2000
+end_year<- 2017
+this_country <- "GHA"
 
-
-
-
-
-
-
-
-
-
+run_stock_and_flow(this_country, start_year, end_year, main_dir, out_dir)
 
 
 
