@@ -11,6 +11,7 @@
 
 library(data.table)
 library(raster)
+library(ggplot2)
 
 rm(list=ls())
 
@@ -32,6 +33,9 @@ par.cutoff <- 0.01
 
 start.year           <- 2000
 end.year             <- 2018
+
+input_val_name      <- "pop_at_risk"
+rate_name           <- "prop_pop_at_risk"
 
 ## ------------ set up templates, establish extents and resolutions ------------------
 
@@ -107,14 +111,14 @@ full.results[, sum:=sum(rate), by="uid"]
 full.results <- full.results[sum>0]
 full.results[, sum:=NULL]
 
-time_series <- ggplot(full.results, aes(x=year, y=rate, color=ISO3)) +
+time_series <- ggplot(full.results, aes(x=year, y=total_pop, color=ISO3)) +
                 geom_line() +
-                facet_wrap(~ISO3) +
+                facet_wrap(~ISO3, scales = "free_y") +
                 theme(legend.position = "none") +
-                labs(x="Year", y="Annual Use (Sam's Folder)")
+                labs(x="Year")
 print(time_series)
 
-full.results.wide <- dcast(full.results, uid + ISO3 ~ year, value.var="rate")
-write.csv(full.results.wide, file=output.filename, row.names=F)
+setnames(full.results, c("input_val", "rate"), c(input_val_name, rate_name))
+write.csv(full.results, file=out.path, row.names=F)
 
 

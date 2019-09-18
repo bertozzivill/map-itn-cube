@@ -811,7 +811,7 @@ save.image(file.path(out_dir, paste0(this_country, "_all_output.RData")))
 }
 
 
-# dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-16 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/data_from_sam --input CODE=gs://map_users/amelia/itn/code/stock_and_flow/02_stock_and_flow.r --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/intermediate_stockflow/ --command 'Rscript ${CODE}'
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highcpu-32 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/data_from_sam --input CODE=gs://map_users/amelia/itn/code/stock_and_flow/02_stock_and_flow.r --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/intermediate_stockflow/ --command 'Rscript ${CODE}'
 
 package_load <- function(package_list){
   # package installation/loading
