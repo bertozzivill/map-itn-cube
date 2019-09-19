@@ -40,6 +40,30 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   survey_data <- fread(file.path(main_dir, 'Aggregated_HH_Svy_indicators_28052019.csv'),stringsAsFactors=FALSE)
   setnames(survey_data, "V1", "X")
   
+  # test: what net age data info is there?
+  net_age <- survey_data[!is.na(tot.LLIN.LT1.hh)]
+  net_age <- melt(net_age, id.vars = c("names", "Country", "ISO3", "date", "min_date", "max_date"),
+                  measure.vars = c("tot.LLIN.LT1.hh", "se.LLIN.LT1.hh", "tot.LLIN.1to2.hh", "se.LLIN.1to2.hh", "tot.LLIN.2to3.hh", "se.LLIN.2to3.hh", "tot.LLIN.GT3.hh", "se.LLIN.GT3.hh"))
+  net_age[, type:= ifelse(variable %like% "tot", "mean", "se")]
+  net_age[, variable:=gsub("se\\.|tot\\.", "", variable)]
+  net_age <- dcast.data.table(net_age, names + Country + ISO3 + date + min_date + max_date + variable ~ type, value.var = "value")
+  net_age[, net_age_years:= factor(variable, levels=c("LLIN.LT1.hh", "LLIN.1to2.hh", "LLIN.2to3.hh", "LLIN.GT3.hh"),
+                                      labels=c("<1", "1-2", "2-3", "3+"))]
+  
+  # remove afghanistan (weird date) and countries where all net counts are zero
+  net_age[, tot_mean:=sum(mean), by="ISO3"]
+  net_age <- net_age[ISO3!="AFG" & tot_mean>0]
+  net_age[, tot_mean:=NULL]
+  
+  
+  ggplot(net_age, aes(x=date, color=variable)) +
+    # geom_linerangeh(aes(y=mean, xmin=min_date, xmax=max_date)) + 
+    geom_pointrange(aes(y=mean, ymin=mean-1.96*se, ymax=mean+1.96*se)) +
+    facet_wrap(~Country, scales="free_y")
+    
+  
+  
+  
   # MICS3 and nosurvey data both from Bonnie originally, defer to eLife paper to explain them
   mics3_data <- fread(file.path(main_dir,'Aggregated_HH_Svy_indicators_MICS3_080817.csv'),stringsAsFactors=FALSE)
   no_report_surveydata <-fread(file.path(main_dir,'No Report SVYs_080817.csv'),stringsAsFactors=FALSE)
@@ -48,6 +72,19 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   # population_v1<-fread(file.path(main_dir,'Population_For_Sam.csv'),stringsAsFactors=FALSE)
   population_v2<-fread(file.path(main_dir,'Population_For_Sam_2017.csv'),stringsAsFactors=FALSE)
   setnames(population_v2, "iso_3_code", "ISO3")
+  
+  # setnames(population_v2, c("iso_3_code", "total_population", "populatio_at_risk_pf", "proportion_population_at_risk_pf"), c("ISO3", "total_pop", "pop_at_risk", "prop_pop_at_risk"))
+  # population_v2[, source:="Sam"]
+  
+  # # test initial frankenpop: it is WEIRD
+  # frankenpop <- fread(file.path(out_dir, "../national_population.csv"))
+  # frankenpop[, source:="frankenpop"]
+  # compare_pop <- rbind(population_v2, frankenpop, fill=T)
+  # 
+  # ggplot(compare_pop, aes(x=year, y=prop_pop_at_risk, color=source)) +
+  #   geom_line() +
+  #   facet_wrap(~ISO3, scales="free_y")
+  # 
   
   # TODO: move mics3 and nosurvey processing to another script
   
@@ -460,11 +497,6 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
 						nmcp_sigma_citn[year_idx] ~ dunif(0, 0.01) 	 # error in ITN NMCP
 						
             # start with priors from GP
-
-            # NMCP nets from simple normal, ignore for now
-            # bounded_est_nmcp_nets_percapita_llin[year_idx] ~ dnorm(nmcp_nets_percapita_llin[year_idx], nmcp_sigma_llin[year_idx]^-2) T(0,)
-            # bounded_est_nmcp_nets_percapita_citn[year_idx] ~ dnorm(nmcp_nets_percapita_citn[year_idx], nmcp_sigma_citn[year_idx]^-2) T(0,)
-            
 						nmcp_net_count_llin[year_idx] <- bounded_est_nmcp_nets_percapita_llin[year_idx]*population[year_idx]
 						nmcp_net_count_citn[year_idx] <- bounded_est_nmcp_nets_percapita_citn[year_idx]*population[year_idx]			
 										
@@ -681,27 +713,43 @@ jags <- jags.model(file=textConnection(full_model_string),
 
 update(jags,n.iter=update)
 
-names_to_extract <- c('bounded_est_nmcp_nets_percapita_llin',
-                      'bounded_est_nmcp_nets_percapita_citn',
-                      
-                      'nmcp_net_count_llin',
-                      'nmcp_net_count_citn',
-                      
-                      'adjusted_llins_distributed',
-                      'initial_stock',
-                      'final_stock',
-                      
-                      'est_survey_llin_count',
-                      'est_survey_citn_count',
-                      
-                      'llins_distributed_quarterly',
-                      'citns_distributed_quarterly',
-                      
-                      'tot_nets_perquarter_llin',
-                      'tot_nets_perquarter_citn',
-                      
-                      'nonet_prop',
-                      'mean_net_count'
+names_to_extract <- c("bounded_est_nmcp_nets_percapita_llin",
+                      "bounded_est_nmcp_nets_percapita_citn",
+                      "manufacturer_llins",
+                      "nmcp_net_count_llin",
+                      "nmcp_net_count_citn",
+                      "raw_llins_distributed",
+                      "initial_stock",
+                      "adjusted_llins_distributed",
+                      "final_stock",
+                      "k_llin",
+                      "L_llin",
+                      "mv_k_llin",
+                      "mv_L_llin",
+                      "llins_distributed_quarterly",
+                      "quarterly_net_count_llin",
+                      "k_citn",
+                      "L_citn",
+                      "mv_k_citn",
+                      "mv_L_citn",
+                      "citns_distributed_quarterly",
+                      "quarterly_net_count_citn",
+                      "tot_nets_perquarter_llin",
+                      "tot_nets_perquarter_citn",
+                      "net_count_percapita",
+                      "est_survey_llin_count",
+                      "est_survey_citn_count",
+                      "survey_llin_count",
+                      "survey_citn_count",
+                      "p1_nonet_prop",
+                      "p2_nonet_prop",
+                      "b1_nonet_prop",
+                      "b2_nonet_prop",
+                      "b3_nonet_prop",
+                      "alpha_mean_nets",
+                      "beta_mean_nets",
+                      "nonet_prop",
+                      "mean_net_count"
 )
 
 jdat <- coda.samples(jags,variable.names=names_to_extract,
@@ -806,7 +854,8 @@ print(quarterly_timeseries_plot)
 print(stock_plot)
 graphics.off()
 
-save.image(file.path(out_dir, paste0(this_country, "_all_output.RData")))
+save(list = ls(all.names = TRUE), file = file.path(out_dir, paste0(this_country, "_all_output.RData")), envir = environment())
+
 
 }
 
