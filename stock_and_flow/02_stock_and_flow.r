@@ -40,29 +40,29 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   survey_data <- fread(file.path(main_dir, 'Aggregated_HH_Svy_indicators_28052019.csv'),stringsAsFactors=FALSE)
   setnames(survey_data, "V1", "X")
   
-  # test: what net age data info is there?
-  net_age <- survey_data[!is.na(tot.LLIN.LT1.hh)]
-  net_age <- melt(net_age, id.vars = c("names", "Country", "ISO3", "date", "min_date", "max_date"),
-                  measure.vars = c("tot.LLIN.LT1.hh", "se.LLIN.LT1.hh", "tot.LLIN.1to2.hh", "se.LLIN.1to2.hh", "tot.LLIN.2to3.hh", "se.LLIN.2to3.hh", "tot.LLIN.GT3.hh", "se.LLIN.GT3.hh"))
-  net_age[, type:= ifelse(variable %like% "tot", "mean", "se")]
-  net_age[, variable:=gsub("se\\.|tot\\.", "", variable)]
-  net_age <- dcast.data.table(net_age, names + Country + ISO3 + date + min_date + max_date + variable ~ type, value.var = "value")
-  net_age[, net_age_years:= factor(variable, levels=c("LLIN.LT1.hh", "LLIN.1to2.hh", "LLIN.2to3.hh", "LLIN.GT3.hh"),
-                                      labels=c("<1", "1-2", "2-3", "3+"))]
-  
-  # remove afghanistan (weird date) and countries where all net counts are zero
-  net_age[, tot_mean:=sum(mean), by="ISO3"]
-  net_age <- net_age[ISO3!="AFG" & tot_mean>0]
-  net_age[, tot_mean:=NULL]
-  
-  
-  ggplot(net_age, aes(x=date, color=variable)) +
-    # geom_linerangeh(aes(y=mean, xmin=min_date, xmax=max_date)) + 
-    geom_pointrange(aes(y=mean, ymin=mean-1.96*se, ymax=mean+1.96*se)) +
-    facet_wrap(~Country, scales="free_y")
-    
-  
-  
+  ## ----------------------------------------------------------------------------------------------------------------------------------
+  # # test: what net age data info is there?
+  # net_age <- survey_data[!is.na(tot.LLIN.LT1.hh)]
+  # net_age <- melt(net_age, id.vars = c("names", "Country", "ISO3", "date", "min_date", "max_date"),
+  #                 measure.vars = c("tot.LLIN.LT1.hh", "se.LLIN.LT1.hh", "tot.LLIN.1to2.hh", "se.LLIN.1to2.hh", "tot.LLIN.2to3.hh", "se.LLIN.2to3.hh", "tot.LLIN.GT3.hh", "se.LLIN.GT3.hh"))
+  # net_age[, type:= ifelse(variable %like% "tot", "mean", "se")]
+  # net_age[, variable:=gsub("se\\.|tot\\.", "", variable)]
+  # net_age <- dcast.data.table(net_age, names + Country + ISO3 + date + min_date + max_date + variable ~ type, value.var = "value")
+  # net_age[, net_age_years:= factor(variable, levels=c("LLIN.LT1.hh", "LLIN.1to2.hh", "LLIN.2to3.hh", "LLIN.GT3.hh"),
+  #                                     labels=c("<1", "1-2", "2-3", "3+"))]
+  # 
+  # # remove afghanistan (weird date) and countries where all net counts are zero
+  # net_age[, tot_mean:=sum(mean), by="ISO3"]
+  # net_age <- net_age[ISO3!="AFG" & tot_mean>0]
+  # net_age[, tot_mean:=NULL]
+  # 
+  # 
+  # ggplot(net_age, aes(x=date, color=net_age_years)) +
+  #   # geom_linerangeh(aes(y=mean, xmin=min_date, xmax=max_date)) + 
+  #   geom_pointrange(aes(y=mean, ymin=mean-1.96*se, ymax=mean+1.96*se)) +
+  #   facet_wrap(~Country, scales="free_y")
+  # 
+  ## ----------------------------------------------------------------------------------------------------------------------------------
   
   # MICS3 and nosurvey data both from Bonnie originally, defer to eLife paper to explain them
   mics3_data <- fread(file.path(main_dir,'Aggregated_HH_Svy_indicators_MICS3_080817.csv'),stringsAsFactors=FALSE)
@@ -93,16 +93,22 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   extract_jags <- function(varnames, jdata){
     
     all_estimates <- lapply(varnames, function(varname){
-      estimates <- jdata[names(jdata) %like% varname]
+      estimates <- jdata[(names(jdata)==varname) | (names(jdata) %like% paste0("^", varname, "\\[") ) ]
+      
+      if(length(estimates)==0){
+        print(paste("no results for variable", varname, ": skipping"))
+        return(NA)
+      }
+      
       if (names(estimates)[[1]] %like% ","){
-        print("extracting matrix")
+        print(paste("extracting matrix", varname))
         
         full_names <- names(estimates)
         rowmax <- max(as.integer(gsub(".*\\[([0-9]+),.*", "\\1", full_names)))
         colmax <- max(as.integer(gsub(".*,([0-9]+)\\].*", "\\1", full_names)))
         estimates <- matrix(estimates, nrow=rowmax, ncol=colmax)
       }else{
-        print("extracting vector")
+        print(paste("extracting vector", varname))
         estimates <- as.numeric(estimates)
       }
       
@@ -267,7 +273,8 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
     survey_model_estimates <- 
       rbind( as.data.table(c( metric = "mean" ,
                               list(year = totnet_calc_list$date),
-                              extract_jags(c("llin_count", "citn_count"), colMeans(survey_model_output[[1]])))), 
+                              extract_jags(c("llin_count", "citn_count"), colMeans(survey_model_output[[1]]))
+                              )), 
              as.data.table(c( metric = "sd" ,
                               list(year = totnet_calc_list$date),
                               extract_jags(c("llin_count", "citn_count"), apply(survey_model_output[[1]],2,sd))))
@@ -439,7 +446,8 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
 					  }
 					  
 					  # multivariate normal around nmcp values
-					  nmcp_nets_percapita_llin ~ dmnorm(mu_gp_llin,inverse(Sigma_gp_llin)) 
+					  # nmcp_nets_percapita_llin ~ dmnorm(mu_gp_llin,inverse(Sigma_gp_llin)) 
+					  nmcp_nets_percapita_llin ~ dmnorm(mu_gp_llin,Sigma_gp_llin) # TEST: what if you don't invert it
 	  
 	          # todo: still don't quite get this
 					  for (year_idx in 1:year_count) {
@@ -469,7 +477,8 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
 						 mu_gp_citn[citn_year_index] <- 0
 					  }
 					  
-					  nmcp_nets_percapita_citn~ dmnorm(mu_gp_citn,inverse(Sigma_gp_citn) )
+					  # nmcp_nets_percapita_citn~ dmnorm(mu_gp_citn,inverse(Sigma_gp_citn) )
+					  nmcp_nets_percapita_citn ~ dmnorm(mu_gp_citn,Sigma_gp_citn) # TEST: what if you don't invert it
 	  
 					  for (year_idx in 1:year_count) {
 						for (citn_year_index in 1:nmcp_year_count_citn) {
@@ -860,7 +869,7 @@ save(list = ls(all.names = TRUE), file = file.path(out_dir, paste0(this_country,
 }
 
 
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highcpu-32 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/data_from_sam --input CODE=gs://map_users/amelia/itn/code/stock_and_flow/02_stock_and_flow.r --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/intermediate_stockflow/ --command 'Rscript ${CODE}'
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highcpu-32 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/data_from_sam --input CODE=gs://map_users/amelia/itn/code/stock_and_flow/02_stock_and_flow.r --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/intermediate_stockflow/20190920_dont_invert_sigma --command 'Rscript ${CODE}'
 
 package_load <- function(package_list){
   # package installation/loading
