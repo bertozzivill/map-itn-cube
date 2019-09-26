@@ -16,6 +16,8 @@
 
 run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out_dir){
   
+  print(paste("RUNNING STOCK AND FLOW FOR", this_country))
+  
   # TODO: FIX THE WAY POPULATION IS USED
   
   ### Set initial values #####----------------------------------------------------------------------------------------------------------------------------------
@@ -27,7 +29,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   update=1000000
   n.iter=50000
   thin=10
-  
+
   ### Read in all data #####----------------------------------------------------------------------------------------------------------------------------------
   
   # NMCP data from WHO
@@ -424,10 +426,10 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   ### Main model string  #####----------------------------------------------------------------------------------------------------------------------------------
   
   test_snippet <- function(string, test_data){
-    n.adapt=10000
-    update=1000000
-    n.iter=50000
-    thin=100
+    n.adapt=100
+    update=1000
+    n.iter=50
+    thin=10
     
     jags<-c()
     jags <- jags.model(file=textConnection(string),
@@ -435,7 +437,6 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
                        n.chains = 1,
                        n.adapt=n.adapt)
   }
-  
   
   model_preface <- "model {"
   model_suffix <- "}"
@@ -642,10 +643,10 @@ citn_quarterly <-
 # test_snippet(paste( model_preface, nmcp_llins, nmcp_citns, annual_stock_and_flow, citn_quarterly, model_suffix), test_data = main_input_list)
 
 accounting <- "for(i in 1:quarter_count){
-				quarterly_net_count_llin[i]<-sum(quarterly_nets_remaining_matrix_llin[i,1:quarter_count])
-				quarterly_net_count_citn[i]<-sum(quarterly_nets_remaining_matrix_citn[i,1:quarter_count])
+				quarterly_nets_in_houses_llin[i]<-sum(quarterly_nets_remaining_matrix_llin[i,1:quarter_count])
+				quarterly_nets_in_houses_citn[i]<-sum(quarterly_nets_remaining_matrix_citn[i,1:quarter_count])
 				# total_percapita_nets is the percapita net count in the true population-at-risk (accounting for IRS)
-				total_percapita_nets[i] <- max( (quarterly_net_count_llin[i]+quarterly_net_count_citn[i])/(PAR*IRS*population[(round(i/4+0.3))]), 0) 
+				total_percapita_nets[i] <- max( (quarterly_nets_in_houses_llin[i]+quarterly_nets_in_houses_citn[i])/(PAR*IRS*population[(round(i/4+0.3))]), 0) 
 			}"
 
 # triggered if there are no nulls in survey data (survey_llin_sd or survey_citn_sd). pretty sure this only happens when there are no surveys, but need to confirm
@@ -655,8 +656,8 @@ surveys <- "for(i in 1:survey_count){
 				survey_quarter_end_index[i] <- survey_quarter_end_indices[i]	 	
 				
 				# to estimate # of nets at time of survey, linearly interpolate between the surrounding quartrly estimates 
-				survey_llin_count_est[i] <- quarter_prop_completed[i] * quarterly_net_count_llin[survey_quarter_start_index[i]] + quarter_prop_remaining[i] * quarterly_net_count_llin[survey_quarter_end_index[i]]	
-				survey_citn_count_est[i] <- quarter_prop_completed[i] * quarterly_net_count_citn[survey_quarter_start_index[i]] + quarter_prop_remaining[i] * quarterly_net_count_citn[survey_quarter_end_index[i]]	
+				survey_llin_count_est[i] <- quarter_prop_completed[i] * quarterly_nets_in_houses_llin[survey_quarter_start_index[i]] + quarter_prop_remaining[i] * quarterly_nets_in_houses_llin[survey_quarter_end_index[i]]	
+				survey_citn_count_est[i] <- quarter_prop_completed[i] * quarterly_nets_in_houses_citn[survey_quarter_start_index[i]] + quarter_prop_remaining[i] * quarterly_nets_in_houses_citn[survey_quarter_end_index[i]]	
 				survey_total_est[i] <- survey_llin_count_est[i] + survey_citn_count_est[i] # TODO: never used
 				
 				survey_llin_count[i] ~ dnorm(survey_llin_count_est[i], survey_llin_sd[i]^-2)	T(survey_llin_lowerlim[i], survey_llin_upperlim[i])
@@ -761,8 +762,8 @@ names_to_extract <- c("gp_rho_llin",
                       "mv_L_citn",
                       "citns_distributed_quarterly",
                       "quarterly_nets_remaining_matrix_citn",
-                      "quarterly_net_count_llin",
-                      "quarterly_net_count_citn",
+                      "quarterly_nets_in_houses_llin",
+                      "quarterly_nets_in_houses_citn",
                       "total_percapita_nets",
                       "survey_llin_count_est",
                       "survey_citn_count_est",
@@ -801,8 +802,8 @@ raw_posterior_densities <- HPDinterval(jdat)[[1]]
 
 uncertainty_vals <- c('llins_distributed_quarterly',
                       'citns_distributed_quarterly',
-                      'quarterly_net_count_llin',
-                      'quarterly_net_count_citn')
+                      'quarterly_nets_in_houses_llin',
+                      'quarterly_nets_in_houses_citn')
 
 posterior_densities <- lapply(uncertainty_vals, function(this_name){
   posteriors <- raw_posterior_densities[rownames(raw_posterior_densities) %like% this_name,]
@@ -828,21 +829,21 @@ posterior_densities <- rbindlist(posterior_densities)
 # Compare net priors to actual nets percapita
 nmcp_outputs <- as.data.table(c(list(year=years), model_estimates[c("nmcp_nets_percapita_llin_est", "nmcp_nets_percapita_citn_est", 'nmcp_count_llin_est', 'nmcp_count_citn_est')]))
 nmcp_outputs <- melt(nmcp_outputs, id.vars="year", variable.name = "metric")
-nmcp_outputs[, type:=gsub("nmcp_net_count_|bounded_est_nmcp_nets_percapita_", "", metric)]
+nmcp_outputs[, type:= ifelse(metric %like% "llin", "llin", "citn")]
 nmcp_outputs[, metric:=gsub("_llin|_citn", "", metric)]
 nmcp_outputs <- dcast.data.table(nmcp_outputs, year + type ~ metric)
-setnames(nmcp_outputs, "nmcp_net_count", "est_nmcp_net_count")
+print(nmcp_outputs)
 nmcp_results <- merge(this_nmcp, nmcp_outputs, by=c("type", "year"), all=T)
 
 nmcp_fit_plot <- ggplot(nmcp_results, aes(x=year, color=type)) + 
-  geom_line(aes(y=bounded_est_nmcp_nets_percapita), size=1) +
+  geom_line(aes(y=nmcp_nets_percapita_est), size=1) +
   geom_point(aes(y=nmcp_nets_percapita), size=2)
 
 
 quarterly_nets <- as.data.table(model_estimates[c("llins_distributed_quarterly", 
                                                   "citns_distributed_quarterly", 
-                                                  "quarterly_net_count_llin", 
-                                                  "quarterly_net_count_citn")])
+                                                  "quarterly_nets_in_houses_llin", 
+                                                  "quarterly_nets_in_houses_citn")])
 quarterly_nets[, year:=quarter_timesteps]
 quarterly_nets <- melt(quarterly_nets, id.vars = "year", variable.name="metric", value.name="mean")
 quarterly_nets <- merge(quarterly_nets, posterior_densities, by=c("year", "metric"), all=T)
@@ -851,7 +852,7 @@ quarterly_nets[, type:=ifelse(metric %like% "citn", "citn", "llin")]
 survey_model_estimates[, type:=gsub("_count", "", variable)]
 survey_model_estimates[, model_mean:=c(model_estimates$survey_llin_count_est, model_estimates$survey_citn_count_est)]
 
-quarterly_timeseries_plot <- ggplot(data=quarterly_nets[metric %like% "tot"], aes(x=year)) +
+quarterly_timeseries_plot <- ggplot(data=quarterly_nets[metric %like% "in_houses"], aes(x=year)) +
   geom_ribbon(aes(ymin=lower, ymax=upper, fill=type), alpha=0.3) + 
   geom_line(aes(y=mean, color=type), size=1) +
   geom_point(data=survey_model_estimates, aes(y=mean, color=type), size=2) +
@@ -886,7 +887,7 @@ save(list = ls(all.names = TRUE), file = file.path(out_dir, paste0(this_country,
 }
 
 
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highcpu-32 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/data_from_sam --input CODE=gs://map_users/amelia/itn/code/stock_and_flow/02_stock_and_flow.r --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/intermediate_stockflow/20190920_dont_invert_sigma --command 'Rscript ${CODE}'
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highcpu-32 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/data_from_sam --input CODE=gs://map_users/amelia/itn/code/stock_and_flow/02_stock_and_flow.r --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/intermediate_stockflow/20190925_batch_test --command 'Rscript ${CODE} ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/batch_country_list.tsv
 
 package_load <- function(package_list){
   # package installation/loading
@@ -900,14 +901,16 @@ package_load(c("data.table","raster","rjags", "zoo", "RecordLinkage", "ggplot2")
 if(Sys.getenv("main_dir")=="") {
   main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/data_from_sam"
   out_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/intermediate_stockflow"
+  this_country <- "MOZ"
 } else {
   main_dir <- Sys.getenv("main_dir")
   out_dir <- Sys.getenv("out_dir") 
+  this_country <- commandArgs(trailingOnly=TRUE)[1]
 }
 
 start_year <- 2000
 end_year<- 2017
-this_country <- "GHA"
+
 
 run_stock_and_flow(this_country, start_year, end_year, main_dir, out_dir)
 
