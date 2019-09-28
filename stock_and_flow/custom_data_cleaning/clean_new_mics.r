@@ -12,7 +12,7 @@ library(ggplot2)
 
 rm(list=ls())
 
-main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/survey_data/MICS5_raw"
+main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/survey_data/mics5_raw"
 
 
 # read in data
@@ -83,6 +83,6 @@ final_data[, n_llin:=n_itn]
 final_data[, n_conv_itn:=0]
 
 ### save
-write.csv(final_data, file.path(main_dir, "../MICS5_clean_05_August_2019.csv"), row.names = F)
+write.csv(final_data, file.path(main_dir, "../mics5_hh_05_august_2019.csv"), row.names = F)
 
 

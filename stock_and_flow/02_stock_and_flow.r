@@ -11,7 +11,7 @@
 # possible covariates for ITN:
 # - conflict area/refugee camp?
 # - urban/rural
-
+# or: get subnational distribution counts, rake to those
 
 
 run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out_dir){
@@ -51,31 +51,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   # from dhs prep script
   survey_data <- fread(file.path(main_dir, 'Aggregated_HH_Svy_indicators_28052019.csv'),stringsAsFactors=FALSE)
   setnames(survey_data, "V1", "X")
-  
-  ## ----------------------------------------------------------------------------------------------------------------------------------
-  # # test: what net age data info is there?
-  # net_age <- survey_data[!is.na(tot.LLIN.LT1.hh)]
-  # net_age <- melt(net_age, id.vars = c("names", "Country", "ISO3", "date", "min_date", "max_date"),
-  #                 measure.vars = c("tot.LLIN.LT1.hh", "se.LLIN.LT1.hh", "tot.LLIN.1to2.hh", "se.LLIN.1to2.hh", "tot.LLIN.2to3.hh", "se.LLIN.2to3.hh", "tot.LLIN.GT3.hh", "se.LLIN.GT3.hh"))
-  # net_age[, type:= ifelse(variable %like% "tot", "mean", "se")]
-  # net_age[, variable:=gsub("se\\.|tot\\.", "", variable)]
-  # net_age <- dcast.data.table(net_age, names + Country + ISO3 + date + min_date + max_date + variable ~ type, value.var = "value")
-  # net_age[, net_age_years:= factor(variable, levels=c("LLIN.LT1.hh", "LLIN.1to2.hh", "LLIN.2to3.hh", "LLIN.GT3.hh"),
-  #                                     labels=c("<1", "1-2", "2-3", "3+"))]
-  # 
-  # # remove afghanistan (weird date) and countries where all net counts are zero
-  # net_age[, tot_mean:=sum(mean), by="ISO3"]
-  # net_age <- net_age[ISO3!="AFG" & tot_mean>0]
-  # net_age[, tot_mean:=NULL]
-  # 
-  # 
-  # ggplot(net_age, aes(x=date, color=net_age_years)) +
-  #   # geom_linerangeh(aes(y=mean, xmin=min_date, xmax=max_date)) + 
-  #   geom_pointrange(aes(y=mean, ymin=mean-1.96*se, ymax=mean+1.96*se)) +
-  #   facet_wrap(~Country, scales="free_y")
-  # 
-  ## ----------------------------------------------------------------------------------------------------------------------------------
-  
+
   # MICS3 and nosurvey data both from Bonnie originally, defer to eLife paper to explain them
   mics3_data <- fread(file.path(main_dir,'Aggregated_HH_Svy_indicators_MICS3_080817.csv'),stringsAsFactors=FALSE)
   no_report_surveydata <-fread(file.path(main_dir,'No Report SVYs_080817.csv'),stringsAsFactors=FALSE)
@@ -247,12 +223,10 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   }else { # calculate total nets from surveys 
     
     this_survey_data[this_survey_data==0] <- 1e-6 # add small amount of precision
+    this_survey_data[, year:=floor(date)]
+    this_survey_data <- merge(this_survey_data, this_pop[, list(year, population=total_population)], by="year", all.x=T)
     
-    totnet_calc_list <- list(survey_count = nrow(this_survey_data),
-                             population = this_pop[year %in% floor(this_survey_data$date)]$total_population
-    )
-    
-    totnet_calc_list <- c(as.list(this_survey_data), totnet_calc_list)
+    totnet_calc_list <- c(as.list(this_survey_data), list(survey_count = nrow(this_survey_data)))
     
     # TODO: update these with appropriate populations from surveys
     ########### ADJUSTMENT FOR SURVEYS NOT CONDUCTED NATIONALLY BUT ON A POPULATION AT RISK BASIS
@@ -341,8 +315,6 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   this_nmcp <- melt(this_nmcp, id.vars=c("MAP_Country_Name", "ISO3", "year"),
                     measure.vars = c("LLIN", "CITN"),
                     variable.name = "type", value.name = "nmcp_count")
-  # TEST: set null values to zero
-  this_nmcp[is.na(nmcp_count), nmcp_count:=0]
   
   this_nmcp <- merge(this_nmcp, this_pop[, list(ISO3, year, total_population)], by=c("ISO3", "year"), all=T)
   this_nmcp[, nmcp_nets_percapita := nmcp_count/total_population]
@@ -461,8 +433,8 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
 					  }
 					  
 					  # multivariate normal around nmcp values
-					  # nmcp_nets_percapita_llin ~ dmnorm(gp_mu_llin,inverse(gp_Sigma_llin)) 
-					  nmcp_nets_percapita_llin ~ dmnorm(gp_mu_llin, gp_Sigma_llin) # TEST: what if you don't invert it
+					  nmcp_nets_percapita_llin ~ dmnorm(gp_mu_llin,inverse(gp_Sigma_llin)) 
+					  # nmcp_nets_percapita_llin ~ dmnorm(gp_mu_llin, gp_Sigma_llin) # TEST: what if you don't invert it
 	  
 	          # to calculate prediction; see Kevin Murphy's textbook
 					  for (year_idx in 1:year_count) {
@@ -493,8 +465,8 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
 						 gp_mu_citn[citn_year_index] <- 0
 					  }
 					  
-					  # nmcp_nets_percapita_citn~ dmnorm(gp_mu_citn,inverse(gp_Sigma_citn) )
-					  nmcp_nets_percapita_citn ~ dmnorm(gp_mu_citn,gp_Sigma_citn) # TEST: what if you don't invert it
+					  nmcp_nets_percapita_citn~ dmnorm(gp_mu_citn,inverse(gp_Sigma_citn) )
+					  # nmcp_nets_percapita_citn ~ dmnorm(gp_mu_citn,gp_Sigma_citn) # TEST: what if you don't invert it
 	  
 					  for (year_idx in 1:year_count) {
 						for (citn_year_index in 1:nmcp_year_count_citn) {
@@ -645,7 +617,9 @@ citn_quarterly <-
 accounting <- "for(i in 1:quarter_count){
 				quarterly_nets_in_houses_llin[i]<-sum(quarterly_nets_remaining_matrix_llin[i,1:quarter_count])
 				quarterly_nets_in_houses_citn[i]<-sum(quarterly_nets_remaining_matrix_citn[i,1:quarter_count])
+				
 				# total_percapita_nets is the percapita net count in the true population-at-risk (accounting for IRS)
+				# NOTE: if you don't calculate indicators (b/c you can't assume national homogeneity) you don't need to worry about IRS OR PAR. what a win.
 				total_percapita_nets[i] <- max( (quarterly_nets_in_houses_llin[i]+quarterly_nets_in_houses_citn[i])/(PAR*IRS*population[(round(i/4+0.3))]), 0) 
 			}"
 
@@ -667,17 +641,17 @@ surveys <- "for(i in 1:survey_count){
 indicators <- "
 
       # priors for nonet prop
-      alpha_nonet_prop ~ dnorm(alpha_nonet_prop_mean, alpha_nonet_prop_sd) I(0,)
-      p1_nonet_prop ~ dnorm(p1_nonet_prop_mean, p1_nonet_prop_sd) I(0,)
-      p2_nonet_prop ~ dnorm(p2_nonet_prop_mean, p2_nonet_prop_sd) I(0,)
-      b1_nonet_prop ~ dnorm(b1_nonet_prop_mean, b1_nonet_prop_sd) I(0,)
-      b2_nonet_prop ~ dnorm(b2_nonet_prop_mean, b2_nonet_prop_sd) I(0,)
-      b3_nonet_prop ~ dnorm(b3_nonet_prop_mean, b3_nonet_prop_sd) I(0,)
+      alpha_nonet_prop ~ dnorm(alpha_nonet_prop_mean, alpha_nonet_prop_sd^-2) I(0,)
+      p1_nonet_prop ~ dnorm(p1_nonet_prop_mean, p1_nonet_prop_sd^-2) I(0,)
+      p2_nonet_prop ~ dnorm(p2_nonet_prop_mean, p2_nonet_prop_sd^-2) I(0,)
+      b1_nonet_prop ~ dnorm(b1_nonet_prop_mean, b1_nonet_prop_sd^-2) I(0,)
+      b2_nonet_prop ~ dnorm(b2_nonet_prop_mean, b2_nonet_prop_sd^-2) I(0,)
+      b3_nonet_prop ~ dnorm(b3_nonet_prop_mean, b3_nonet_prop_sd^-2) I(0,)
       
       # priors for mean nets
       for(i in 1:max_hhsize){
-			  alpha_mean_nets[i] ~ dnorm(alpha_mean_nets_mean[i], alpha_mean_nets_sd[i]) I(0,)
-			  beta_mean_nets[i] ~ dnorm(beta_mean_nets_mean[i], beta_mean_nets_sd[i]) I(0,)
+			  alpha_mean_nets[i] ~ dnorm(alpha_mean_nets_mean[i], alpha_mean_nets_sd[i]^-2) I(0,)
+			  beta_mean_nets[i] ~ dnorm(beta_mean_nets_mean[i], beta_mean_nets_sd[i]^-2) I(0,)
 			}
       
       for (i in 1:quarter_count){
@@ -849,18 +823,27 @@ quarterly_nets <- melt(quarterly_nets, id.vars = "year", variable.name="metric",
 quarterly_nets <- merge(quarterly_nets, posterior_densities, by=c("year", "metric"), all=T)
 quarterly_nets[, type:=ifelse(metric %like% "citn", "citn", "llin")]
 
-survey_model_estimates[, type:=gsub("_count", "", variable)]
-survey_model_estimates[, model_mean:=c(model_estimates$survey_llin_count_est, model_estimates$survey_citn_count_est)]
-
-quarterly_timeseries_plot <- ggplot(data=quarterly_nets[metric %like% "in_houses"], aes(x=year)) +
-  geom_ribbon(aes(ymin=lower, ymax=upper, fill=type), alpha=0.3) + 
-  geom_line(aes(y=mean, color=type), size=1) +
-  geom_point(data=survey_model_estimates, aes(y=mean, color=type), size=2) +
-  geom_linerange(data=survey_model_estimates, aes(ymin=lower_limit, ymax=upper_limit, color=type)) +
-  geom_point(data=survey_model_estimates, aes(y=model_mean, color=type), shape=1, size=3) + 
-  labs(title= paste("Nets in Houses:", this_country),
-       x="Year",
-       y="Net Count")
+if (exists("survey_model_estimates")){
+  survey_model_estimates[, type:=gsub("_count", "", variable)]
+  survey_model_estimates[, model_mean:=c(model_estimates$survey_llin_count_est, model_estimates$survey_citn_count_est)]
+  
+  quarterly_timeseries_plot <- ggplot(data=quarterly_nets[metric %like% "in_houses"], aes(x=year)) +
+    geom_ribbon(aes(ymin=lower, ymax=upper, fill=type), alpha=0.3) + 
+    geom_line(aes(y=mean, color=type), size=1) +
+    geom_point(data=survey_model_estimates, aes(y=mean, color=type), size=2) +
+    geom_linerange(data=survey_model_estimates, aes(ymin=lower_limit, ymax=upper_limit, color=type)) +
+    geom_point(data=survey_model_estimates, aes(y=model_mean, color=type), shape=1, size=3) + 
+    labs(title= paste("Nets in Houses:", this_country),
+         x="Year",
+         y="Net Count")
+}else{
+  quarterly_timeseries_plot <- ggplot(data=quarterly_nets[metric %like% "in_houses"], aes(x=year)) +
+    geom_ribbon(aes(ymin=lower, ymax=upper, fill=type), alpha=0.3) + 
+    geom_line(aes(y=mean, color=type), size=1) +
+    labs(title= paste("Nets in Houses:", this_country),
+         x="Year",
+         y="Net Count")
+}
 
 
 stock_metrics <- data.table(year=years,
@@ -901,7 +884,7 @@ package_load(c("data.table","raster","rjags", "zoo", "RecordLinkage", "ggplot2")
 if(Sys.getenv("main_dir")=="") {
   main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/data_from_sam"
   out_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/intermediate_stockflow"
-  this_country <- "MOZ"
+  this_country <- "SEN"
 } else {
   main_dir <- Sys.getenv("main_dir")
   out_dir <- Sys.getenv("out_dir") 

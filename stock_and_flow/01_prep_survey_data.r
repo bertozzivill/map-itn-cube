@@ -15,14 +15,15 @@ library(lubridate)
 
 rm(list=ls())
 
-main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data"
+main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/survey_data/household_surveys"
+out_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/data_prep"
 dhs_dir <- "/Volumes/GoogleDrive/Shared drives/Data Gathering/Standard_MAP_DHS_Outputs/DHS_ITN_Data/Output/2019-07-24/standard_tables"
 
-# big table of national name/region/code maps. used to map ISO to GAUL in itn cube, not sure about here. 
+# big table of national name/region/code maps
 country_codes <-fread(file.path(main_dir, 'National_Config_Data.csv'))
 
 # map of older surveys to modern-style survey ids and country names
-old_survey_key <- fread(file.path(main_dir, "survey_data/KEY_080817.csv"))
+old_survey_key <- fread(file.path(main_dir, "KEY_080817.csv"))
 setnames(old_survey_key, c("Svy Name", "old_id", "Name"), c("SurveyId", "Survey.hh", "CountryName"))
 old_survey_key <- old_survey_key[SurveyId!="U2011BM"] # remove duplicate survey, see data_checking.r for details
 
@@ -78,8 +79,10 @@ dhs_data[, c("SurveyNum", "location_src", "hh_has_entry_in_net_tbl", "hh_has_itn
 # read in older data extracted by B Mappin, keep only surveys that are not present in dhs_data
 print("reading older dhs data")
 
+## DATA SOURCE TWO: OLDER DHS SURVEYS EXTRACTED BY B MAPPIN ----------------------------------------------------------------------------------------------------------------------
+
 # from Z:\Malaria data\Measure DHS\Data and Aggregation\Data from Malaria Indicators. 
-old_dhs_data <-fread(file.path(main_dir, "survey_data/Net details aggregated by household combined6Oct.csv"),stringsAsFactors=FALSE)
+old_dhs_data <-fread(file.path(main_dir, "older_dhs_hh_06_october.csv"),stringsAsFactors=FALSE)
 
 # keep only surveys that don't overlap with newer DHS data-- see data_checking.r for how we got these survey values specifically
 old_surveys_to_keep <- c("TZ2007AIS", "ML2010OTH", "KE2007BM", "KE2010BM", "NM2009SPA", "RC2012BM")
@@ -87,7 +90,7 @@ to_keep_ids <- old_survey_key[SurveyId %in% old_surveys_to_keep]$Survey.hh
 old_dhs_data <- old_dhs_data[Survey.hh %in% to_keep_ids]
 
 # also load cluster-level data from this extraction to get lat-longs
-old_dhs_cluster <- fread(file.path(main_dir, "/survey_data/Net details aggregated by cluster combined22Oct.csv"))
+old_dhs_cluster <- fread(file.path(main_dir, "/older_dhs_cluster_22_october.csv"))
 old_dhs_cluster <- old_dhs_cluster[Survey %in% unique(old_dhs_data$Survey.hh), 
                                    list(Survey.hh=Survey, 
                                         Cluster.hh=Cluster.number,
@@ -96,11 +99,11 @@ old_dhs_cluster <- old_dhs_cluster[Survey %in% unique(old_dhs_data$Survey.hh),
 old_dhs_data <- merge(old_dhs_data, old_dhs_cluster, by=c("Survey.hh", "Cluster.hh"), all.x=T) # Congo 2011, Kenya 2007, and Kenya 2010 don't have gps data
 
 
-## DATA SOURCE TWO: MICS SURVEYS ----------------------------------------------------------------------------------------------------------------------
+## DATA SOURCE THREE: MICS SURVEYS ----------------------------------------------------------------------------------------------------------------------
 
-## MICS4 data -- from 2014, probably newer ones that we haven't processed 
+## MICS4 data -- from 2014, extracted by Bonnie 
 # originally from Z:\Malaria data\MICS\Indicator data\MICS4\MICS4 Net details aggregated by household 21Jan.csv
-old_mics_data<-fread(file.path(main_dir, "survey_data/MICS4 Net details aggregated by household 21Jan.csv"))
+old_mics_data<-fread(file.path(main_dir, "mics4_hh_21_january.csv"))
 
 # standardize naming with other 'old' datasets
 to_sub_mics <- names(old_mics_data)[names(old_mics_data) %like% "LLIN"]
@@ -109,7 +112,7 @@ setnames(old_mics_data, to_sub_mics, gsub("LLIN", "LLINs", to_sub_mics))
 
 ## MICS5 data -- I extracted and cleaned these, see extract_mics.r and clean_new_mics.r
 ## These include some subnational surveys that can't be included in the cube data (no lat/long) or the stock and flow data, drop those.
-mics5_data<-fread(file.path(main_dir, "survey_data/MICS5_clean_05_August_2019.csv"))
+mics5_data<-fread(file.path(main_dir, "mics5_hh_05_august_2019.csv"))
 setnames(mics5_data, c("surveyid", "country"), c("SurveyId", "CountryName"))
 mics5_data <- mics5_data[subnat==""]
 mics5_data[, subnat:=NULL]
@@ -117,15 +120,11 @@ mics5_data[, subnat:=NULL]
 # drop ST2014MICS because apparently all survey weights are zero? todo: ask lisa about this
 mics5_data<- mics5_data[SurveyId!="ST2014MICS"]
 
-## DATA SOURCE THREE: OTHER SURVEYS ----------------------------------------------------------------------------------------------------------------------
+## DATA SOURCE FOUR: OTHER SURVEYS ----------------------------------------------------------------------------------------------------------------------
 # see data_checking.r for more details
 
 # "other" data-- unsure, hunt through Z:\Malaria data\Surveys from other sources
-old_other_data <-fread(file.path(main_dir, "survey_data/Other source net data by household.csv"))
-
-# surveys to drop for cube:
-# "Zambia 2010" "Zambia 2012": No hh_sample_wt
-# MW2010: No n_defacto_pop or n_slept_under_itn
+old_other_data <-fread(file.path(main_dir, "other_hh.csv"))
 
 old_other_data <- old_other_data[!Survey.hh %in% c("Malawi2010", "Zambia 2010", "Zambia 2012")]
 
@@ -184,6 +183,47 @@ all_data[, (to_drop):=NULL]
 # add cleaned mics5 data
 all_data <- rbind(all_data, mics5_data, fill=T)
 
+## Fix ITN count discrepancy  ----------------------------------------------------------------------------------------------------------------------
+
+# n_itn is not always equal to n_llin + n_conv_llin. Enforce consistency in two steps:
+# 1. If n_llin + n_conv_itn > n_itn, replace n_itn with the sum.
+# 2. If n_llin + n_conv_itn < n_itn, rake n_llin and n_conv_itn up to n_itn using the citn/llin ratios in the survey (or, failing that, in the country)
+
+# step 1
+all_data[, summed_n_itn:= n_conv_itn + n_llin]
+all_data[summed_n_itn > n_itn, n_itn:=summed_n_itn]
+
+# step 2
+net_mismatch_svys <- unique(all_data[summed_n_itn!=n_itn]$SurveyId)
+
+net_type_ratios <- all_data[SurveyId %in% net_mismatch_svys, list(n_conv_itn_survey=sum(n_conv_itn),
+                                                                  n_llin_survey=sum(n_llin),
+                                                                  survey_ratio=sum(n_conv_itn)/sum(n_llin)), by= c("SurveyId", "CountryName", "iso3")]
+net_type_ratios[ is.infinite(survey_ratio), survey_ratio:=1]
+
+net_mismatch_countries <- unique(all_data[summed_n_itn!=n_itn]$iso3)
+net_type_ratios_country <- all_data[iso3 %in% net_mismatch_countries, list(n_conv_itn_country=sum(n_conv_itn),
+                                                                  n_llin_country=sum(n_llin, na.rm=T),
+                                                                  country_ratio=sum(n_conv_itn)/sum(n_llin, na.rm=T)), by= c("iso3")]
+
+net_type_ratios <- merge(net_type_ratios, net_type_ratios_country, by="iso3", all.x=T)
+net_type_ratios[is.na(survey_ratio), survey_ratio:=country_ratio]
+# if there's not even data on the country level (cambodia and vietnam), assume all nets are llins
+net_type_ratios[is.na(survey_ratio), survey_ratio:=0]
+
+all_data <- merge(all_data, net_type_ratios[, list(SurveyId, citn_ratio=survey_ratio)], by="SurveyId", all.x=T)
+all_data[, n_conv_itn:=as.numeric(n_conv_itn)]
+all_data[, n_llin:=as.numeric(n_llin)]
+all_data[summed_n_itn!=n_itn, n_conv_itn:=n_itn*citn_ratio]
+all_data[summed_n_itn!=n_itn, n_llin:=n_itn*(1-citn_ratio)]
+all_data[, summed_n_itn:=n_conv_itn + n_llin]
+all_data[, diff:=abs(summed_n_itn-n_itn)]
+if(max(all_data$diff, na.rm=T)>1e-15){
+  stop("N_ITN STILL DOESN'T ADD UP TO CITN + LLIN")
+}
+
+all_data[, c("summed_n_itn", "citn_ratio", "diff") :=NULL]
+
 
 ## Isolate data to use for itn cube fitting-- must have entries in all columns listed below  ----------------------------------------------------------------------------------------------------------------------
 
@@ -201,12 +241,10 @@ for_cube <- all_data[, list(SurveyId,
                             n_itn)]
 
 for_cube <- for_cube[complete.cases(for_cube)]
-write.csv(for_cube, file.path(main_dir, "../results/itn_survey_data.csv"), row.names=F) # TODO: compare this to the net data currently being used
+write.csv(for_cube, file.path(out_dir, "itn_hh_survey_data.csv"), row.names=F) # TODO: compare this to the net data currently being used
 
 
-
-
-## Find household size distributions for surveys  ----------------------------------------------------------------------------------------------------------------------
+## Find household size distributions from surveys  ----------------------------------------------------------------------------------------------------------------------
 
 for_cube[, sample_prop:= hh_sample_wt/sum(hh_sample_wt), by="SurveyId"]
 
@@ -216,7 +254,7 @@ names(full_hh_dist) <- c("SurveyId", "n_defacto_pop")
 hh_size_props <- merge(hh_size_props, full_hh_dist, by=c("SurveyId", "n_defacto_pop"), all=T)
 hh_size_props[is.na(hh_prop), hh_prop:=0]
 
-write.csv(hh_size_props, file.path(main_dir, "../results/HHsize.csv"), row.names=F)
+write.csv(hh_size_props, file.path(out_dir, "hhsize_from_surveys.csv"), row.names=F)
 
 
 ## SUMMARIZE DATA FOR STOCK AND FLOW  ----------------------------------------------------------------------------------------------------------------------
@@ -230,9 +268,6 @@ all_data[, hh_sample_wt:=hh_sample_wt/1e6] # as per dhs specs, apparently (ask s
 # get date as middle day of collection month
 all_data[, time:=decimal_date(ymd(paste(year, month, "15", sep="-")))]
 
-# NOTE: this sum is different from n_itn in a handful of cases
-all_data[, summed_n_itn:= n_conv_itn + n_llin]
-
 print("Summarizing surveys")
 survey_summary <- lapply(unique(all_data$SurveyId), function(this_svy){
   
@@ -242,7 +277,7 @@ survey_summary <- lapply(unique(all_data$SurveyId), function(this_svy){
   # set up survey design
   svy_strat<-svydesign(ids=~clusterid, data=this_svy_data, weight=~hh_sample_wt) 
   
-  meanvals <- c("hh_size", "n_defacto_pop", "summed_n_itn", "n_llin", "n_conv_itn", "n_slept_under_itn", "n_itn_used")
+  meanvals <- c("hh_size", "n_defacto_pop", "n_itn", "n_llin", "n_conv_itn", "n_slept_under_itn", "n_itn_used")
   svy_means <- lapply(meanvals, function(this_val){
     uniques <- unique(this_svy_data[[this_val]])
     if (length(uniques)==1 & is.na(uniques[1])){
@@ -291,4 +326,4 @@ survey_summary <- lapply(unique(all_data$SurveyId), function(this_svy){
 # for each metric, values are means unless col name is "tot", in which case they are sums
 survey_summary <- rbindlist(survey_summary)
 
-write.csv(survey_summary, file.path(main_dir, "../results/summarized_survey_data.csv"), row.names=F)
+write.csv(survey_summary, file.path(out_dir, "itn_aggregated_survey_data.csv"), row.names=F)

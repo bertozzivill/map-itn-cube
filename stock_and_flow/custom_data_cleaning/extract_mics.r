@@ -11,12 +11,13 @@ library(data.table)
 rm(list=ls())
 
 # directory setup
-this_svy <- "MICS5"
+this_svy <- "mics5"
 
 func_dir <- "~/repos/map-itn-cube/stock_and_flow/custom_data_cleaning/"
 in_dir <- "/Volumes/map_data/MICS_Automation/Acquisition/NEW/03 Processed"
-main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/"
-out_dir <- file.path(main_dir, "survey_data/MICS5_raw")
+main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/survey_data/household_surveys"
+out_dir <- file.path(main_dir, paste0(this_svy, "_raw"))
+dir.create(out_dir, showWarnings=F, recursive=T)
 svy_dir <- file.path(in_dir, this_svy, "Ready to Extract/")
 data_fnames <- list.files(svy_dir)
 
