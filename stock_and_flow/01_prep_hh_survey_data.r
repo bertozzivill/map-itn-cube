@@ -15,8 +15,8 @@ library(lubridate)
 
 rm(list=ls())
 
-main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/survey_data/household_surveys"
-out_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/data_prep"
+main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_data/household_surveys"
+out_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_data_prep"
 dhs_dir <- "/Volumes/GoogleDrive/Shared drives/Data Gathering/Standard_MAP_DHS_Outputs/DHS_ITN_Data/Output/2019-07-24/standard_tables"
 
 # big table of national name/region/code maps
@@ -231,6 +231,7 @@ for_cube <- all_data[, list(SurveyId,
                             CountryName,
                             iso3,
                             clusterid,
+                            hhid,
                             latitude,
                             longitude,
                             year,
@@ -266,7 +267,7 @@ all_data <- all_data[!is.na(hh_size) & !is.na(year)]
 all_data[, hh_sample_wt:=hh_sample_wt/1e6] # as per dhs specs, apparently (ask sam). 
 
 # get date as middle day of collection month
-all_data[, time:=decimal_date(ymd(paste(year, month, "15", sep="-")))]
+all_data[, date:=decimal_date(ymd(paste(year, month, "15", sep="-")))]
 
 print("Summarizing surveys")
 survey_summary <- lapply(unique(all_data$SurveyId), function(this_svy){
@@ -277,7 +278,7 @@ survey_summary <- lapply(unique(all_data$SurveyId), function(this_svy){
   # set up survey design
   svy_strat<-svydesign(ids=~clusterid, data=this_svy_data, weight=~hh_sample_wt) 
   
-  meanvals <- c("hh_size", "n_defacto_pop", "n_itn", "n_llin", "n_conv_itn", "n_slept_under_itn", "n_itn_used")
+  meanvals <- c("n_defacto_pop", "n_itn", "n_llin", "n_conv_itn")
   svy_means <- lapply(meanvals, function(this_val){
     uniques <- unique(this_svy_data[[this_val]])
     if (length(uniques)==1 & is.na(uniques[1])){
@@ -285,40 +286,24 @@ survey_summary <- lapply(unique(all_data$SurveyId), function(this_svy){
     }else{
       mean_df<- as.data.frame(svymean(as.formula(paste("~", this_val)), svy_strat, na.rm=T))
     }
-    names(mean_df) <- c("val", "se")
+    names(mean_df) <- c("mean", "se")
     return(mean_df)
     })
-  svy_means <- do.call("rbind", svy_means)
+  svy_summary <- do.call("rbind", svy_means)
   
-  totvals <- c("n_llin", "n_llin_1yr", "n_llin_1_2yr", "n_llin_2_3yr", "n_llin_gt3yr")
-  svy_sums <- lapply(totvals, function(this_val){
-    
-    # todo: check whether or not every entry of the column is null
-    uniques <- unique(this_svy_data[[this_val]])
-    if (length(uniques)==1 & is.na(uniques[1])){
-      tot_df<- as.data.frame(svytotal(as.formula(paste("~", this_val)), svy_strat))
-    }else{
-      tot_df<- as.data.frame(svytotal(as.formula(paste("~", this_val)), svy_strat, na.rm=T))
-    }
-    
-    names(tot_df) <- c("val", "se")
-    return(tot_df)
-  })
-  svy_sums <- do.call("rbind", svy_sums)
-  rownames(svy_sums) <- paste0("tot_", rownames(svy_sums))
-  svy_summary <- rbind(svy_means, svy_sums)
   svy_summary$variable <- rownames(svy_summary)
   
   svy_summary <- data.table(svy_summary,
                             surveyid = this_svy,
                             iso3=unique(this_svy_data$iso3) ,
                             country=unique(this_svy_data$CountryName),
-                            time=svymean(~time, svy_strat)[[1]],
-                            min_time=min(this_svy_data$time),
-                            max_time=max(this_svy_data$time)
+                            date=svymean(~date, svy_strat)[[1]],
+                            min_date=min(this_svy_data$date),
+                            max_date=max(this_svy_data$date)
   )
-  svy_summary <- melt(svy_summary, measure.vars = c("val", "se"), variable.name="metric")
-  svy_summary <- dcast(svy_summary, surveyid + iso3 + country + time +  min_time + max_time + metric ~ variable, value.var="value")
+  svy_summary <- melt(svy_summary, measure.vars = c("mean", "se"), variable.name="metric")
+  svy_summary[, variable:=paste(variable, metric, sep="_")]
+  svy_summary <- dcast(svy_summary, surveyid + iso3 + country + date +  min_date + max_date  ~ variable, value.var="value")
   
   return(svy_summary)
 })

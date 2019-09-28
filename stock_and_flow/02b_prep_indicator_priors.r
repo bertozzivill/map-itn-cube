@@ -23,73 +23,67 @@ emplogit <- function (y, eps = 1e-3){
   log((eps + y)/(1 - y + eps))
 } 
 
-main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/data_from_sam"
+main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data"
 
 ### Read in all data #####----------------------------------------------------------------------------------------------------------------------------------
 
-HH<-fread( file.path(main_dir, 'ALL_HH_Data_28052019.csv'))
+HH<-fread( file.path(main_dir, "01_data_prep/itn_hh_survey_data.csv"))
 
-# n.ITN.per.hh does not perfectly add up so use this instead
-HH[, totITN := n.conventional.ITNs + n.LLINs]
-
-# use n who slept in house previous night as hh size
-setnames(HH, "n.individuals.that.slept.in.surveyed.hhs", "defacto.hh.size")
-
-HH <- HH[!Survey.hh %in% c('TZ2012AIS')] # todo: why?
-HH$sample.w<-HH$sample.w/1e6 # adjust sample weight according to DHS specs
+HH <- HH[!SurveyId %in% c('TZ2012AIS')] # todo: why?
+HH[, hh_sample_wt:=hh_sample_wt/1e6] # adjust sample weight according to DHS specs
 
 # todo: only keep surveys from SSA malaria countries
 
 ### Format and aggregate #####----------------------------------------------------------------------------------------------------------------------------------
 
 # find survey nets per capita
-aggregated_svy_data <- lapply(unique(HH$Survey.hh), function(this_svy){
+aggregated_svy_data <- lapply(unique(HH$SurveyId), function(this_svy){
   
-  subset <- HH[Survey.hh==this_svy]
-  dstrat<-svydesign(ids=~Cluster.hh, data=subset, weight=~sample.w) # set up survey design
+  subset <- HH[SurveyId==this_svy]
+  dstrat<-svydesign(ids=~clusterid, data=subset, weight=~hh_sample_wt) # set up survey design
   
   ## HH size and population	
-  hh.size<-as.numeric(as.data.frame(svymean(~defacto.hh.size,dstrat))) #average household size	
+  hh_size<-as.numeric(as.data.frame(svymean(~n_defacto_pop, dstrat))) 
   
-  ## numbers itn and llin in HH
-  avg.ITN_total<-as.numeric(as.data.frame(svymean(~totITN,dstrat))) #average household size	
+  ## itn and llin counts in HH
+  net_counts <- as.numeric(as.data.frame(svymean(~n_itn, dstrat))) 
   
-  summary <- data.table(Survey.hh=this_svy, 
-                        avg.hh.size=hh.size[1],
-                        se.hh.size=hh.size[2],
-                        avg.tot.ITN.hh=avg.ITN_total[1],
-                        se.tot.ITN.hh=avg.ITN_total[2],
-                        nets_pc =  avg.ITN_total[1] / hh.size[1]
+  summary <- data.table(SurveyId=this_svy, 
+                        hh_size_mean=hh_size[1],
+                        hh_size_se=hh_size[2],
+                        net_count_mean.hh=net_counts[1],
+                        net_count_se=net_counts[2],
+                        nets_percapita =  net_counts[1] / hh_size[1]
                         )
   return(summary)
   
 })
 aggregated_svy_data <- rbindlist(aggregated_svy_data)
-nets.per.capita <- aggregated_svy_data$nets_pc
+nets.per.capita <- aggregated_svy_data$nets_percapita
 
 hh_size_max<-10 # number of house categories
 
-for_indicators <- HH[, list(Survey.hh, Country, ISO3, Cluster.hh, hhid, sample.w,
-                            defacto.hh.size=pmin(defacto.hh.size, 10), totITN)]
+for_indicators <- HH[, list(SurveyId, CountryName, iso3, clusterid, hhid, hh_sample_wt,
+                            n_defacto_pop=pmin(n_defacto_pop, 10), n_itn)]
 
 # Find indicators from data
 svy_indicators <- lapply(1:hh_size_max, function(hhsize){
-  subset <- for_indicators[defacto.hh.size==hhsize]
+  subset <- for_indicators[n_defacto_pop==hhsize]
   
-  num <- subset[, list(denom_sample=sum(sample.w, na.rm = T)), by="Survey.hh"]
-  denom <- subset[totITN==0, list(num_sample=sum(sample.w, na.rm = T)), by="Survey.hh"]
-  mean_nets <- subset[totITN>0, list(mean_nets=weighted.mean(totITN, sample.w, na.rm=T)), by="Survey.hh"]
+  num <- subset[, list(denom_sample=sum(hh_sample_wt, na.rm = T)), by="SurveyId"]
+  denom <- subset[n_itn==0, list(num_sample=sum(hh_sample_wt, na.rm = T)), by="SurveyId"]
+  mean_nets <- subset[n_itn>0, list(mean_nets=weighted.mean(n_itn, hh_sample_wt, na.rm=T)), by="SurveyId"]
   
-  full <- merge(num, denom, by="Survey.hh", all=T)
+  full <- merge(num, denom, by="SurveyId", all=T)
   full[, prop_no_net:=num_sample/denom_sample]
-  full <- merge(full, mean_nets, by="Survey.hh", all=T)
+  full <- merge(full, mean_nets, by="SurveyId", all=T)
   full[prop_no_net==1, mean_nets:=0]
   full[, hhsize:=hhsize]
   return(full)
 })
 svy_indicators <- rbindlist(svy_indicators)
 svy_indicators[, emplogit_prop_no_net:= emplogit(prop_no_net)]
-svy_indicators <- merge(svy_indicators, aggregated_svy_data[, list(Survey.hh, nets_pc)], by="Survey.hh", all=T)
+svy_indicators <- merge(svy_indicators, aggregated_svy_data[, list(SurveyId, nets_percapita)], by="SurveyId", all=T)
 
 # find adjusted mean net count to preserve mean of truncated poisson
 truncated_poiss_mean<-function(M){
@@ -108,22 +102,17 @@ svy_indicators[, adj_mean_nets:= sapply(mean_nets, truncated_poiss_mean)]
 
 ### Run models #####----------------------------------------------------------------------------------------------------------------------------------
 
-prop_no_nets <- as.list(svy_indicators[, list(emplogit_prop_no_net, hhsize, nets_pc)])
+prop_no_nets <- as.list(svy_indicators[, list(emplogit_prop_no_net, hhsize, nets_percapita)])
 prop_no_nets$N <- nrow(svy_indicators)
 
 chains <- 1
 warm<-5000
 iterations<-10000
 
-# testing
-warm<-500
-iterations<-1000
-
-
 no_nets_model <- "data {
             int<lower=1> N;      
             real hhsize[N]; // x
-            real nets_pc[N]; // y
+            real nets_percapita[N]; // y
             real emplogit_prop_no_net[N]; // z
             }
         parameters {
@@ -148,7 +137,7 @@ no_nets_model <- "data {
       			tau_nonet_prop ~ gamma(0.1,0.1); 			
 
              for(i in 1:N){
-                 mu_hat[i] = alpha_nonet_prop + p1_nonet_prop*hhsize[i] + p2_nonet_prop*pow(hhsize[i], 2) + b1_nonet_prop*nets_pc[i] + b2_nonet_prop*pow(nets_pc[i], 2) + b3_nonet_prop*pow(nets_pc[i], 3) ;
+                 mu_hat[i] = alpha_nonet_prop + p1_nonet_prop*hhsize[i] + p2_nonet_prop*pow(hhsize[i], 2) + b1_nonet_prop*nets_percapita[i] + b2_nonet_prop*pow(nets_percapita[i], 2) + b3_nonet_prop*pow(nets_percapita[i], 3) ;
              }               
               emplogit_prop_no_net ~ normal(mu_hat, tau_nonet_prop);
 
@@ -163,7 +152,7 @@ no_net_fit <- stan(model_code=no_nets_model,
 
 mean_nets_model <- "data {
             int<lower=1> N;
-            vector[N] nets_pc; // formerly y1-10
+            vector[N] nets_percapita; // formerly y1-10
             vector[N] adj_mean_nets; //formerly z1-10
             }
         parameters {
@@ -176,12 +165,12 @@ mean_nets_model <- "data {
       			alpha_mean_nets ~ uniform(-20,20);
       			beta_mean_nets ~ uniform(-20,20);
 			      tau_mean_nets ~ gamma(0.1,0.1);
-			      adj_mean_nets ~ normal(alpha_mean_nets + beta_mean_nets*nets_pc, tau_mean_nets);
+			      adj_mean_nets ~ normal(alpha_mean_nets + beta_mean_nets*nets_percapita, tau_mean_nets);
         }"
 
 
 mean_net_fit <- lapply(1:hh_size_max, function(this_hhsize){
-  mean_nets <- as.list(svy_indicators[hhsize==this_hhsize, list(adj_mean_nets, hhsize, nets_pc)])
+  mean_nets <- as.list(svy_indicators[hhsize==this_hhsize, list(adj_mean_nets, hhsize, nets_percapita)])
   mean_nets$N <- nrow(svy_indicators[hhsize==this_hhsize])
   
   this_mean_net_fit <-	stan(model_code=mean_nets_model,
@@ -239,7 +228,7 @@ mean_net_outputs <- rbindlist(mean_net_outputs)
 mean_net_outputs[, model_type:="mean_net_count"]
 
 all_outputs <- rbind(no_net_outputs, mean_net_outputs, fill=T)
-write.csv(all_outputs, file=file.path(main_dir, "AMELIA_GENERATED_indicator_priors.csv"), row.names = F)
+write.csv(all_outputs, file=file.path(main_dir, "02_stock_and_flow_prep/indicator_priors.csv"), row.names = F)
 
 # todo: diagnostic plots
 # lp1<-var1[i1] + var1[b1]*data1$y1 
