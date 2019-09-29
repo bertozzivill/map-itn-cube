@@ -27,31 +27,6 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   update=1000000
   n.iter=50000
   thin=10
-  
-  ### Useful Function #####----------------------------------------------------------------------------------------------------------------------------------
-  
-  extract_jags <- function(varnames, jdata){
-    all_estimates <- lapply(varnames, function(varname){
-      estimates <- jdata[(names(jdata)==varname) | (names(jdata) %like% paste0("^", varname, "\\[") ) ]
-      if(length(estimates)==0){
-        print(paste("no results for variable", varname, ": skipping"))
-        return(NA)
-      }
-      if (names(estimates)[[1]] %like% ","){
-        print(paste("extracting matrix", varname))
-        full_names <- names(estimates)
-        rowmax <- max(as.integer(gsub(".*\\[([0-9]+),.*", "\\1", full_names)))
-        colmax <- max(as.integer(gsub(".*,([0-9]+)\\].*", "\\1", full_names)))
-        estimates <- matrix(estimates, nrow=rowmax, ncol=colmax)
-      }else{
-        print(paste("extracting vector", varname))
-        estimates <- as.numeric(estimates)
-      }
-      return(estimates)
-    })
-    names(all_estimates) <- varnames
-    return(all_estimates)
-  }
 
   ### Read in all data #####----------------------------------------------------------------------------------------------------------------------------------
   
@@ -170,6 +145,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
            x="Year",
            y="Nets")
     
+    # TODO: ADD SURVEY DATES
     main_input_list <- list(survey_llin_count = survey_model_estimates[variable=="llin_count"]$mean,
                             survey_llin_sd = survey_model_estimates[variable=="llin_count"]$sd,
                             survey_llin_lowerlim = survey_model_estimates[variable=="llin_count"]$lower_limit,
@@ -193,6 +169,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   ### Format NMCP reports  #####----------------------------------------------------------------------------------------------------------------------------------
   
   # set llins to zero in early years for which manufacturers didn't report any nets 
+  # TODO: shouldn't model cap this anyway?
   this_nmcp[this_manufacturer_llins$llins==0, LLIN:=0]
   
   # find nets per person, drop NAs but track indices of non-null years for GP prior
@@ -749,7 +726,7 @@ save(list = ls(all.names = TRUE), file = file.path(out_dir, paste0(this_country,
 }
 
 
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highcpu-32 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/02_stock_and_flow_prep --input CODE=gs://map_users/amelia/itn/code/stock_and_flow/03_stock_and_flow.r --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20190927_new_data --command 'Rscript ${CODE} ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/batch_country_list.tsv
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highcpu-32 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/02_stock_and_flow_prep CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20190927_new_data --command 'cd ${CODE}; Rscript 03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list.tsv
 
 package_load <- function(package_list){
   # package installation/loading
@@ -763,13 +740,14 @@ package_load(c("data.table","raster","rjags", "zoo", "RecordLinkage", "ggplot2")
 if(Sys.getenv("main_dir")=="") {
   main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/02_stock_and_flow_prep"
   out_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results"
-  this_country <- "COG"
+  this_country <- "GHA"
 } else {
   main_dir <- Sys.getenv("main_dir")
   out_dir <- Sys.getenv("out_dir") 
   this_country <- commandArgs(trailingOnly=TRUE)[1]
 }
 
+source("jags_functions.r")
 start_year <- 2000
 end_year<- 2018
 

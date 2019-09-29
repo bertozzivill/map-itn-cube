@@ -19,6 +19,7 @@ update=1000000
 n.iter=50000
 thin=10
 
+source("jags_functions.r")
 main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/"
 
 # From Bonnie/Sam: pre-aggregated data from older surveys/reports, defer to eLife paper to explain them
@@ -35,32 +36,6 @@ survey_data <- survey_data[, list(surveyid, iso3, country, date,
                                   n_citn_se=n_conv_itn_se,
                                   n_llin_mean,
                                   n_llin_se)]
-
-### Useful Function #####----------------------------------------------------------------------------------------------------------------------------------
-
-extract_jags <- function(varnames, jdata){
-  all_estimates <- lapply(varnames, function(varname){
-    estimates <- jdata[(names(jdata)==varname) | (names(jdata) %like% paste0("^", varname, "\\[") ) ]
-    if(length(estimates)==0){
-      print(paste("no results for variable", varname, ": skipping"))
-      return(NA)
-    }
-    if (names(estimates)[[1]] %like% ","){
-      print(paste("extracting matrix", varname))
-      full_names <- names(estimates)
-      rowmax <- max(as.integer(gsub(".*\\[([0-9]+),.*", "\\1", full_names)))
-      colmax <- max(as.integer(gsub(".*,([0-9]+)\\].*", "\\1", full_names)))
-      estimates <- matrix(estimates, nrow=rowmax, ncol=colmax)
-    }else{
-      print(paste("extracting vector", varname))
-      estimates <- as.numeric(estimates)
-    }
-    return(estimates)
-  })
-  names(all_estimates) <- varnames
-  return(all_estimates)
-}
-
 
 ### preprocess MICS3 Data #####----------------------------------------------------------------------------------------------------------------------------------
 
