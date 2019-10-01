@@ -298,12 +298,14 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   nmcp_llins <- "
             gp_rho_llin ~ dunif(0,1) # restricted to prevent over-smoothing
 	    			gp_tau_llin ~ dunif(0,0.1)
-	    			gp_sigma_sq_llin ~ dunif(0,1000)
+	    			gp_sigma_sq_llin ~ dunif(0,2)
 
             # specify covariance function for GP (squared exponential?)
             for (llin_year_row in 1:nmcp_year_count_llin) {
 						for (llin_year_column in 1:nmcp_year_count_llin) {
 							gp_Sigma_llin[llin_year_row, llin_year_column] <- gp_sigma_sq_llin * exp(-( (nmcp_year_indices_llin[llin_year_row] - nmcp_year_indices_llin[llin_year_column]) / gp_rho_llin)^2) + ifelse(llin_year_row==llin_year_column, gp_tau_llin, 0) 
+							# gp_Sigma_llin[llin_year_row, llin_year_column] <- exp(-( (nmcp_year_indices_llin[llin_year_row] - nmcp_year_indices_llin[llin_year_column]) / gp_rho_llin)^2) + ifelse(llin_year_row==llin_year_column, gp_tau_llin, 0) 
+
 						}
 					  }
 					  
@@ -320,6 +322,8 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
 					  for (year_idx in 1:year_count) {
 						for (llin_year_idx in 1:nmcp_year_count_llin) {
 							gp_Sigma_prediction_llin[year_idx, llin_year_idx] <-  gp_sigma_sq_llin * exp(-((year_idx - nmcp_year_indices_llin[llin_year_idx])/gp_rho_llin)^2)
+							# gp_Sigma_prediction_llin[year_idx, llin_year_idx] <- exp(-((year_idx - nmcp_year_indices_llin[llin_year_idx])/gp_rho_llin)^2)
+
 						}
 					  }			  
 					  
@@ -331,12 +335,14 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   nmcp_citns <- "
             gp_rho_citn ~ dunif(0,1)
   					gp_tau_citn ~ dunif(0,0.1)
-  					gp_sigma_sq_citn ~ dunif(0,1000)
+  					gp_sigma_sq_citn ~ dunif(0,2)
             
             # specify covariance function for GP (squared exponential?)
             for (citn_year_row in 1:nmcp_year_count_citn) {
 						for (citn_year_column in 1:nmcp_year_count_citn) {
 							gp_Sigma_citn[citn_year_row, citn_year_column] <- gp_sigma_sq_citn *  exp(-((nmcp_year_indices_citn[citn_year_row] - nmcp_year_indices_citn[citn_year_column])/gp_rho_citn)^2)  +ifelse(citn_year_row==citn_year_column,gp_tau_citn,0) 
+							# gp_Sigma_citn[citn_year_row, citn_year_column] <- exp(-((nmcp_year_indices_citn[citn_year_row] - nmcp_year_indices_citn[citn_year_column])/gp_rho_citn)^2)  +ifelse(citn_year_row==citn_year_column,gp_tau_citn,0) 
+
 						}
 					  }
 					  
@@ -351,6 +357,8 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
 					  for (year_idx in 1:year_count) {
 						for (citn_year_index in 1:nmcp_year_count_citn) {
 							gp_Sigma_prediction_citn[year_idx, citn_year_index] <- gp_sigma_sq_citn * exp(-((year_idx - nmcp_year_indices_citn[citn_year_index])/gp_rho_citn)^2)
+							# gp_Sigma_prediction_citn[year_idx, citn_year_index] <- exp(-((year_idx - nmcp_year_indices_citn[citn_year_index])/gp_rho_citn)^2)
+
 						}
 					  }			  
 					  
@@ -750,7 +758,7 @@ save(list = ls(all.names = TRUE), file = file.path(out_dir, paste0(this_country,
 }
 
 
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highcpu-32 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/02_stock_and_flow_prep CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20190930_gp_invSigma_yesScale --command 'cd ${CODE}; Rscript 03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list_TESTING.tsv
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highcpu-32 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/02_stock_and_flow_prep CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191001_gp_limitScale --command 'cd ${CODE}; Rscript 03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list_TESTING.tsv
 
 package_load <- function(package_list){
   # package installation/loading
