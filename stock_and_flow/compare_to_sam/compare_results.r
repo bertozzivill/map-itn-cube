@@ -13,13 +13,15 @@ library(data.table)
 library(coda)
 library(gridExtra)
 
+theme_set(theme_minimal(base_size = 12))
+
 # load("~/Downloads/amelia_itn_stock_and_flow_results_intermediate_stockflow_GHA_all_output.RData")
 
 ### Prep  #####----------------------------------------------------------------------------------------------------------------------------------
 func_dir <- "~/repos/map-itn-cube/stock_and_flow/"
 setwd(func_dir)
 source("jags_functions.r")
-new_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20190925_batch_test"
+new_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20190927_new_data"
 sam_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/data_from_sam/out"
 varname_map <- fread(file.path(func_dir, "compare_to_sam/varname_map.csv"))
 
@@ -66,7 +68,8 @@ for(this_country in countries){
     
     
     ## quarterly net estimates from models
-    uncertainty_vars <- c("quarterly_nets_in_houses_citn", "quarterly_nets_in_houses_llin")
+    uncertainty_vars <- c("quarterly_nets_in_houses_citn", "quarterly_nets_in_houses_llin", "nmcp_count_citn_est", "adjusted_llins_distributed")
+    
     sam_uncertainty_vars <- varname_map[new_varname %in% uncertainty_vars]$sam_varname
     sam_uncertainty_vals <- rbindlist(lapply(sam_uncertainty_vars, extract_posteriors, posterior_densities=sam_raw_posterior_densities))
     sam_uncertainty_vals <- merge(sam_uncertainty_vals, varname_map[,list(variable=sam_varname, new_varname)], by="variable", all.x=T)
@@ -74,9 +77,9 @@ for(this_country in countries){
     sam_nets_in_houses <- data.table(quarter=rep(1:sam_quarter_count,2),
                                      nets_houses=c(sam_model_estimates$quarterly_nets_in_houses_citn, sam_model_estimates$quarterly_nets_in_houses_llin),
                                      type=rep(c("citn", "llin"), each=sam_quarter_count),
-                                     model="sam"
+                                     model="Sam Model"
     )
-    sam_nets_in_houses <- merge(sam_nets_in_houses, sam_uncertainty_vals[, list(quarter, type=ifelse(new_varname %like% "llin", "llin", "citn"),
+    sam_nets_in_houses <- merge(sam_nets_in_houses, sam_uncertainty_vals[new_varname %like% "quarterly", list(quarter, type=ifelse(new_varname %like% "llin", "llin", "citn"),
                                                                                 lower, upper)], by=c("type", "quarter"), all=T)
     
     
@@ -85,9 +88,9 @@ for(this_country in countries){
     new_nets_in_houses <- data.table(quarter=rep(1:new_data$quarter_count, 2),
                                      nets_houses=c(new_model_estimates$quarterly_nets_in_houses_citn, new_model_estimates$quarterly_nets_in_houses_llin),
                                      type=rep(c("citn", "llin"), each=new_data$quarter_count),
-                                     model="new"
+                                     model="New Model"
     )
-    new_nets_in_houses <- merge(new_nets_in_houses, new_uncertainty_vals[, list(quarter, type=ifelse(variable %like% "llin", "llin", "citn"),
+    new_nets_in_houses <- merge(new_nets_in_houses, new_uncertainty_vals[variable %like% "quarterly", list(quarter, type=ifelse(variable %like% "llin", "llin", "citn"),
                                                                                 lower, upper)], by=c("type", "quarter"), all=T)
     
     all_nets_in_houses <- rbind(sam_nets_in_houses, new_nets_in_houses)
@@ -99,25 +102,27 @@ for(this_country in countries){
                                   svy_net_count = c(sam_data$mTot_llin, sam_data$mTot_itn),
                                   svy_net_lower = c(sam_data$llinlimL, sam_data$itnlimL),
                                   svy_net_upper = c(sam_data$llinlimH, sam_data$itnlimH),
-                                  model="sam"
+                                  model="Sam Model"
     )
+  
+    if (nrow(new_survey_data_raw)>0){
+      new_survey_data <- data.table(date=rep(new_survey_data_raw$date, 2),
+                                    type = rep(c("llin", "citn"), each=new_data$survey_count),
+                                    svy_net_count = c(new_data$survey_llin_count, new_data$survey_citn_count),
+                                    svy_net_lower = c(new_data$survey_llin_lowerlim, new_data$survey_citn_lowerlim),
+                                    svy_net_upper = c(new_data$survey_llin_upperlim, new_data$survey_citn_upperlim),
+                                    model="New Model")
+      all_survey_data <- rbind(sam_survey_data, new_survey_data)
+                                    
+    }else{
+      all_survey_data <- copy(sam_survey_data)
+    }
     
-    new_survey_data <- data.table(date=rep(new_survey_data_raw$date, 2),
-                                  type = rep(c("llin", "citn"), each=new_data$survey_count),
-                                  svy_net_count = c(new_data$survey_llin_count, new_data$survey_citn_count),
-                                  svy_net_lower = c(new_data$survey_llin_lowerlim, new_data$survey_citn_lowerlim),
-                                  svy_net_upper = c(new_data$survey_llin_upperlim, new_data$survey_citn_upperlim),
-                                  model="new"
-    )
-    all_survey_data <- rbind(sam_survey_data, new_survey_data)
-    
-    
-    houses_plot <- ggplot(all_nets_in_houses, aes(x=date, color=model, fill=model)) +
+    houses_plot <- ggplot(all_nets_in_houses, aes(x=date, color=type, fill=type)) +
       geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.3) +
       geom_line(aes(y=nets_houses), size=1) +
       geom_pointrange(data=all_survey_data, aes(y=svy_net_count, ymin=svy_net_lower, ymax=svy_net_upper), alpha=0.85) +
-      facet_grid(.~type) + 
-      theme_minimal() + 
+      facet_grid(.~model) + 
       labs(title= paste("Nets in Houses:", this_country),
            x="Time",
            y="Net count")
@@ -125,25 +130,48 @@ for(this_country in countries){
     
     ### Plot annual net distributions vs nmcp data #####----------------------------------------------------------------------------------------------------------------------------------
     
-    sam_nets_distributed <- sam_nets_in_houses[, list(model,type, quarter, year=floor(2000 + 0.25*quarter - 0.25),
-                                                      nets_distributed_model = c(sam_model_estimates$citns_distributed_quarterly,
-                                                                                 sam_model_estimates$llins_distributed_quarterly))]
-    sam_nets_distributed <- sam_nets_distributed[year<=sam_end_year, list(nets_distributed_model=sum(nets_distributed_model)), by=list(model,type, year)]
-    sam_nets_distributed[, nets_distributed_data:=c(sam_data$NMCP_itn*sam_data$year_population, sam_data$NMCP_llin * sam_data$year_population)]
+    sam_years <- 2000:sam_end_year
+    sam_nets_distributed <- data.table(year=rep(sam_years,2),
+                           nets_distributed_model=c(sam_model_estimates$nmcp_count_citn_est, sam_model_estimates$adjusted_llins_distributed),
+                           type=rep(c("citn", "llin"), each=length(sam_years)),
+                           model="Sam Model"
+                          )
+    sam_nets_distributed <- merge(sam_nets_distributed, sam_uncertainty_vals[!new_varname %like% "quarterly", list(year=quarter+2000-1, type=ifelse(new_varname %like% "llin", "llin", "citn"),
+                                                                                                              lower, upper)], by=c("type", "year"), all=T)
     
-    new_nets_distributed <- new_nets_in_houses[, list(model,type, quarter, year=floor(2000 + 0.25*quarter - 0.25),
-                                                      nets_distributed_model = c(new_model_estimates$citns_distributed_quarterly,
-                                                                                 new_model_estimates$llins_distributed_quarterly))]
-    new_nets_distributed <- new_nets_distributed[, list(nets_distributed_model=sum(nets_distributed_model)), by=list(model, type, year)]
-    new_nets_distributed[, nets_distributed_data:=c(new_data$nmcp_count_citn, new_data$nmcp_count_llin)]
+    new_years <- 1:new_data$year_count + (2000-1)
+    new_nets_distributed <- data.table(year=rep(new_years,2),
+                                       nets_distributed_model=c(new_model_estimates$nmcp_count_citn_est, new_model_estimates$adjusted_llins_distributed),
+                                       type=rep(c("citn", "llin"), each=length(new_years)),
+                                       model="New Model"
+    )
+    
+    new_nets_distributed <- merge( new_nets_distributed, new_uncertainty_vals[!variable %like% "quarterly", list(year=quarter+2000-1, type=ifelse(variable %like% "llin", "llin", "citn"),
+                                                                                                                   lower, upper)], by=c("type", "year"), all=T)
     
     all_nets_distributed <- rbind(sam_nets_distributed, new_nets_distributed)
     
-    distribution_plot <- ggplot(all_nets_distributed, aes(x=year, color=model)) +
+    sam_nmcp_data <- sam_nets_distributed[, list(model, type, year, 
+                                                 nets_distributed_data=c(sam_data$NMCP_itn*sam_data$year_population, sam_data$NMCP_llin * sam_data$year_population)
+    )]
+    
+    # bit of a wiggle to re-introduce NA's into NMCP time series
+    new_nmcp_data <- data.table(year=c(new_data$nmcp_year_indices_citn,
+                                  new_data$nmcp_year_indices_llin),
+                           nets_distributed_data=c(new_data$nmcp_count_citn,
+                                                   new_data$nmcp_count_llin),
+                           type=c(rep("citn", length(new_data$nmcp_year_indices_citn)),
+                                  rep("llin", length(new_data$nmcp_year_indices_llin))),
+                           model="New Model")
+    new_nmcp_data[, year:=year + 2000-1]
+  
+    all_nmcp_data <- rbind(sam_nmcp_data, new_nmcp_data)
+    
+    distribution_plot <- ggplot(all_nets_distributed, aes(x=year, color=type, fill=type)) +
+      geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.3) +
       geom_line(aes(y=nets_distributed_model), size=2, alpha=0.75) +
-      geom_point(aes(y=nets_distributed_data), alpha=0.75, size=3) + 
-      facet_grid(.~type) + 
-      theme_minimal() + 
+      geom_point(data=all_nmcp_data, aes(y=nets_distributed_data), alpha=0.75, size=3) + 
+      facet_grid(.~model) + 
       labs(title= paste("Nets Distributed:", this_country),
            x="Time",
            y="Net count")
@@ -166,9 +194,9 @@ for(this_country in countries){
     all_stock <- rbind(sam_stock, new_stock)
     all_stock <- melt(all_stock, id.vars=c("model", "type", "year"), variable.name="metric")
     
-    stock_plot <- ggplot(all_stock, aes(x=year, color=model)) +
+    stock_plot <- ggplot(all_stock, aes(x=year)) +
       geom_line(aes(y=value, linetype=metric), size=1) +
-      theme_minimal() + 
+      facet_grid(.~model) + 
       labs(title= paste("LLIN Stock and Distribution:", this_country),
            x="Time",
            y="Net count")
@@ -180,9 +208,8 @@ for(this_country in countries){
                     c(2, 2, 2, 2),
                     c(NA, 3, 3, NA))
     
-    full_plot <- grid.arrange(grobs=plotlist, layout_matrix=layout)
+    full_plot <- grid.arrange(grobs=plotlist, nrow=3)
     print(full_plot)
-    
     
   }
 }

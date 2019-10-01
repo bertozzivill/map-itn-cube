@@ -195,6 +195,30 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   
   main_input_list <- c(main_input_list, nmcp_list)
   
+  ########### ---------------------------------------------------------------------------------------------------------------------------
+  # # TEST: what does the GP covariance matrix look like?
+  # gp_rho_llin <- 0.5854221
+  # gp_tau_llin <- 0.02359517
+  # gp_sigma_sq_llin <- 0.01660944
+  # 
+  # gp_year_count <- nmcp_list$nmcp_year_count_llin
+  # gp_Sigma_llin <- matrix(nrow=gp_year_count, ncol = gp_year_count)
+  # 
+  # 
+  # # specify covariance function for GP (squared exponential?)
+  # for (llin_year_row in 1:gp_year_count) {
+  #   for (llin_year_column in 1:gp_year_count) {
+  #     gp_Sigma_llin[llin_year_row, llin_year_column] <- gp_sigma_sq_llin * exp(-( (nmcp_list$nmcp_year_indices_llin[llin_year_row] - nmcp_list$nmcp_year_indices_llin[llin_year_column]) / gp_rho_llin)^2) +
+  #       ifelse(llin_year_row==llin_year_column, gp_tau_llin, 0) 
+  #   }
+  # }
+  # 
+  # inverse_mat <- solve(gp_Sigma_llin)
+  # 
+   ########### ---------------------------------------------------------------------------------------------------------------------------
+
+  
+  
   ### Store population at risk and IRS parameters. TODO: update IRS, find PAR for surveys more rigorously  #####----------------------------------------------------------------------------------------------------------------------------------
   # store population at risk parameter 
   main_input_list$PAR <- mean(this_pop$prop_pop_at_risk_pf)
@@ -348,8 +372,8 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
 						nmcp_sigma_citn[year_idx] ~ dunif(0, 0.01) 	 # error in ITN NMCP
 						
             # start with priors from GP
-						nmcp_count_llin_est[year_idx] <- nmcp_nets_percapita_llin_est[year_idx]*population[year_idx]
-						nmcp_count_citn_est[year_idx] <- nmcp_nets_percapita_citn_est[year_idx]*population[year_idx]			
+						nmcp_count_llin_est[year_idx] <- max(0, nmcp_nets_percapita_llin_est[year_idx]*population[year_idx])
+						nmcp_count_citn_est[year_idx] <- max(0, nmcp_nets_percapita_citn_est[year_idx]*population[year_idx])			
 										
 					}
 							
@@ -726,7 +750,7 @@ save(list = ls(all.names = TRUE), file = file.path(out_dir, paste0(this_country,
 }
 
 
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highcpu-32 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/02_stock_and_flow_prep CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20190927_new_data --command 'cd ${CODE}; Rscript 03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list.tsv
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highcpu-32 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/02_stock_and_flow_prep CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20190930_gp_invSigma_yesScale --command 'cd ${CODE}; Rscript 03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list_TESTING.tsv
 
 package_load <- function(package_list){
   # package installation/loading
@@ -740,7 +764,7 @@ package_load(c("data.table","raster","rjags", "zoo", "RecordLinkage", "ggplot2")
 if(Sys.getenv("main_dir")=="") {
   main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/02_stock_and_flow_prep"
   out_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results"
-  this_country <- "GHA"
+  this_country <- "MOZ"
 } else {
   main_dir <- Sys.getenv("main_dir")
   out_dir <- Sys.getenv("out_dir") 

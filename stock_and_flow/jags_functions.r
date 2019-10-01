@@ -17,7 +17,7 @@ extract_jags <- function(varnames, jdata, verbose=F){
       return(NA)
     }
     if (names(estimates)[[1]] %like% ","){
-      if (verbose){
+      if (verbose==T){
         print(paste("extracting matrix", varname))
       }
       full_names <- names(estimates)
@@ -25,7 +25,7 @@ extract_jags <- function(varnames, jdata, verbose=F){
       colmax <- max(as.integer(gsub(".*,([0-9]+)\\].*", "\\1", full_names)))
       estimates <- matrix(estimates, nrow=rowmax, ncol=colmax)
     }else{
-      if (verbose){
+      if (verbose==T){
         print(paste("extracting vector", varname))
       }
       estimates <- as.numeric(estimates)
