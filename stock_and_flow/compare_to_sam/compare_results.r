@@ -27,7 +27,7 @@ varname_map <- fread(file.path(func_dir, "compare_to_sam/varname_map.csv"))
 
 countries <- gsub("([A-Z]{3})\\.RData", "\\1", list.files(sam_dir)[list.files(sam_dir) %like% ".RData"])
 
-pdf(file.path(new_dir, "compare_to_sam.pdf"), height=11, width=8.5)
+pdf(file.path(new_dir, "compare_to_sam.pdf"), height=8.5, width=8.5)
 
 for(this_country in countries){
   if(file.exists(file.path(new_dir, paste0(this_country, "_all_output.RData")))){
@@ -204,11 +204,12 @@ for(this_country in countries){
     ### Aggregate Plots #####----------------------------------------------------------------------------------------------------------------------------------
     
     plotlist <- list(houses_plot, distribution_plot, stock_plot)
+    plotlist <- list(houses_plot, distribution_plot)
     layout <- rbind(c(1, 1, 1, 1),
                     c(2, 2, 2, 2),
                     c(NA, 3, 3, NA))
     
-    full_plot <- grid.arrange(grobs=plotlist, nrow=3)
+    full_plot <- grid.arrange(grobs=plotlist, nrow=length(plotlist))
     print(full_plot)
     
   }

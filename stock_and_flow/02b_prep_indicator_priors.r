@@ -7,6 +7,8 @@
 ## mean # of nets per household
 ##############################################################################################################
 
+# TODO: why are these not country-specific? and why estimate them in the main model instead of after?
+
 library(survey)
 library(zoo)
 library(raster)

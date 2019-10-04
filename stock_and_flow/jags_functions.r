@@ -46,3 +46,16 @@ extract_posteriors <- function(varname, posterior_densities, melt=F){
   posteriors[, variable:=varname]
   return(posteriors)
 }
+
+test_snippet <- function(string, test_data){
+  n.adapt=100
+  update=1000
+  n.iter=50
+  thin=10
+  
+  jags<-c()
+  jags <- jags.model(file=textConnection(string),
+                     data = test_data,
+                     n.chains = 1,
+                     n.adapt=n.adapt)
+}

@@ -16,6 +16,19 @@ library(Hmisc)
 
 theme_set(theme_minimal(base_size = 12))
 
+#loss function
+sigmoid<-function(t,k,L){
+  v<-exp(k-k/(1-(t/L)^2))
+  v[t>L]<-0
+  return(v)	
+}
+
+gg_color_hue <- function(n) {
+  hues = seq(15, 375, length = n + 1)
+  hcl(h = hues, l = 65, c = 100)[1:n]
+}
+
+
 # load("~/Downloads/amelia_itn_stock_and_flow_results_intermediate_stockflow_GHA_all_output.RData")
 
 ### Prep  #####----------------------------------------------------------------------------------------------------------------------------------
@@ -25,13 +38,22 @@ source("jags_functions.r")
 
 base_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/"
 
-model_dirs <- c(no_scale="20190930_gp_invSigma_noScale",
-                with_scale="20190930_gp_invSigma_yesScale")
+make_country_plots <- F
+
+model_dirs <- c(full_run = "20190927_new_data")
 model_names <- capitalize(gsub("_", " ", names(model_dirs)))
+names(model_dirs) <- model_names
 
 reference_dir <- file.path(base_dir, model_dirs[[1]])
 
 countries <- gsub("([A-Z]{3})_all_output\\.RData", "\\1", list.files(reference_dir)[list.files(reference_dir) %like% ".RData"])
+
+# start list to store half life details
+half_life_comparison <- list()
+
+if (make_country_plots){
+  pdf(file.path(reference_dir, "assess_indicator_priors.pdf"), height=11, width=8.5)
+}
 
 for(this_country in countries){
   
@@ -58,6 +80,59 @@ for(this_country in countries){
       rm(list=new_objects)
     }
   }
+  
+  ### Compare Indicator parameters to priors #####----------------------------------------------------------------------------------------------------------------------------------
+  
+  half_life_comparison[[this_country]] <- rbindlist(lapply(model_names, function(this_model_name){
+    net_loss_params <- all_model_estimates[[this_model_name]][c("mv_k_llin", "mv_L_llin")]
+    
+    half_lifes<-c()
+    net_loss_sig <- rbindlist(lapply(1:length(net_loss_params$mv_k_llin), function(idx){
+      time_points=seq(0,10,.01)
+      data.table(base_year=idx+1999,
+                 time=time_points,
+                 sig=sigmoid(time_points, net_loss_params$mv_k_llin[idx], net_loss_params$mv_L_llin[idx])
+      )
+      
+    }))
+    
+    net_loss_sig[, half_life:=time[which.min(abs(sig-0.5))], by="base_year"]
+    
+    # average last three years for plot
+    for_plot_sig <- net_loss_sig[base_year>=(max(base_year)-2), list(iso3=this_country,
+                                                                     model=this_model_name,
+                                                                     sig=mean(sig),
+                                                                     half_life=mean(half_life)), by="time"]
+    
+    return(for_plot_sig)
+  }))
+  
+  
+  ### Compare Indicator parameters to priors #####----------------------------------------------------------------------------------------------------------------------------------
+  
+  indicator_comparison <- rbindlist(lapply(model_names, function(this_model_name){
+    this_indicator_priors <- all_input_data[[this_model_name]][c("alpha_nonet_prop_mean", "alpha_nonet_prop_sd", "b1_nonet_prop_mean", "b1_nonet_prop_sd", "b2_nonet_prop_mean", "b2_nonet_prop_sd", "b3_nonet_prop_mean", "b3_nonet_prop_sd", 
+                                                                 "p1_nonet_prop_mean", "p1_nonet_prop_sd", "p2_nonet_prop_mean", "p2_nonet_prop_sd", "tau_nonet_prop_mean", "tau_nonet_prop_sd", "alpha_mean_nets_mean", "alpha_mean_nets_sd",
+                                                                 "beta_mean_nets_mean", "beta_mean_nets_sd", "tau_mean_nets_mean", "tau_mean_nets_sd")]
+    this_indicator_estimates <- all_model_estimates[[this_model_name]][c("p1_nonet_prop", "p2_nonet_prop", "b1_nonet_prop", "b2_nonet_prop", "b3_nonet_prop",  "alpha_mean_nets", "beta_mean_nets")]
+    rbindlist(lapply(names(this_indicator_estimates), function(varname){
+      data.table(var=varname,
+                 model=this_model_name,
+                 model_val=this_indicator_estimates[[varname]],
+                 prior_val=this_indicator_priors[[paste0(varname, "_mean")]],
+                 prior_sd=this_indicator_priors[[paste0(varname, "_sd")]])
+    }))
+  }))
+    
+  indicator_prior_plot <- ggplot(indicator_comparison, aes(x=prior_val, y=model_val, color=model)) +
+                          geom_abline() + 
+                          geom_linerange(aes(ymin=prior_val-prior_sd*1.96, ymax=prior_val + prior_sd*1.96)) +
+                          geom_point() +
+                          facet_wrap(~var, scales="free") +
+                          theme(legend.position="none") +
+                          labs(title= paste("Indicator Priors vs estimated:", this_country),
+                               x="Prior Value",
+                               y="Model Value")
   
   ### Plot quarterly nets in houses compared to survey data #####----------------------------------------------------------------------------------------------------------------------------------
   
@@ -175,13 +250,42 @@ for(this_country in countries){
   
   ### Aggregate Plots #####----------------------------------------------------------------------------------------------------------------------------------
   
-  plotlist <- list(houses_plot, distribution_plot, stock_plot)
-  full_plot <- grid.arrange(grobs=plotlist, nrow=3)
-  print(full_plot)
-  
+  if (make_country_plots){
+    plotlist <- list(houses_plot, distribution_plot, stock_plot)
+    plotlist <- list(indicator_prior_plot)
+    full_plot <- grid.arrange(grobs=plotlist, nrow=length(plotlist))
+    print(full_plot)
+  }
+
 }
-# pdf(file.path(new_dir, "compare_to_sam.pdf"), height=11, width=8.5)
-# graphics.off()
+
+graphics.off()
+
+
+### Plot all net loss sigmoids #####----------------------------------------------------------------------------------------------------------------------------------
+
+two_colors <- gg_color_hue(2)
+
+half_life_comparison <- rbindlist(half_life_comparison)
+half_life_means <- half_life_comparison[, list (sig=mean(sig), half_life=mean(half_life)), by="time"]
+
+ggplot(half_life_comparison, aes(x=time, y=sig)) +
+  geom_line(aes(group=iso3), alpha=0.5, color=two_colors[2]) +
+  geom_line(data=half_life_means, size=2, color=two_colors[1]) +
+  geom_vline(xintercept=unique(half_life_means$half_life)) +
+  labs(title="Net Retention by Country",
+       x="Time since net received (years)",
+       y="Prop. of nets retained")
+  
+
+ country_lambdas <- unique(half_life_comparison[, list(iso3, half_life)])
+
+ggplot(country_lambdas, aes(x=reorder(iso3, -half_life), y=half_life)) +
+  geom_text(aes(label=iso3)) +
+  theme(axis.text.x = element_text(angle=45, hjust=1),
+        legend.position = "none") + 
+  labs(x="",
+       y="Net Half-life (years)")
 
 
 

@@ -13,6 +13,10 @@
 # - urban/rural
 # or: get subnational distribution counts, rake to those
 
+gg_color_hue <- function(n) {
+  hues = seq(15, 375, length = n + 1)
+  hcl(h = hues, l = 65, c = 100)[1:n]
+}
 
 run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out_dir){
   
@@ -35,6 +39,31 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   nmcp_data<-fread(file.path(main_dir, "from_who/NMCP_2019.csv"),stringsAsFactors=FALSE)
   setnames(nmcp_data, "ITN", "CITN")
   
+  nmcp_to_plot <- melt(nmcp_data, id.vars = c("ISO3", "year"), measure.vars = c("LLIN", "CITN"), variable.name = "type", value.name="net_count")
+  nmcp_nulls <- nmcp_to_plot[is.na(net_count), list(ISO3, year, type, net_count=0)]
+  
+  # net_colors <- gg_color_hue(2)
+  # net_types <- c("CITN", "LLIN")
+  # pdf("~/Desktop/nmcp_data.pdf", width=14, height=10)
+  # for (idx in 1:2){
+  #   this_net_type <- net_types[idx]
+  #   print(ggplot(nmcp_to_plot[!is.na(net_count)& type==this_net_type], aes(x=year, y=net_count/1000000)) +
+  #     geom_point(color=net_colors[idx]) +
+  #     geom_point(data=nmcp_nulls[type==this_net_type], shape=1, size=3, color=net_colors[idx]) +
+  #     facet_wrap(~ISO3, scales="free_y") +
+  #     theme(legend.position = "none",
+  #           axis.text.x = element_text(angle=45, hjust=1)) +
+  #     labs(title=paste("NMCP Net Counts", this_net_type),
+  #          x="Year",
+  #          y="Nets Distributed (millions)"))
+  # }
+  # graphics.off()
+  
+  # TESTING: Set all NMCP NA's to zero
+  nmcp_data[is.na(LLIN), LLIN:=0]
+  nmcp_data[is.na(CITN), CITN:=0]
+  
+  
   manufacturer_llins <- fread(file.path(main_dir, "from_who/MANU_2019.csv"),stringsAsFactors=FALSE)
   setnames(manufacturer_llins, names(manufacturer_llins), as.character(manufacturer_llins[1,]))
   manufacturer_llins <- manufacturer_llins[2:nrow(manufacturer_llins),]
@@ -55,7 +84,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   this_survey_data <- survey_data[iso3 %in% this_country,]
   this_manufacturer_llins <- manufacturer_llins[ISO3==this_country]
   this_nmcp <- nmcp_data[ISO3==this_country]
-  this_pop <- population_full[iso3==this_country]
+  this_pop <- population_full[iso3==this_country & year<=end_year]
   
   
   ### Formulate means and confidence around survey data #####----------------------------------------------------------------------------------------------------------------------------------
@@ -182,6 +211,14 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   this_nmcp[, type:=tolower(type)]
   this_nmcp[, nmcp_year_indices:= year-start_year+1]
   
+  # it happens sometimes (TCD, GNQ) that the NMCP time series is entirely NA for citns.
+  # It's safe to assume that there were no citns distributed in the past year, so change 
+  # this to zero to avoid breaking the script.
+  if(nrow(this_nmcp[type=="citn" & !is.na(nmcp_count)])==0){
+    this_nmcp[type=="citn" & year==end_year, nmcp_count:=0]
+    this_nmcp[type=="citn" & year==end_year, nmcp_nets_percapita:=0]
+  }
+  
   # convert to list format for model
   nmcp_list <- lapply(c("llin", "citn"), function(net_type){
     subset <- dcast.data.table(this_nmcp[type==net_type &  !is.na(nmcp_count)], year ~ type,
@@ -194,30 +231,6 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   nmcp_list <- unlist(nmcp_list, recursive = F)
   
   main_input_list <- c(main_input_list, nmcp_list)
-  
-  ########### ---------------------------------------------------------------------------------------------------------------------------
-  # # TEST: what does the GP covariance matrix look like?
-  # gp_rho_llin <- 0.5854221
-  # gp_tau_llin <- 0.02359517
-  # gp_sigma_sq_llin <- 0.01660944
-  # 
-  # gp_year_count <- nmcp_list$nmcp_year_count_llin
-  # gp_Sigma_llin <- matrix(nrow=gp_year_count, ncol = gp_year_count)
-  # 
-  # 
-  # # specify covariance function for GP (squared exponential?)
-  # for (llin_year_row in 1:gp_year_count) {
-  #   for (llin_year_column in 1:gp_year_count) {
-  #     gp_Sigma_llin[llin_year_row, llin_year_column] <- gp_sigma_sq_llin * exp(-( (nmcp_list$nmcp_year_indices_llin[llin_year_row] - nmcp_list$nmcp_year_indices_llin[llin_year_column]) / gp_rho_llin)^2) +
-  #       ifelse(llin_year_row==llin_year_column, gp_tau_llin, 0) 
-  #   }
-  # }
-  # 
-  # inverse_mat <- solve(gp_Sigma_llin)
-  # 
-   ########### ---------------------------------------------------------------------------------------------------------------------------
-
-  
   
   ### Store population at risk and IRS parameters. TODO: update IRS, find PAR for surveys more rigorously  #####----------------------------------------------------------------------------------------------------------------------------------
   # store population at risk parameter 
@@ -276,108 +289,23 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   
   main_input_list <- c(main_input_list, as.list(no_net_prop_priors), mean_net_count_priors, list(max_hhsize=10))
   
-  
   ### Main model string  #####----------------------------------------------------------------------------------------------------------------------------------
-  test_snippet <- function(string, test_data){
-    n.adapt=100
-    update=1000
-    n.iter=50
-    thin=10
-    
-    jags<-c()
-    jags <- jags.model(file=textConnection(string),
-                       data = test_data,
-                       n.chains = 1,
-                       n.adapt=n.adapt)
-  }
   
   model_preface <- "model {"
   model_suffix <- "}"
-  
-  # NMCP GP priors-- replace equations 14 and 15? 
-  nmcp_llins <- "
-            gp_rho_llin ~ dunif(0,1) # restricted to prevent over-smoothing
-	    			gp_tau_llin ~ dunif(0,0.1)
-	    			gp_sigma_sq_llin ~ dunif(0,2)
-
-            # specify covariance function for GP (squared exponential?)
-            for (llin_year_row in 1:nmcp_year_count_llin) {
-						for (llin_year_column in 1:nmcp_year_count_llin) {
-							gp_Sigma_llin[llin_year_row, llin_year_column] <- gp_sigma_sq_llin * exp(-( (nmcp_year_indices_llin[llin_year_row] - nmcp_year_indices_llin[llin_year_column]) / gp_rho_llin)^2) + ifelse(llin_year_row==llin_year_column, gp_tau_llin, 0) 
-							# gp_Sigma_llin[llin_year_row, llin_year_column] <- exp(-( (nmcp_year_indices_llin[llin_year_row] - nmcp_year_indices_llin[llin_year_column]) / gp_rho_llin)^2) + ifelse(llin_year_row==llin_year_column, gp_tau_llin, 0) 
-
-						}
-					  }
-					  
-            # set GP means to zero
-					  for (llin_year_idx in 1:nmcp_year_count_llin) {
-						 gp_mu_llin[llin_year_idx] <- 0
-					  }
-					  
-					  # multivariate normal around nmcp values
-					  nmcp_nets_percapita_llin ~ dmnorm(gp_mu_llin,inverse(gp_Sigma_llin)) 
-					  # nmcp_nets_percapita_llin ~ dmnorm(gp_mu_llin, gp_Sigma_llin) # TEST: what if you don't invert it
-	  
-	          # to calculate prediction; see Kevin Murphy's textbook
-					  for (year_idx in 1:year_count) {
-						for (llin_year_idx in 1:nmcp_year_count_llin) {
-							gp_Sigma_prediction_llin[year_idx, llin_year_idx] <-  gp_sigma_sq_llin * exp(-((year_idx - nmcp_year_indices_llin[llin_year_idx])/gp_rho_llin)^2)
-							# gp_Sigma_prediction_llin[year_idx, llin_year_idx] <- exp(-((year_idx - nmcp_year_indices_llin[llin_year_idx])/gp_rho_llin)^2)
-
-						}
-					  }			  
-					  
-					  # prior estimate of llins per capita distributed by nmcp
-						nmcp_nets_percapita_llin_est <- gp_Sigma_prediction_llin%*%inverse(gp_Sigma_llin)%*%nmcp_nets_percapita_llin" 
-  
-  # test_snippet(paste(model_preface, nmcp_llins, model_suffix), test_data = main_input_list)
-  
-  nmcp_citns <- "
-            gp_rho_citn ~ dunif(0,1)
-  					gp_tau_citn ~ dunif(0,0.1)
-  					gp_sigma_sq_citn ~ dunif(0,2)
-            
-            # specify covariance function for GP (squared exponential?)
-            for (citn_year_row in 1:nmcp_year_count_citn) {
-						for (citn_year_column in 1:nmcp_year_count_citn) {
-							gp_Sigma_citn[citn_year_row, citn_year_column] <- gp_sigma_sq_citn *  exp(-((nmcp_year_indices_citn[citn_year_row] - nmcp_year_indices_citn[citn_year_column])/gp_rho_citn)^2)  +ifelse(citn_year_row==citn_year_column,gp_tau_citn,0) 
-							# gp_Sigma_citn[citn_year_row, citn_year_column] <- exp(-((nmcp_year_indices_citn[citn_year_row] - nmcp_year_indices_citn[citn_year_column])/gp_rho_citn)^2)  +ifelse(citn_year_row==citn_year_column,gp_tau_citn,0) 
-
-						}
-					  }
-					  
-					  # set GP means to zero
-					  for (citn_year_index in 1:nmcp_year_count_citn) {
-						 gp_mu_citn[citn_year_index] <- 0
-					  }
-					  
-					  nmcp_nets_percapita_citn~ dmnorm(gp_mu_citn,inverse(gp_Sigma_citn) )
-					  # nmcp_nets_percapita_citn ~ dmnorm(gp_mu_citn,gp_Sigma_citn) # TEST: what if you don't invert it
-	  
-					  for (year_idx in 1:year_count) {
-						for (citn_year_index in 1:nmcp_year_count_citn) {
-							gp_Sigma_prediction_citn[year_idx, citn_year_index] <- gp_sigma_sq_citn * exp(-((year_idx - nmcp_year_indices_citn[citn_year_index])/gp_rho_citn)^2)
-							# gp_Sigma_prediction_citn[year_idx, citn_year_index] <- exp(-((year_idx - nmcp_year_indices_citn[citn_year_index])/gp_rho_citn)^2)
-
-						}
-					  }			  
-					  
-					# prior estimate of itns per capita distributed by nmcp
-					nmcp_nets_percapita_citn_est <- gp_Sigma_prediction_citn%*%inverse(gp_Sigma_citn)%*%nmcp_nets_percapita_citn"
-  
-  # test_snippet(paste(model_preface, nmcp_citns, model_suffix), test_data = main_input_list)
   
   # see equations 5, and 17-22 of supplement
   annual_stock_and_flow <- "
 					for(year_idx in 1:year_count){
 						
 						manufacturer_sigma[year_idx] ~ dunif(0, 0.075) 	 # error in llin manufacturer	
-						# ASK SAM: should the data be on the LHS here?
 						manufacturer_llins_est[year_idx] ~ dnorm(manufacturer_llins[year_idx], ((manufacturer_llins[year_idx]+1e-12)*manufacturer_sigma[year_idx])^-2) T(0,)
 						
-						# TODO: are these ever used?
-						nmcp_sigma_llin[year_idx] ~ dunif(0, 0.01) 	 # error in llin NMCP				
-						nmcp_sigma_citn[year_idx] ~ dunif(0, 0.01) 	 # error in ITN NMCP
+						# error in percapita NMCP distributions
+						nmcp_sigma_llin[year_idx] ~ dunif(0, 0.01) 	 			
+						nmcp_sigma_citn[year_idx] ~ dunif(0, 0.01) 	 
+						nmcp_nets_percapita_llin_est[year_idx] ~ dnorm(nmcp_nets_percapita_llin[year_idx], nmcp_sigma_llin[year_idx]^-2) T(0,)
+						nmcp_nets_percapita_citn_est[year_idx] ~ dnorm(nmcp_nets_percapita_citn[year_idx], nmcp_sigma_citn[year_idx]^-2) T(0,)
 						
             # start with priors from GP
 						nmcp_count_llin_est[year_idx] <- max(0, nmcp_nets_percapita_llin_est[year_idx]*population[year_idx])
@@ -507,7 +435,7 @@ accounting <- "for(i in 1:quarter_count){
 				quarterly_nets_in_houses_citn[i]<-sum(quarterly_nets_remaining_matrix_citn[i,1:quarter_count])
 				
 				# total_percapita_nets is the percapita net count in the true population-at-risk (accounting for IRS)
-				# NOTE: if you don't calculate indicators (b/c you can't assume national homogeneity) you don't need to worry about IRS OR PAR. what a win.
+				# NOTE: this is where you could input some sort of filter to determine 'pop at risk' in places like ssd as including availability of getting a net
 				total_percapita_nets[i] <- max( (quarterly_nets_in_houses_llin[i]+quarterly_nets_in_houses_citn[i])/(PAR*IRS*population[(round(i/4+0.3))]), 0) 
 			}"
 
@@ -529,17 +457,17 @@ surveys <- "for(i in 1:survey_count){
 indicators <- "
 
       # priors for nonet prop
-      alpha_nonet_prop ~ dnorm(alpha_nonet_prop_mean, alpha_nonet_prop_sd^-2) I(0,)
-      p1_nonet_prop ~ dnorm(p1_nonet_prop_mean, p1_nonet_prop_sd^-2) I(0,)
-      p2_nonet_prop ~ dnorm(p2_nonet_prop_mean, p2_nonet_prop_sd^-2) I(0,)
-      b1_nonet_prop ~ dnorm(b1_nonet_prop_mean, b1_nonet_prop_sd^-2) I(0,)
-      b2_nonet_prop ~ dnorm(b2_nonet_prop_mean, b2_nonet_prop_sd^-2) I(0,)
-      b3_nonet_prop ~ dnorm(b3_nonet_prop_mean, b3_nonet_prop_sd^-2) I(0,)
+      alpha_nonet_prop ~ dnorm(alpha_nonet_prop_mean, alpha_nonet_prop_sd^-2) 
+      p1_nonet_prop ~ dnorm(p1_nonet_prop_mean, p1_nonet_prop_sd^-2) 
+      p2_nonet_prop ~ dnorm(p2_nonet_prop_mean, p2_nonet_prop_sd^-2) 
+      b1_nonet_prop ~ dnorm(b1_nonet_prop_mean, b1_nonet_prop_sd^-2) 
+      b2_nonet_prop ~ dnorm(b2_nonet_prop_mean, b2_nonet_prop_sd^-2) 
+      b3_nonet_prop ~ dnorm(b3_nonet_prop_mean, b3_nonet_prop_sd^-2) 
       
       # priors for mean nets
       for(i in 1:max_hhsize){
-			  alpha_mean_nets[i] ~ dnorm(alpha_mean_nets_mean[i], alpha_mean_nets_sd[i]^-2) I(0,)
-			  beta_mean_nets[i] ~ dnorm(beta_mean_nets_mean[i], beta_mean_nets_sd[i]^-2) I(0,)
+			  alpha_mean_nets[i] ~ dnorm(alpha_mean_nets_mean[i], alpha_mean_nets_sd[i]^-2)
+			  beta_mean_nets[i] ~ dnorm(beta_mean_nets_mean[i], beta_mean_nets_sd[i]^-2)
 			}
       
       for (i in 1:quarter_count){
@@ -555,8 +483,8 @@ indicators <- "
 
 if(any(is.na(main_input_list$survey_llin_sd)) | any(is.na(main_input_list$survey_citn_sd))){
   full_model_string <- paste(model_preface, 
-                             nmcp_llins, 
-                             nmcp_citns, 
+                             # nmcp_llins, 
+                             # nmcp_citns, 
                              annual_stock_and_flow, 
                              llin_quarterly, 
                              citn_quarterly, 
@@ -566,8 +494,8 @@ if(any(is.na(main_input_list$survey_llin_sd)) | any(is.na(main_input_list$survey
                              sep="\n")
 }else{
   full_model_string <- paste(model_preface, 
-                             nmcp_llins, 
-                             nmcp_citns, 
+                             # nmcp_llins, 
+                             # nmcp_citns, 
                              annual_stock_and_flow, 
                              llin_quarterly, 
                              citn_quarterly, 
@@ -596,18 +524,20 @@ jags <- jags.model(file=textConnection(full_model_string),
 
 update(jags,n.iter=update)
 
-names_to_extract <- c("gp_rho_llin",
-                      "gp_rho_citn",
-                      "gp_tau_llin",
-                      "gp_tau_citn",
-                      "gp_sigma_sq_llin",
-                      "gp_sigma_sq_citn",
+names_to_extract <- c(
+                      # "gp_rho_llin",
+                      # "gp_rho_citn",
+                      # "gp_tau_llin",
+                      # "gp_tau_citn",
+                      # "gp_sigma_sq_llin",
+                      # "gp_sigma_sq_citn",
                       "nmcp_nets_percapita_llin_est",
                       "nmcp_nets_percapita_citn_est",
                       "manufacturer_llins_est",
                       "nmcp_count_llin_est",
                       "nmcp_count_citn_est",
                       "llin_distribution_noise",
+                      "distribution_uncertainty_betapar",
                       "raw_llins_distributed",
                       "initial_stock",
                       "adjusted_llins_distributed",
@@ -757,8 +687,7 @@ save(list = ls(all.names = TRUE), file = file.path(out_dir, paste0(this_country,
 
 }
 
-
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highcpu-32 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/02_stock_and_flow_prep CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191001_gp_limitScale --command 'cd ${CODE}; Rscript 03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list_TESTING.tsv
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highcpu-32 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/02_stock_and_flow_prep CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191003_no_gp --command 'cd ${CODE}; Rscript 03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list_TESTING.tsv
 
 package_load <- function(package_list){
   # package installation/loading
