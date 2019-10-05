@@ -1,9 +1,9 @@
 ###############################################################################################################
-## 01_prep_dhs.r
+## 01_hh_survey_data.r
 ## Amelia Bertozzi-Villa
-## July 2019
+## October 2019
 ## 
-## Prepare DHS data for the stock and flow model
+## Prepare survey data for the stock and flow and itn cube models
 ##############################################################################################################
 
 library(survey)
@@ -26,8 +26,6 @@ country_codes <-fread(file.path(main_dir, 'National_Config_Data.csv'))
 old_survey_key <- fread(file.path(main_dir, "KEY_080817.csv"))
 setnames(old_survey_key, c("Svy Name", "old_id", "Name"), c("SurveyId", "Survey.hh", "CountryName"))
 old_survey_key <- old_survey_key[SurveyId!="U2011BM"] # remove duplicate survey, see data_checking.r for details
-
-# TODO: after you determine which columns are actually used, prune columns early
 
 ## DATA SOURCE ONE: DHS SURVEYS ----------------------------------------------------------------------------------------------------------------------
 
@@ -59,7 +57,7 @@ dhs_data <- lapply(dhs_surveynums, function(svynum){
 
 dhs_data <- rbindlist(dhs_data)
 
-# make the assumption that, if n_llin/n_conv is missing and it's after 2010, all nets are llins.
+# make the assumption that, if n_llin or n_conv is missing and it's after 2010, all nets are llins.
 dhs_data[year>2010 & is.na(n_llin), n_llin:=n_itn]
 dhs_data[year>2010 & is.na(n_conv_itn), n_conv_itn:=0]
 
@@ -85,7 +83,7 @@ print("reading older dhs data")
 old_dhs_data <-fread(file.path(main_dir, "older_dhs_hh_06_october.csv"),stringsAsFactors=FALSE)
 
 # keep only surveys that don't overlap with newer DHS data-- see data_checking.r for how we got these survey values specifically
-old_surveys_to_keep <- c("TZ2007AIS", "ML2010OTH", "KE2007BM", "KE2010BM", "NM2009SPA", "RC2012BM")
+old_surveys_to_keep <- c("TZ2007AIS", "ML2010OTH", "KE2007BM", "KE2010BM", "NM2009SPA")
 to_keep_ids <- old_survey_key[SurveyId %in% old_surveys_to_keep]$Survey.hh
 old_dhs_data <- old_dhs_data[Survey.hh %in% to_keep_ids]
 
@@ -112,7 +110,7 @@ setnames(old_mics_data, to_sub_mics, gsub("LLIN", "LLINs", to_sub_mics))
 
 ## MICS5 data -- I extracted and cleaned these, see extract_mics.r and clean_new_mics.r
 ## These include some subnational surveys that can't be included in the cube data (no lat/long) or the stock and flow data, drop those.
-mics5_data<-fread(file.path(main_dir, "mics5_hh_05_august_2019.csv"))
+mics5_data<-fread(file.path(main_dir, "mics5_hh_04_october_2019.csv"))
 setnames(mics5_data, c("surveyid", "country"), c("SurveyId", "CountryName"))
 mics5_data <- mics5_data[subnat==""]
 mics5_data[, subnat:=NULL]
@@ -223,6 +221,76 @@ if(max(all_data$diff, na.rm=T)>1e-15){
 }
 
 all_data[, c("summed_n_itn", "citn_ratio", "diff") :=NULL]
+
+## Fix hh size/slept under itn discrepancy ----------------------------------------------------------------------------------------------------------------------
+
+
+
+## Test use-nets percapita regression ----------------------------------------------------------------------------------------------------------------------
+
+run_npc_use_regression <- F
+if (run_npc_use_regression){
+  countries_to_keep <- fread("for_gcloud/batch_country_list.tsv")
+  names(countries_to_keep) <- "iso3"
+  
+  regress_use <- all_data[iso3 %in% countries_to_keep$iso3,
+                          list(SurveyId, iso3, clusterid, hhid,
+                               hh_size=n_defacto_pop, 
+                               n_itn, n_slept_under_itn
+                          )]
+  regress_use <- regress_use[complete.cases(regress_use)]
+  regress_use[hh_size<n_slept_under_itn, hh_size:=n_slept_under_itn]
+  
+  regress_use_cluster <- regress_use[, list(clust_size=sum(hh_size),
+                                            n_itn=sum(n_itn),
+                                            n_slept_under_itn=sum(n_slept_under_itn),
+                                            clust_npc=sum(n_itn)/sum(hh_size),
+                                            clust_use=sum(n_slept_under_itn)/sum(hh_size)
+  ), 
+  by=c("iso3", "SurveyId", "clusterid")]
+  regress_use_cluster <- regress_use_cluster[complete.cases(regress_use_cluster)]
+  
+  for_logistic <- lapply(1:nrow(regress_use_cluster), function(row_id){
+    this_row <- regress_use_cluster[row_id]
+    to_merge <- data.table(ind_id=1:this_row$clust_size,
+                           used_net=c(rep(1, this_row$n_slept_under_itn),
+                                      rep(0, this_row$clust_size-this_row$n_slept_under_itn)),
+                           clusterid=this_row$clusterid
+    )
+    binary_data <- merge(this_row[, list(iso3, SurveyId, clusterid, clust_npc)],
+                         to_merge, by="clusterid")
+    if(nrow(binary_data)!=this_row$clust_size){
+      print(paste("problem on line", row_id))
+    }
+    return(binary_data)
+  })
+  
+  by_iso_regression <- glm(used_net ~  clust_npc:iso3, family=binomial, data=for_logistic)
+  
+  countries <- unique(regress_use_cluster$iso3)
+  by_iso_prediction <- data.table(iso3=rep(countries, each=101),
+                                  clust_npc=rep(seq(0,1,0.01), length(countries))
+  )
+  by_iso_prediction[, pred_use:=predict(by_iso_regression, type="response", newdata=by_iso_prediction)]
+  
+  by_iso_prediction <- merge(by_iso_prediction, by_iso_prediction[clust_npc==0.5, list(iso3, country_use=pred_use)])
+  by_iso_prediction[, label:=paste0(iso3, ": ", round(country_use, 2))]
+  
+  regress_use_cluster <- merge(regress_use_cluster, unique(by_iso_prediction[, list(iso3, label)]),
+                               by="iso3", all.x=T)
+  
+  ggplot(regress_use_cluster, aes(x=clust_npc, y=clust_use)) +
+    geom_point(aes(color=iso3)) + 
+    geom_vline(xintercept=0.5, linetype=2) +
+    geom_line(data=by_iso_prediction, aes(y=pred_use)) +
+    facet_wrap(~label) + 
+    theme(legend.position="none",
+          axis.text.x = element_text(angle=30, hjust=1)) +
+    labs(title="",
+         x="Cluster Nets per Capita",
+         y="Cluster Net Use")
+  
+}
 
 
 ## Isolate data to use for itn cube fitting-- must have entries in all columns listed below  ----------------------------------------------------------------------------------------------------------------------

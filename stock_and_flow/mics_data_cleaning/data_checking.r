@@ -9,14 +9,13 @@
 ## General question: we can use data w/o lat-longs for stock and flow, couldn't we? Just not for cube?
 ##############################################################################################################
 
-## SUMMARY AS OF JULY 19TH 2019: 
+## SUMMARY AS OF October 4TH 2019: 
 # Harry to extract: TZ2007AIS
 # Use Bonnie's: 
 # ML2010OTH
 # KE2007BM
 # KE2010BM
 # NM2009SPA
-# RC2012BM
 
 
 # ML2010OTH: not an obvious duplicate, Harry says maybe available-- but go ahead and use bonnie's extraction
@@ -145,7 +144,7 @@ kenya07_bonnie <- dhs_bonnie[SurveyId=="KE2007BM"]
 kenya10_bonnie <- dhs_bonnie[SurveyId=="KE2010BM"]
 # TODO: check and see if these can be extracted.
 
-# RC2012BM: looks like the 2011-12 DHS survey (CG2011DHS), Harry says no gps data
+# RC2012BM: looks like the 2011-12 DHS survey (CG2011DHS), don't keep
 congo_bonnie <- dhs_bonnie[SurveyId=="RC2012BM"]
 
 

@@ -12,7 +12,7 @@ library(ggplot2)
 
 rm(list=ls())
 
-main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/survey_data/mics5_raw"
+main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_data/household_surveys/mics5_raw"
 
 
 # read in data
@@ -35,12 +35,14 @@ final_data <- merge(final_data, defacto_pop, by=c("surveyid", "subnat", "cluster
 # determine n_slept_under_itn
 itn_sleepers <- tn_data[, list(surveyid, subnat, clusterid, hhid, net_id, 
                               net_sleeper_1, net_sleeper_2, net_sleeper_3, net_sleeper_4, net_sleeper_5, net_sleeper_6)]
+
 itn_sleepers <- melt(itn_sleepers, id.vars = c("surveyid", "subnat", "clusterid", "hhid", "net_id"))
 
 itn_sleepers <- itn_sleepers[, list(n_slept_under_itn=sum(!is.na(value))), by=list(surveyid, subnat, clusterid, hhid)]
 
 final_data <- merge(final_data, itn_sleepers, by=c("surveyid", "subnat", "clusterid", "hhid"), all=T)
 final_data[is.na(n_slept_under_itn) & n_itn==0, n_slept_under_itn:=0]
+final_data[n_slept_under_itn>n_defacto_pop, n_defacto_pop:=n_slept_under_itn] # occurs when more non hh members slept in house/under net
 
 # determine n_itn_used
 print("finding net use count")
@@ -83,6 +85,6 @@ final_data[, n_llin:=n_itn]
 final_data[, n_conv_itn:=0]
 
 ### save
-write.csv(final_data, file.path(main_dir, "../mics5_hh_05_august_2019.csv"), row.names = F)
+write.csv(final_data, file.path(main_dir, "../mics5_hh_04_october_2019.csv"), row.names = F)
 
 

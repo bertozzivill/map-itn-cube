@@ -26,8 +26,7 @@ main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/"
 mics3_data <- fread(file.path(main_dir,"00_survey_data/non_household_surveys/mics3_aggregated_08_august_2017.csv"),stringsAsFactors=FALSE)
 no_report_surveydata <-fread(file.path(main_dir,"00_survey_data/non_household_surveys/other_aggregated_08_august_2017.csv"),stringsAsFactors=FALSE)
 
-# From 01_prep_hh_survey_data: aggregated survey data. keep only needed columns; reshape wide
-# TODO: change data prep script so this reshaping is unnecessary.
+# From 01_prep_hh_survey_data: aggregated survey data. keep only needed columns;
 survey_data <- fread(file.path(main_dir, "01_data_prep/itn_aggregated_survey_data.csv"),stringsAsFactors=FALSE)
 survey_data <- survey_data[, list(surveyid, iso3, country, date,
                                   hh_size_mean=n_defacto_pop_mean,
