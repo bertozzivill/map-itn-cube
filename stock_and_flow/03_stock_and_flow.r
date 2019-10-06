@@ -696,7 +696,7 @@ package_load <- function(package_list){
   lapply(package_list, library, character.only=T)
 }
 
-package_load(c("data.table","raster","rjags", "zoo", "RecordLinkage", "ggplot2"))
+package_load(c("data.table","raster","rjags", "zoo", "ggplot2"))
 
 if(Sys.getenv("main_dir")=="") {
   main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/02_stock_and_flow_prep"
