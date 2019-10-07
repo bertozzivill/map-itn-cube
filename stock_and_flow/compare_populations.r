@@ -1,7 +1,7 @@
 ###############################################################################################################
 ## compare_populations.r
 ## Amelia Bertozzi-Villa
-## SEptember 2019
+## September 2019
 ## 
 ## Attempt to determine which population file to use for stock and flow
 ##############################################################################################################

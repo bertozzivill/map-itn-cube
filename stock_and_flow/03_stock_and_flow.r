@@ -39,9 +39,9 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   nmcp_data<-fread(file.path(main_dir, "from_who/NMCP_2019.csv"),stringsAsFactors=FALSE)
   setnames(nmcp_data, "ITN", "CITN")
   
-  nmcp_to_plot <- melt(nmcp_data, id.vars = c("ISO3", "year"), measure.vars = c("LLIN", "CITN"), variable.name = "type", value.name="net_count")
-  nmcp_nulls <- nmcp_to_plot[is.na(net_count), list(ISO3, year, type, net_count=0)]
-  
+  # nmcp_to_plot <- melt(nmcp_data, id.vars = c("ISO3", "year"), measure.vars = c("LLIN", "CITN"), variable.name = "type", value.name="net_count")
+  # nmcp_nulls <- nmcp_to_plot[is.na(net_count), list(ISO3, year, type, net_count=0)]
+  # 
   # net_colors <- gg_color_hue(2)
   # net_types <- c("CITN", "LLIN")
   # pdf("~/Desktop/nmcp_data.pdf", width=14, height=10)
@@ -232,17 +232,21 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   
   main_input_list <- c(main_input_list, nmcp_list)
   
-  ### Store population at risk and IRS parameters. TODO: update IRS, find PAR for surveys more rigorously  #####----------------------------------------------------------------------------------------------------------------------------------
+  ### Store population at risk and IRS parameters.  #####----------------------------------------------------------------------------------------------------------------------------------
   # store population at risk parameter 
   main_input_list$PAR <- mean(this_pop$prop_pop_at_risk_pf)
   
-  # set IRS values. todo: update these from WHO data or anita work
+  # TODO: update IRS from WHO data or anita work, find PAR for surveys more rigorously
+  
+  # UNTIL WE UPDATE: don't discount any PAR based on IRS coverage
   # "IRS" refers to the proportion of the population *not* covered by IRS
-  if(this_country=='Mozambique'){ main_input_list$IRS=(1-0.1)
-  }else if(this_country=='Madagascar'){ main_input_list$IRS=(1-0.24)
-  }else if(this_country=='Zimbabwe'){ main_input_list$IRS=(1-0.48)
-  }else if(this_country=='Eritrea'){ main_input_list$IRS=(1-0.1)
-  }else{ main_input_list$IRS=1}
+  # if(this_country=='Mozambique'){ main_input_list$IRS=(1-0.1)
+  # }else if(this_country=='Madagascar'){ main_input_list$IRS=(1-0.24)
+  # }else if(this_country=='Zimbabwe'){ main_input_list$IRS=(1-0.48)
+  # }else if(this_country=='Eritrea'){ main_input_list$IRS=(1-0.1)
+  # }else{ main_input_list$IRS=1}
+  
+  main_input_list$IRS <- 1
   
   ### create "counter" matrix that marks time since net distribution for each quarter   #####----------------------------------------------------------------------------------------------------------------------------------
   quarter_count <- main_input_list$quarter_count
@@ -357,7 +361,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
           " 
           # k & L are parameters for the loss function -- L is a time horizon and k is an exponential scaling factor
           for(i in 1:nrow_moving_avg){ 
-          						k_llin[1,i]~dunif(16,18) 
+          						k_llin[1,i]~dunif(16,24) 
           						L_llin[1,i]~dunif(4,20.7)	# changed this back from either (1, 20.7) or (3, 20.7) to avoid an error
           					}
           					
@@ -396,7 +400,7 @@ citn_quarterly <-
           " 
             # k & L are parameters for the loss function -- L is a time horizon and k is an exponential scaling factor
             for(i in 1:nrow_moving_avg){ 
-            						k_citn[1,i]~dunif(16,18) 
+            						k_citn[1,i]~dunif(16,24) 
             						L_citn[1,i]~dunif(4,20.7)	# changed this back from either (1, 20.7) or (3, 20.7) to avoid an error
             					}
             					
@@ -687,7 +691,7 @@ save(list = ls(all.names = TRUE), file = file.path(out_dir, paste0(this_country,
 
 }
 
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highcpu-32 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/02_stock_and_flow_prep CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191004_fix_data_bugs --command 'cd ${CODE}; Rscript 03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list.tsv
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highcpu-32 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/02_stock_and_flow_prep CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191004_fix_data_bugs_no_irs_wider_loss_prior --command 'cd ${CODE}; Rscript 03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list.tsv
 
 package_load <- function(package_list){
   # package installation/loading
