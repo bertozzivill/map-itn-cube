@@ -13,10 +13,6 @@
 # - urban/rural
 # or: get subnational distribution counts, rake to those
 
-gg_color_hue <- function(n) {
-  hues = seq(15, 375, length = n + 1)
-  hcl(h = hues, l = 65, c = 100)[1:n]
-}
 
 run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out_dir){
   
@@ -359,15 +355,14 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   # loss functions and quarterly distribution-- see section 3.2.2.3
   llin_quarterly <- 
           " 
-          # k & L are parameters for the loss function -- L is a time horizon and k is an exponential scaling factor
+          # test exponenetial loss function with lambda parameter, where prior is transformed to be uniform in function space
           for(i in 1:nrow_moving_avg){ 
-          						k_llin[1,i]~dunif(16,24) 
-          						L_llin[1,i]~dunif(4,20.7)	# changed this back from either (1, 20.7) or (3, 20.7) to avoid an error
+          						lambda_base_llin[1,i] ~ dunif(0.1, 0.7) 
+          						lambda_llin[1, i] <- -log(lambda_base_llin[1,i])
           					}
           					
           # vectors of length year_count
-          mv_k_llin <- k_llin%*%moving_avg_weights		
-          mv_L_llin <- L_llin%*%moving_avg_weights
+          mv_lambda_llin <- lambda_llin%*%moving_avg_weights		
           
           # find proportions for quarterly llin distributions
           for(j in 1:year_count){
@@ -388,7 +383,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
           for (j in 1:quarter_count){
             llins_distributed_quarterly[j] <- adjusted_llins_distributed[(round(j/4+0.3))] * quarter_fractions_llin[(round(j/4+0.3)), (((j/4)-(round(j/4+0.3)-1))*4) ] # todo: find easier math
             for (i in 1:quarter_count){
-              quarterly_nets_remaining_matrix_llin[i,j] <- ifelse(j>i, 0, ifelse(time_since_distribution[i,j] >= mv_L_llin[(round(j/4+0.3))], 0, llins_distributed_quarterly[j] * exp(mv_k_llin[(round(j/4+0.3))]-mv_k_llin[(round(j/4+0.3))]/(1-(time_since_distribution[i,j]/mv_L_llin[(round(j/4+0.3))])^2))))
+              quarterly_nets_remaining_matrix_llin[i,j] <- ifelse(j>i, 0, llins_distributed_quarterly[j] * exp(-mv_lambda_llin[(round(j/4+0.3))]*time_since_distribution[i,j]))
             }
           }
             
@@ -398,15 +393,14 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
 
 citn_quarterly <- 
           " 
-            # k & L are parameters for the loss function -- L is a time horizon and k is an exponential scaling factor
-            for(i in 1:nrow_moving_avg){ 
-            						k_citn[1,i]~dunif(16,24) 
-            						L_citn[1,i]~dunif(4,20.7)	# changed this back from either (1, 20.7) or (3, 20.7) to avoid an error
-            					}
-            					
-            # vectors of length year_count
-            mv_k_citn <- k_citn%*%moving_avg_weights		
-            mv_L_citn <- L_citn%*%moving_avg_weights
+            # test exponenetial loss function with lambda parameter, where prior is transformed to be uniform in function space
+          for(i in 1:nrow_moving_avg){ 
+          						lambda_base_citn[1,i] ~ dunif(0.1, 0.7) 
+          						lambda_citn[1, i] <- -log(lambda_base_citn[1,i])
+          					}
+          					
+          # vectors of length year_count
+          mv_lambda_citn <- lambda_citn%*%moving_avg_weights
             
             # find proportions for quarterly citn distributions
             for(j in 1:year_count){
@@ -426,7 +420,7 @@ citn_quarterly <-
             for (j in 1:quarter_count){
               citns_distributed_quarterly[j] <- nmcp_count_citn_est[(round(j/4+0.3))] * quarter_fractions_citn[(round(j/4+0.3)), (((j/4)-(round(j/4+0.3)-1))*4) ] # todo: find easier math
               for (i in 1:quarter_count){
-                quarterly_nets_remaining_matrix_citn[i,j] <- ifelse(j>i, 0, ifelse(time_since_distribution[i,j] >= mv_L_citn[(round(j/4+0.3))], 0, citns_distributed_quarterly[j] * exp(mv_k_citn[(round(j/4+0.3))]-mv_k_citn[(round(j/4+0.3))]/(1-(time_since_distribution[i,j]/mv_L_citn[(round(j/4+0.3))])^2))))
+              quarterly_nets_remaining_matrix_citn[i,j] <- ifelse(j>i, 0, citns_distributed_quarterly[j] * exp(-mv_lambda_citn[(round(j/4+0.3))]*time_since_distribution[i,j]))
               }
             }
   
@@ -691,7 +685,7 @@ save(list = ls(all.names = TRUE), file = file.path(out_dir, paste0(this_country,
 
 }
 
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highcpu-32 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/02_stock_and_flow_prep CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191004_fix_data_bugs_no_irs_wider_loss_prior --command 'cd ${CODE}; Rscript 03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list.tsv
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-32 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/02_stock_and_flow_prep CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191008_exp_loss --command 'cd ${CODE}; Rscript 03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list_TESTING.tsv
 
 package_load <- function(package_list){
   # package installation/loading
@@ -705,7 +699,7 @@ package_load(c("data.table","raster","rjags", "zoo", "ggplot2"))
 if(Sys.getenv("main_dir")=="") {
   main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/02_stock_and_flow_prep"
   out_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results"
-  this_country <- "MOZ"
+  this_country <- "BFA"
 } else {
   main_dir <- Sys.getenv("main_dir")
   out_dir <- Sys.getenv("out_dir") 
@@ -716,6 +710,10 @@ source("jags_functions.r")
 start_year <- 2000
 end_year<- 2018
 
+gg_color_hue <- function(n) {
+  hues = seq(15, 375, length = n + 1)
+  hcl(h = hues, l = 65, c = 100)[1:n]
+}
 
 run_stock_and_flow(this_country, start_year, end_year, main_dir, out_dir)
 

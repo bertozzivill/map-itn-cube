@@ -41,3 +41,33 @@ ggplot(all_sigs, aes(x=time, y=sig))  +
   geom_line(aes(color=as.factor(L), group=as.factor(id))) +
   labs(title=paste("k from", min(k), "to", max(k)))
 
+
+
+# perhaps not identifiable, try simple exponential instead:
+n_param_samples <- 50
+lambda <- -log(seq(0.1, 0.7, length.out = n_param_samples))
+
+all_exp <- rbindlist(lapply(1:length(lambda), function(idx){
+  time_points=seq(0,10,.01)
+  this_lambda <- lambda[idx]
+  this_exp <- data.table(id=idx,
+                             time=time_points,
+                             lambda=this_lambda,
+                             expval=exp(-this_lambda*time_points))
+  return(this_exp)
+}))
+
+ggplot(all_exp, aes(x=time, y=expval))  +
+  geom_line(aes(color=as.factor(lambda))) +
+  theme(legend.position = "none") + 
+  labs(title=paste("lambda from", min(lambda), "to", max(lambda)))
+
+compare <- data.table(idx=1:n_param_samples,
+                      logseq = -log(seq(0.1, 0.7, length.out = n_param_samples)),
+                      seqlog = seq(-log(0.1), -log(0.7), length.out = n_param_samples))
+compare <- melt(compare, id.vars = "idx")
+compare[, expval:=exp(-value)]
+
+
+ggplot(compare, aes(x=idx, y=expval)) +
+  geom_point(aes(color=variable))
