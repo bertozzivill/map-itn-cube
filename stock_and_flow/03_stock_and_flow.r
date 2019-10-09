@@ -355,14 +355,18 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   # loss functions and quarterly distribution-- see section 3.2.2.3
   llin_quarterly <- 
           " 
-          # test exponenetial loss function with lambda parameter, where prior is transformed to be uniform in function space
-          for(i in 1:nrow_moving_avg){ 
-          						lambda_base_llin[1,i] ~ dunif(0.1, 0.7) 
-          						lambda_llin[1, i] <- -log(lambda_base_llin[1,i])
-          					}
-          					
-          # vectors of length year_count
-          mv_lambda_llin <- lambda_llin%*%moving_avg_weights		
+          # # test exponenetial loss function with lambda parameter, where prior is transformed to be uniform in function space
+          # for(i in 1:nrow_moving_avg){ 
+          # 						lambda_base_llin[1,i] ~ dunif(0.1, 0.7) 
+          # 						lambda_llin[1, i] <- -log(lambda_base_llin[1,i])
+          # 					}
+          # 					
+          # # vectors of length year_count
+          # mv_lambda_llin <- lambda_llin%*%moving_avg_weights		
+          
+          # test stationary loss parameter
+          lambda_base_llin ~ dunif(0.1, 0.7) 
+          lambda_llin <- -log(lambda_base_llin)
           
           # find proportions for quarterly llin distributions
           for(j in 1:year_count){
@@ -383,7 +387,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
           for (j in 1:quarter_count){
             llins_distributed_quarterly[j] <- adjusted_llins_distributed[(round(j/4+0.3))] * quarter_fractions_llin[(round(j/4+0.3)), (((j/4)-(round(j/4+0.3)-1))*4) ] # todo: find easier math
             for (i in 1:quarter_count){
-              quarterly_nets_remaining_matrix_llin[i,j] <- ifelse(j>i, 0, llins_distributed_quarterly[j] * exp(-mv_lambda_llin[(round(j/4+0.3))]*time_since_distribution[i,j]))
+              quarterly_nets_remaining_matrix_llin[i,j] <- ifelse(j>i, 0, llins_distributed_quarterly[j] * exp(-lambda_llin*time_since_distribution[i,j]))
             }
           }
             
@@ -393,17 +397,23 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
 
 citn_quarterly <- 
           " 
-            # test exponenetial loss function with lambda parameter, where prior is transformed to be uniform in function space
-          for(i in 1:nrow_moving_avg){ 
-          						lambda_base_citn[1,i] ~ dunif(0.1, 0.7) 
-          						lambda_citn[1, i] <- -log(lambda_base_citn[1,i])
-          					}
-          					
-          # vectors of length year_count
-          mv_lambda_citn <- lambda_citn%*%moving_avg_weights
+          # 
+          #   # test exponenetial loss function with lambda parameter, where prior is transformed to be uniform in function space
+          # for(i in 1:nrow_moving_avg){ 
+          # 						lambda_base_citn[1,i] ~ dunif(0.1, 0.7) 
+          # 						lambda_citn[1, i] <- -log(lambda_base_citn[1,i])
+          # 					}
+          # 					
+          # # vectors of length year_count
+          # mv_lambda_citn <- lambda_citn%*%moving_avg_weights
+          
+          # test stationary loss parameter
+          lambda_base_citn ~ dunif(0.1, 0.7) 
+          lambda_citn <- -log(lambda_base_citn)
+          
             
-            # find proportions for quarterly citn distributions
-            for(j in 1:year_count){
+          # find proportions for quarterly citn distributions
+          for(j in 1:year_count){
               quarter_draws_citn[j,1] ~ dunif(0,1)
               quarter_draws_citn[j,2] ~ dunif(0,1)
               quarter_draws_citn[j,3] ~ dunif(0,1)
@@ -420,7 +430,7 @@ citn_quarterly <-
             for (j in 1:quarter_count){
               citns_distributed_quarterly[j] <- nmcp_count_citn_est[(round(j/4+0.3))] * quarter_fractions_citn[(round(j/4+0.3)), (((j/4)-(round(j/4+0.3)-1))*4) ] # todo: find easier math
               for (i in 1:quarter_count){
-              quarterly_nets_remaining_matrix_citn[i,j] <- ifelse(j>i, 0, citns_distributed_quarterly[j] * exp(-mv_lambda_citn[(round(j/4+0.3))]*time_since_distribution[i,j]))
+              quarterly_nets_remaining_matrix_citn[i,j] <- ifelse(j>i, 0, citns_distributed_quarterly[j] * exp(-lambda_citn*time_since_distribution[i,j]))
               }
             }
   
@@ -540,16 +550,20 @@ names_to_extract <- c(
                       "initial_stock",
                       "adjusted_llins_distributed",
                       "final_stock",
-                      "k_llin",
-                      "L_llin",
-                      "mv_k_llin",
-                      "mv_L_llin",
+                      "lambda_llin",
+                      "lambda_base_llin",
+                      # "k_llin",
+                      # "L_llin",
+                      # "mv_k_llin",
+                      # "mv_L_llin",
                       "llins_distributed_quarterly",
                       "quarterly_nets_remaining_matrix_llin",
-                      "k_citn",
-                      "L_citn",
-                      "mv_k_citn",
-                      "mv_L_citn",
+                      "lambda_citn",
+                      "lambda_base_citn",
+                      # "k_citn",
+                      # "L_citn",
+                      # "mv_k_citn",
+                      # "mv_L_citn",
                       "citns_distributed_quarterly",
                       "quarterly_nets_remaining_matrix_citn",
                       "quarterly_nets_in_houses_llin",
@@ -685,7 +699,7 @@ save(list = ls(all.names = TRUE), file = file.path(out_dir, paste0(this_country,
 
 }
 
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-32 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/02_stock_and_flow_prep CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191008_exp_loss --command 'cd ${CODE}; Rscript 03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list_TESTING.tsv
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highcpu-8 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/02_stock_and_flow_prep CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191009_stationary_exp_loss --command 'cd ${CODE}; Rscript 03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list_TESTING.tsv
 
 package_load <- function(package_list){
   # package installation/loading

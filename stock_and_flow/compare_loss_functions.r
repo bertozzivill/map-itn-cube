@@ -19,9 +19,10 @@ sigmoid<-function(t,k,L){
   return(v)	
 }
 
-n_param_samples <- 20
+n_param_samples <- 200
 k <- seq(16, 24, length.out = n_param_samples)
 L <- seq(4, 30, length.out = n_param_samples)
+k <- 20
 
 samples <- data.table(expand.grid(k, L))
 names(samples) <- c("k", "L")
@@ -39,8 +40,8 @@ all_sigs <- rbindlist(lapply(1:nrow(samples), function(idx){
 
 ggplot(all_sigs, aes(x=time, y=sig))  +
   geom_line(aes(color=as.factor(L), group=as.factor(id))) +
+  theme(legend.position="none") +
   labs(title=paste("k from", min(k), "to", max(k)))
-
 
 
 # perhaps not identifiable, try simple exponential instead:
