@@ -75,32 +75,44 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
       }
       
       ### Record half-life details for the end #####----------------------------------------------------------------------------------------------------------------------------------
-      
-      # TODO: modify for exponential curve
-      # print("Calculating net retention curves")
-      # half_life_comparison[[this_country]] <- rbindlist(lapply(model_names, function(this_model_name){
-      #   net_loss_params <- all_model_estimates[[this_model_name]][c("mv_k_llin", "mv_L_llin")]
-      #   
-      #   half_lifes<-c()
-      #   net_loss_sig <- rbindlist(lapply(1:length(net_loss_params$mv_k_llin), function(idx){
-      #     time_points=seq(0,10,.01)
-      #     data.table(base_year=idx+1999,
-      #                time=time_points,
-      #                sig=sigmoid(time_points, net_loss_params$mv_k_llin[idx], net_loss_params$mv_L_llin[idx])
-      #     )
-      #     
-      #   }))
-      #   
-      #   net_loss_sig[, half_life:=time[which.min(abs(sig-0.5))], by="base_year"]
-      #   
-      #   # average last three years for plot
-      #   for_plot_sig <- net_loss_sig[base_year>=(max(base_year)-2), list(iso3=this_country,
-      #                                                                    model=this_model_name,
-      #                                                                    sig=mean(sig),
-      #                                                                    half_life=mean(half_life)), by="time"]
-      #   
-      #   return(for_plot_sig)
-      # }))
+    
+      print("Calculating net retention curves")
+      half_life_comparison[[this_country]] <- rbindlist(lapply(model_names, function(this_model_name){
+        
+        if ("mv_k_llin" %in% names(all_model_estimates[[this_model_name]])){
+          net_loss_params <- all_model_estimates[[this_model_name]][c("mv_k_llin", "mv_L_llin")]
+          
+          half_lifes<-c()
+          net_loss_sig <- rbindlist(lapply(1:length(net_loss_params$mv_k_llin), function(idx){
+            time_points=seq(0,10,.01)
+            data.table(base_year=idx+1999,
+                       time=time_points,
+                       sig=sigmoid(time_points, net_loss_params$mv_k_llin[idx], net_loss_params$mv_L_llin[idx])
+            )
+            
+          }))
+          
+          net_loss_sig[, half_life:=time[which.min(abs(sig-0.5))], by="base_year"]
+          
+          # average last three years for plot
+          for_plot_sig <- net_loss_sig[base_year>=(max(base_year)-2), list(iso3=this_country,
+                                                                           model=this_model_name,
+                                                                           sig=mean(sig),
+                                                                           half_life=mean(half_life)), by="time"]
+        }else{
+          net_loss_params <- all_model_estimates[[this_model_name]][c("k_llin", "L_llin")]
+          
+          half_lifes<-c()
+          time_points=seq(0,10,.01)
+          for_plot_sig <- data.table(iso3=this_country,
+                                     model=this_model_name,
+                                     time=time_points,
+                                     sig=sigmoid(time_points, net_loss_params$k_llin, net_loss_params$L_llin))
+          for_plot_sig[, half_life:=time[which.min(abs(sig-0.5))]]
+        }
+        
+        return(for_plot_sig)
+      }), use.names = T)
       
       
       ### Compare Indicator parameters to priors #####----------------------------------------------------------------------------------------------------------------------------------
@@ -262,42 +274,42 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
   
   
   ### Plot all net loss sigmoids #####----------------------------------------------------------------------------------------------------------------------------------
-  # TODO: modify for exponential
-  # print("plotting net retention curves")
-  # 
-  # pdf(file.path(plot_dir, paste0("half_lives", out_label, ".pdf")), height=8, width=10)
-  # 
-  # two_colors <- gg_color_hue(2)
-  # 
-  # half_life_comparison <- rbindlist(half_life_comparison)
-  # half_life_means <- half_life_comparison[, list (sig=mean(sig), half_life=mean(half_life)), by=c("model", "time")]
-  # midpoints <- unique(half_life_means[, list(model, half_life)])
-  # 
-  # print(ggplot(half_life_comparison, aes(x=time, y=sig)) +
-  #         geom_line(aes(group=iso3), alpha=0.5, color=two_colors[2]) +
-  #         geom_line(data=half_life_means, size=2, color=two_colors[1]) +
-  #         geom_vline(data=midpoints, aes(xintercept=half_life)) +
-  #         facet_grid(.~model) + 
-  #         labs(title="Net Retention by Country",
-  #              x="Time since net received (years)",
-  #              y="Prop. of nets retained"))
-  # 
-  # 
-  # country_lambdas <- unique(half_life_comparison[, list(model, iso3, half_life)])
-  # 
-  # print(ggplot(country_lambdas, aes(x=reorder(iso3, -half_life), y=half_life)) +
-  #         geom_text(aes(label=iso3)) +
-  #         facet_grid(.~model) + 
-  #         theme(axis.text.x = element_text(angle=45, hjust=1),
-  #               legend.position = "none") + 
-  #         labs(x="",
-  #              y="Net Half-life (years)"))
-  # 
-  # graphics.off()
-  # 
+
+  print("plotting net retention curves")
+
+  pdf(file.path(plot_dir, paste0("half_lives", out_label, ".pdf")), height=8, width=10)
+
+  two_colors <- gg_color_hue(2)
+
+  half_life_comparison <- rbindlist(half_life_comparison)
+  half_life_means <- half_life_comparison[, list (sig=mean(sig), half_life=mean(half_life)), by=c("model", "time")]
+  midpoints <- unique(half_life_means[, list(model, half_life)])
+
+  print(ggplot(half_life_comparison, aes(x=time, y=sig)) +
+          geom_line(aes(group=iso3), alpha=0.5, color=two_colors[2]) +
+          geom_line(data=half_life_means, size=2, color=two_colors[1]) +
+          geom_vline(data=midpoints, aes(xintercept=half_life)) +
+          facet_grid(.~model) +
+          labs(title="Net Retention by Country",
+               x="Time since net received (years)",
+               y="Prop. of nets retained"))
+
+
+  country_lambdas <- unique(half_life_comparison[, list(model, iso3, half_life)])
+
+  print(ggplot(country_lambdas, aes(x=reorder(iso3, -half_life), y=half_life)) +
+          geom_text(aes(label=iso3)) +
+          facet_grid(.~model) +
+          theme(axis.text.x = element_text(angle=45, hjust=1),
+                legend.position = "none") +
+          labs(x="",
+               y="Net Half-life (years)"))
+
+  graphics.off()
+
 }
 
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive model_dir_1=gs://map_users/amelia/itn/stock_and_flow/results/20191008_exp_loss model_dir_2=gs://map_users/amelia/itn/stock_and_flow/results/20191004_fix_data_bugs_no_irs_wider_loss_prior CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive plot_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191008_exp_loss --command 'cd ${CODE}; Rscript compare_new_outputs.r'
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive model_dir_1=gs://map_users/amelia/itn/stock_and_flow/results/20191009_stationary_sigm_loss model_dir_2=gs://map_users/amelia/itn/stock_and_flow/results/20190927_new_data CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive plot_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191009_stationary_sigm_loss --command 'cd ${CODE}; Rscript compare_new_outputs.r'
 package_load <- function(package_list){
   # package installation/loading
   new_packages <- package_list[!(package_list %in% installed.packages()[,"Package"])]
@@ -312,9 +324,9 @@ if(Sys.getenv("model_dir_1")=="") {
   base_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/"
   func_dir <- "~/repos/map-itn-cube/stock_and_flow/"
   setwd(func_dir)
-  plot_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20190930_gp_invSigma_noScale"
+  plot_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20191009_stationary_sigm_loss"
   
-  model_dirs <- c("20190930_gp_invSigma_noScale", "20191004_fix_data_bugs_no_irs_wider_loss_prior")
+  model_dirs <- c("20191009_stationary_sigm_loss", "20190930_gp_invSigma_noScale")
   
 } else {
   plot_dir <- Sys.getenv("plot_dir") 
