@@ -6,7 +6,7 @@
 ## Main script for the stock and flow model
 ##############################################################################################################
 
-# From Noor: all the nets in SSD/DRC are going *to conflict areas*-- huge mismatch, not right to use as nationally representative
+# From Noor: many of the nets in SSD/DRC are going *to conflict areas*-- huge mismatch, not right to use as nationally representative
 
 # possible covariates for ITN:
 # - conflict area/refugee camp?
@@ -34,26 +34,6 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   # todo: compare 2018 and 2019
   nmcp_data<-fread(file.path(main_dir, "from_who/NMCP_2019.csv"),stringsAsFactors=FALSE)
   setnames(nmcp_data, "ITN", "CITN")
-  
-  # nmcp_to_plot <- melt(nmcp_data, id.vars = c("ISO3", "year"), measure.vars = c("LLIN", "CITN"), variable.name = "type", value.name="net_count")
-  # nmcp_nulls <- nmcp_to_plot[is.na(net_count), list(ISO3, year, type, net_count=0)]
-  # 
-  # net_colors <- gg_color_hue(2)
-  # net_types <- c("CITN", "LLIN")
-  # pdf("~/Desktop/nmcp_data.pdf", width=14, height=10)
-  # for (idx in 1:2){
-  #   this_net_type <- net_types[idx]
-  #   print(ggplot(nmcp_to_plot[!is.na(net_count)& type==this_net_type], aes(x=year, y=net_count/1000000)) +
-  #     geom_point(color=net_colors[idx]) +
-  #     geom_point(data=nmcp_nulls[type==this_net_type], shape=1, size=3, color=net_colors[idx]) +
-  #     facet_wrap(~ISO3, scales="free_y") +
-  #     theme(legend.position = "none",
-  #           axis.text.x = element_text(angle=45, hjust=1)) +
-  #     labs(title=paste("NMCP Net Counts", this_net_type),
-  #          x="Year",
-  #          y="Nets Distributed (millions)"))
-  # }
-  # graphics.off()
   
   # TESTING: Set all NMCP NA's to zero
   nmcp_data[is.na(LLIN), LLIN:=0]
@@ -354,21 +334,8 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   
   # loss functions and quarterly distribution-- see section 3.2.2.3
   llin_quarterly <- 
-          " 
-          # # test exponenetial loss function with lambda parameter, where prior is transformed to be uniform in function space
-          # for(i in 1:nrow_moving_avg){ 
-          # 						lambda_base_llin[1,i] ~ dunif(0.1, 0.9) 
-          # 						lambda_llin[1, i] <- -log(lambda_base_llin[1,i])
-          # 					}
-          # 					
-          # # vectors of length year_count
-          # mv_lambda_llin <- lambda_llin%*%moving_avg_weights		
-          
-          # test stationary loss parameter
-          # lambda_base_llin ~ dunif(0.1, 0.9) 
-          # lambda_llin <- -log(lambda_base_llin)
-          
-          # test stationary sigmoidal loss parameter
+          "
+          #  stationary sigmoidal loss parameter
           k_llin <- 20 
           L_llin ~ dunif(4,20.7)
           
@@ -391,8 +358,6 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
           for (j in 1:quarter_count){
             llins_distributed_quarterly[j] <- adjusted_llins_distributed[(round(j/4+0.3))] * quarter_fractions_llin[(round(j/4+0.3)), (((j/4)-(round(j/4+0.3)-1))*4) ] # todo: find easier math
             for (i in 1:quarter_count){
-              # exp:
-              # quarterly_nets_remaining_matrix_llin[i,j] <- ifelse(j>i, 0, llins_distributed_quarterly[j] * exp(-lambda_llin*time_since_distribution[i,j]))
               # sigm:
               quarterly_nets_remaining_matrix_llin[i,j] <- ifelse(j>i, 0, ifelse(time_since_distribution[i,j] >= L_llin, 0, llins_distributed_quarterly[j] * exp(k_llin - k_llin/(1-(time_since_distribution[i,j]/L_llin)^2))))
 
@@ -405,21 +370,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
 
 citn_quarterly <- 
           " 
-          # 
-          #   # test exponenetial loss function with lambda parameter, where prior is transformed to be uniform in function space
-          # for(i in 1:nrow_moving_avg){ 
-          # 						lambda_base_citn[1,i] ~ dunif(0.1, 0.9) 
-          # 						lambda_citn[1, i] <- -log(lambda_base_citn[1,i])
-          # 					}
-          # 					
-          # # vectors of length year_count
-          # mv_lambda_citn <- lambda_citn%*%moving_avg_weights
-          
-          # test stationary exponential loss parameter
-          # lambda_base_citn ~ dunif(0.1, 0.9) 
-          # lambda_citn <- -log(lambda_base_citn)
-          
-          # test stationary sigmoidal loss parameter
+          #  stationary sigmoidal loss parameter
           k_citn <- 20 
           L_citn ~ dunif(4,20.7)
             
@@ -441,8 +392,6 @@ citn_quarterly <-
             for (j in 1:quarter_count){
               citns_distributed_quarterly[j] <- nmcp_count_citn_est[(round(j/4+0.3))] * quarter_fractions_citn[(round(j/4+0.3)), (((j/4)-(round(j/4+0.3)-1))*4) ] # todo: find easier math
               for (i in 1:quarter_count){
-              # exp:
-              # quarterly_nets_remaining_matrix_citn[i,j] <- ifelse(j>i, 0, citns_distributed_quarterly[j] * exp(-lambda_citn*time_since_distribution[i,j]))
               # sigm:
               quarterly_nets_remaining_matrix_citn[i,j] <- ifelse(j>i, 0, ifelse(time_since_distribution[i,j] >= L_citn, 0, citns_distributed_quarterly[j] * exp(k_citn - k_citn/(1-(time_since_distribution[i,j]/L_citn)^2))))
               }
@@ -547,12 +496,6 @@ jags <- jags.model(file=textConnection(full_model_string),
 update(jags,n.iter=update)
 
 names_to_extract <- c(
-                      # "gp_rho_llin",
-                      # "gp_rho_citn",
-                      # "gp_tau_llin",
-                      # "gp_tau_citn",
-                      # "gp_sigma_sq_llin",
-                      # "gp_sigma_sq_citn",
                       "nmcp_nets_percapita_llin_est",
                       "nmcp_nets_percapita_citn_est",
                       "manufacturer_llins_est",
@@ -564,20 +507,12 @@ names_to_extract <- c(
                       "initial_stock",
                       "adjusted_llins_distributed",
                       "final_stock",
-                      "lambda_llin",
-                      "lambda_base_llin",
                       "k_llin",
                       "L_llin",
-                      # "mv_k_llin",
-                      # "mv_L_llin",
                       "llins_distributed_quarterly",
                       "quarterly_nets_remaining_matrix_llin",
-                      "lambda_citn",
-                      "lambda_base_citn",
                       "k_citn",
                       "L_citn",
-                      # "mv_k_citn",
-                      # "mv_L_citn",
                       "citns_distributed_quarterly",
                       "quarterly_nets_remaining_matrix_citn",
                       "quarterly_nets_in_houses_llin",
