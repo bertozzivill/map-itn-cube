@@ -46,7 +46,7 @@ ggplot(all_sigs, aes(x=time, y=sig))  +
 
 # perhaps not identifiable, try simple exponential instead:
 n_param_samples <- 50
-lambda <- -log(seq(0.1, 0.7, length.out = n_param_samples))
+lambda <- -log(seq(0.1, 0.9, length.out = n_param_samples))
 
 all_exp <- rbindlist(lapply(1:length(lambda), function(idx){
   time_points=seq(0,10,.01)
