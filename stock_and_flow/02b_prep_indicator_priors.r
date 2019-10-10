@@ -1,6 +1,7 @@
 ###############################################################################################################
 ## prep_priors.r
 ## Amelia Bertozzi-Villa
+## Samir Bhatt
 ## September 2019
 ## 
 ## Adapted from "indicator stan prior.r"-- find prior estimates for prop of people with no nets and 

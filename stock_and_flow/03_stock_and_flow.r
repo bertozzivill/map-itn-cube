@@ -1,6 +1,7 @@
 ###############################################################################################################
 ## 02_stock_and_flow.r
 ## Amelia Bertozzi-Villa
+## Samir Bhatt
 ## July 2019
 ## 
 ## Main script for the stock and flow model

@@ -1,6 +1,7 @@
 ###############################################################################################################
 ## 01_hh_survey_data.r
 ## Amelia Bertozzi-Villa
+## Samir Bhatt
 ## October 2019
 ## 
 ## Prepare survey data for the stock and flow and itn cube models

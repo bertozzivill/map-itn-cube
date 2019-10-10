@@ -210,7 +210,7 @@ compare_to_sam <- function(sam_dir, new_dir, plot_dir){
   
 }
 
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive sam_dir=gs://map_users/amelia/itn/stock_and_flow/data_from_sam/out new_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191003_no_gp CODE=gs://map_users/amelia/itn/code/stock_and_flow/  --output-recursive plot_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191003_no_gp --command 'cd ${CODE}; Rscript compare_to_sam/compare_results.r'
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive sam_dir=gs://map_users/amelia/itn/stock_and_flow/data_from_sam/out new_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191003_no_gp CODE=gs://map_users/amelia/itn/code/stock_and_flow/  --output-recursive plot_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191003_no_gp --command 'cd ${CODE}; Rscript compare_to_sam/compare_to_sam.r'
 package_load <- function(package_list){
   # package installation/loading
   new_packages <- package_list[!(package_list %in% installed.packages()[,"Package"])]
