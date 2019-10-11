@@ -7,19 +7,6 @@
 ## Plot outputs from different stock and flow models
 ##############################################################################################################
 
-#loss function
-sigmoid<-function(t,k,L){
-  v<-exp(k-k/(1-(t/L)^2))
-  v[t>L]<-0
-  return(v)	
-}
-
-gg_color_hue <- function(n) {
-  hues = seq(15, 375, length = n + 1)
-  hcl(h = hues, l = 65, c = 100)[1:n]
-}
-
-
 compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
 
   ### Prep  #####----------------------------------------------------------------------------------------------------------------------------------
@@ -36,6 +23,7 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
   
   # start list to store half life details
   half_life_comparison <- list()
+  compare_L <- list()
   
   if (make_country_plots){
     pdf(file.path(plot_dir, paste0("compare_outputs_", out_label,".pdf")), height=11, width=8.5)
@@ -115,7 +103,26 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
         return(for_plot_sig)
       }), use.names = T)
       
-      
+      # temp
+      compare_L[[this_country]] <- rbindlist(lapply(model_names, function(this_model_name){
+        if ("mv_L_llin" %in% names(all_model_estimates[[this_model_name]])){
+          L_dt <- data.table(iso3=this_country,
+                             model=this_model_name,
+                             L=all_model_estimates[[this_model_name]]$mv_L_llin)
+          L_dt[, year:= (1:nrow(L_dt)) + 1999]
+          
+        }else{
+          L_dt <- data.table(iso3=this_country,
+                             model=this_model_name,
+                             L=all_model_estimates[[this_model_name]]$L_llin)
+          L_dt <- merge(L_dt, data.table(year=(1:length(all_model_estimates[[this_model_name]]$initial_stock))+1999,
+                                         model=this_model_name),
+                        by="model", all=T)
+          
+        }
+        return(L_dt)
+      }), use.names = T)
+    
       ### Compare Indicator parameters to priors #####----------------------------------------------------------------------------------------------------------------------------------
       print("Finding indicator priors")
       indicator_comparison <- rbindlist(lapply(model_names, function(this_model_name){
@@ -182,10 +189,13 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
         }
       }))
       
+      nets_in_houses <- merge(nets_in_houses, unique(half_life_comparison[[this_country]][, list(model, half_life)]), by="model")
+      nets_in_houses[, label:= paste0(model, "\n Half Life ", round(half_life, 2), " yrs")]
+      
       houses_plot <- ggplot(nets_in_houses, aes(x=date, color=type, fill=type)) +
         geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.3) +
         geom_line(aes(y=nets_houses), size=1) +
-        facet_grid(.~model) + 
+        facet_grid(.~label) + 
         labs(title= paste("Nets in Houses:", this_country),
              x="Time",
              y="Net count")
@@ -207,32 +217,37 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
                                            type=rep(c("citn", "llin"), each=length(years)),
                                            model=this_model_name
         )
+        return(new_nets_distributed)
       }))
       
-      nets_distributed <- merge( nets_distributed, uncertainty_vals[!variable %like% "quarterly", list(model, year=quarter+2000-1, type=ifelse(variable %like% "llin", "llin", "citn"),
-                                                                                                       lower, upper)], by=c("model", "type", "year"), all=T)
+      uncertainty_for_dist <- uncertainty_vals[!variable %like% "quarterly", list(model, year=quarter+2000-1, 
+                                                                                  type=ifelse(variable %like% "llin", "llin", "citn"),
+                                                                                  lower, upper)]
+      
+      nets_distributed <- merge( nets_distributed, uncertainty_for_dist, by=c("model", "type", "year"), all=T)
       
       
       
       nmcp_data <- rbindlist(lapply(names(model_dirs), function(this_model_name){
         this_data <- all_input_data[[this_model_name]]
         
-        data.table(year=c(this_data$nmcp_year_indices_citn,
-                          this_data$nmcp_year_indices_llin),
-                   nets_distributed_data=c(this_data$nmcp_count_citn,
-                                           this_data$nmcp_count_llin),
-                   type=c(rep("citn", length(this_data$nmcp_year_indices_citn)),
-                          rep("llin", length(this_data$nmcp_year_indices_llin))),
-                   model=this_model_name)
-        
+        new_nmcp_data <- data.table(year=c(this_data$nmcp_year_indices_citn,
+                                            this_data$nmcp_year_indices_llin),
+                                     nets_distributed_data=c(this_data$nmcp_count_citn,
+                                                             this_data$nmcp_count_llin),
+                                     type=c(rep("citn", length(this_data$nmcp_year_indices_citn)),
+                                            rep("llin", length(this_data$nmcp_year_indices_llin))),
+                                     model=this_model_name)
+        new_nmcp_data[type=="llin", manufacturer_llins_data:=this_data$manufacturer_llins]
       }))
       nmcp_data[, year:=year + 2000-1]
-      
+
       distribution_plot <- ggplot(nets_distributed, aes(x=year, color=type, fill=type)) +
         geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.3) +
         geom_line(aes(y=nets_distributed_model), size=2, alpha=0.75) +
         geom_point(data=nmcp_data, aes(y=nets_distributed_data), alpha=0.75, size=3) + 
-        facet_grid(.~model) + 
+        geom_line(data=nmcp_data[type=="llin"], aes(y=manufacturer_llins_data), linetype=2, size=1, color="black") +
+        facet_grid( ~ model) + 
         labs(title= paste("Nets Distributed:", this_country),
              x="Time",
              y="Net count")
@@ -240,15 +255,19 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
       ### Plot LLIN stock over time #####----------------------------------------------------------------------------------------------------------------------------------
       print("plotting LLIN stock")
       
-      model_initial_stock <- lapply(names(model_dirs), function(this_model_name){
-        return(all_model_estimates[[this_model_name]]$initial_stock)
-      })
+      model_initial_stock <- rbindlist(lapply(names(model_dirs), function(this_model_name){
+        this_model <- all_model_estimates[[this_model_name]]
+        
+        stock_manuf <- data.table(model=this_model_name,
+                                  stock=this_model$initial_stock)
+        stock_manuf[, year:=(1:nrow(stock_manuf)) + 1999]
+        
+        return(stock_manuf)
+      }))
       
-      stock <- nets_distributed[type=="llin", list(model,type, year, 
-                                                   initial_stock = unlist(model_initial_stock),
-                                                   llins_distributed=nets_distributed_model
-                                                   
-      )]
+      
+      stock <- merge(nets_distributed[type=="llin", list(model,type, year, distributed=nets_distributed_model)],
+                     model_initial_stock, by=c("model", "year"), all=T)
       stock <- melt(stock, id.vars=c("model", "type", "year"), variable.name="metric")
       
       stock_plot <- ggplot(stock, aes(x=year)) +
@@ -278,7 +297,7 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
 
   print("plotting net retention curves")
 
-  pdf(file.path(plot_dir, paste0("half_lives", out_label, ".pdf")), height=8, width=10)
+  pdf(file.path(plot_dir, paste0("half_lives", out_label, ".pdf")), height=8, width=14)
 
   two_colors <- gg_color_hue(2)
 
@@ -297,17 +316,29 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
 
 
   country_lambdas <- unique(half_life_comparison[, list(model, iso3, half_life)])
+  descending_order <- country_lambdas[model==model_names[[2]]][order(half_life, decreasing=T)]$iso3
+  country_lambdas[, iso3:= factor(iso3, levels = descending_order)]
 
-  print(ggplot(country_lambdas, aes(x=reorder(iso3, -half_life), y=half_life)) +
+  print(ggplot(country_lambdas, aes(x=iso3, y=half_life)) +
           geom_text(aes(label=iso3)) +
           facet_grid(.~model) +
+          ylim(0, 4) +
           theme(axis.text.x = element_text(angle=45, hjust=1),
                 legend.position = "none") +
           labs(x="",
                y="Net Half-life (years)"))
 
+  
+  compare_L <- rbindlist(compare_L)
+  print(ggplot(compare_L, aes(x=year, y=L)) +
+    geom_line(aes(color=model)) +
+    facet_wrap(~iso3) +
+    labs(x="Year",
+         y="L_param",
+         title="L parameter of loss function over time"))
+  
   graphics.off()
-
+  
 }
 
 # dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive model_dir_1=gs://map_users/amelia/itn/stock_and_flow/results/20191009_stationary_sigm_loss model_dir_2=gs://map_users/amelia/itn/stock_and_flow/results/20191003_no_gp CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive plot_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191009_stationary_sigm_loss --command 'cd ${CODE}; Rscript 04_compare_outputs.r'
@@ -321,13 +352,28 @@ package_load <- function(package_list){
 package_load(c("data.table","rjags", "zoo", "ggplot2", "gridExtra"))
 theme_set(theme_minimal(base_size = 12))
 
+
+#loss function
+sigmoid<-function(t,k,L){
+  v<-exp(k-k/(1-(t/L)^2))
+  v[t>L]<-0
+  return(v)	
+}
+
+gg_color_hue <- function(n) {
+  hues = seq(15, 375, length = n + 1)
+  hcl(h = hues, l = 65, c = 100)[1:n]
+}
+
+
+
 if(Sys.getenv("model_dir_1")=="") {
   base_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/"
   func_dir <- "~/repos/map-itn-cube/stock_and_flow/"
   setwd(func_dir)
   plot_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20191009_stationary_sigm_loss"
   
-  model_dirs <- c("20191009_stationary_sigm_loss", "20190930_gp_invSigma_noScale")
+  model_dirs <- c("20191009_stationary_sigm_loss", "20191003_no_gp")
   
 } else {
   plot_dir <- Sys.getenv("plot_dir") 
