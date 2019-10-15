@@ -96,8 +96,9 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
           for_plot_sig <- data.table(iso3=this_country,
                                      model=this_model_name,
                                      time=time_points,
-                                     sig=sigmoid(time_points, net_loss_params$k_llin, net_loss_params$L_llin))
+                                     sig=sigmoid(time_points, net_loss_params$k_llin, net_loss_params$L_llin[[2]])) # only keep the "since 2010" half-life
           for_plot_sig[, half_life:=time[which.min(abs(sig-0.5))]]
+          
         }
         
         return(for_plot_sig)
@@ -114,10 +115,16 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
         }else{
           L_dt <- data.table(iso3=this_country,
                              model=this_model_name,
+                             L_type=c("L1", "L2"),
                              L=all_model_estimates[[this_model_name]]$L_llin)
-          L_dt <- merge(L_dt, data.table(year=(1:length(all_model_estimates[[this_model_name]]$initial_stock))+1999,
+          L_cutoff_year <- all_input_data[[this_model_name]]$loss_function_pivot_quarter/4
+          L_labels <- c(rep("L1", L_cutoff_year), rep("L2", all_input_data[[this_model_name]]$year_count-L_cutoff_year))
+          
+          L_dt <- merge(L_dt, data.table(year=(1:all_input_data[[this_model_name]]$year_count) + 1999,
+                                         L_type=L_labels,
                                          model=this_model_name),
-                        by="model", all=T)
+                        by=c("model", "L_type"), all=T)
+          L_dt[, L_type:= NULL]
           
         }
         return(L_dt)
@@ -297,7 +304,7 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
 
   print("plotting net retention curves")
 
-  pdf(file.path(plot_dir, paste0("half_lives", out_label, ".pdf")), height=8, width=14)
+  pdf(file.path(plot_dir, paste0("half_lives_", out_label, ".pdf")), height=8, width=14)
 
   two_colors <- gg_color_hue(2)
 
@@ -341,7 +348,7 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
   
 }
 
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive model_dir_1=gs://map_users/amelia/itn/stock_and_flow/results/20191009_stationary_sigm_loss model_dir_2=gs://map_users/amelia/itn/stock_and_flow/results/20191003_no_gp CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive plot_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191009_stationary_sigm_loss --command 'cd ${CODE}; Rscript 04_compare_outputs.r'
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive model_dir_1=gs://map_users/amelia/itn/stock_and_flow/results/20191014_two_param_loss model_dir_2=gs://map_users/amelia/itn/stock_and_flow/results/20191003_no_gp CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive plot_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191014_two_param_loss --command 'cd ${CODE}; Rscript 04_compare_outputs.r'
 package_load <- function(package_list){
   # package installation/loading
   new_packages <- package_list[!(package_list %in% installed.packages()[,"Package"])]
