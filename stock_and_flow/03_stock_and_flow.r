@@ -252,6 +252,11 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   main_input_list$moving_avg_weights <- moving_avg_weights
   main_input_list$nrow_moving_avg <- nrow(moving_avg_weights)
   
+  # Testing loss with two loss parameters (one before, one after a given year)
+  pivot_year <- 2010
+  main_input_list$loss_function_pivot_quarter <- which(years==pivot_year)*4 # change to a cutoff quarter because loss is calculated quarterly
+  
+  
   ### load indicator priors #####----------------------------------------------------------------------------------------------------------------------------------
   extract_prior <- function(varname, data){
     subset <- data[variable==varname]
@@ -338,7 +343,10 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
           "
           #  stationary sigmoidal loss parameter
           k_llin <- 20 
-          L_llin ~ dunif(4,20.7)
+          
+          # allow rate of loss to vary before and after the cutoff loss_function_pivot_quarter
+          L_llin[1] ~ dunif(4,20.7)
+          L_llin[2] ~ dunif(4,20.7)
           
           # find proportions for quarterly llin distributions
           for(j in 1:year_count){
@@ -358,9 +366,13 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
           # here '(round(j/4+0.3))' is a way of finding year index and '(round(j/4+0.3)-1))*4)' is a way of finding modulo 4 quarter index
           for (j in 1:quarter_count){
             llins_distributed_quarterly[j] <- adjusted_llins_distributed[(round(j/4+0.3))] * quarter_fractions_llin[(round(j/4+0.3)), (((j/4)-(round(j/4+0.3)-1))*4) ] # todo: find easier math
-            for (i in 1:quarter_count){
+            for (i in 1:loss_function_pivot_quarter){
               # sigm:
-              quarterly_nets_remaining_matrix_llin[i,j] <- ifelse(j>i, 0, ifelse(time_since_distribution[i,j] >= L_llin, 0, llins_distributed_quarterly[j] * exp(k_llin - k_llin/(1-(time_since_distribution[i,j]/L_llin)^2))))
+              quarterly_nets_remaining_matrix_llin[i,j] <- ifelse(j>i, 0, ifelse(time_since_distribution[i,j] >= L_llin[1], 0, llins_distributed_quarterly[j] * exp(k_llin - k_llin/(1-(time_since_distribution[i,j]/L_llin[1])^2))))
+            }
+            for (i in (loss_function_pivot_quarter+1):quarter_count){
+              # sigm:
+              quarterly_nets_remaining_matrix_llin[i,j] <- ifelse(j>i, 0, ifelse(time_since_distribution[i,j] >= L_llin[2], 0, llins_distributed_quarterly[j] * exp(k_llin - k_llin/(1-(time_since_distribution[i,j]/L_llin[2])^2))))
 
             }
           }
@@ -373,7 +385,10 @@ citn_quarterly <-
           " 
           #  stationary sigmoidal loss parameter
           k_citn <- 20 
-          L_citn ~ dunif(4,20.7)
+          
+          # allow rate of loss to vary before and after the cutoff loss_function_pivot_quarter
+          L_citn[1] ~ dunif(4,20.7)
+          L_citn[2] ~ dunif(4,20.7)
             
           # find proportions for quarterly citn distributions
           for(j in 1:year_count){
@@ -392,9 +407,13 @@ citn_quarterly <-
             # distribute citns across quarters
             for (j in 1:quarter_count){
               citns_distributed_quarterly[j] <- nmcp_count_citn_est[(round(j/4+0.3))] * quarter_fractions_citn[(round(j/4+0.3)), (((j/4)-(round(j/4+0.3)-1))*4) ] # todo: find easier math
-              for (i in 1:quarter_count){
+              for (i in 1:loss_function_pivot_quarter){
               # sigm:
-              quarterly_nets_remaining_matrix_citn[i,j] <- ifelse(j>i, 0, ifelse(time_since_distribution[i,j] >= L_citn, 0, citns_distributed_quarterly[j] * exp(k_citn - k_citn/(1-(time_since_distribution[i,j]/L_citn)^2))))
+              quarterly_nets_remaining_matrix_citn[i,j] <- ifelse(j>i, 0, ifelse(time_since_distribution[i,j] >= L_citn[1], 0, citns_distributed_quarterly[j] * exp(k_citn - k_citn/(1-(time_since_distribution[i,j]/L_citn[1])^2))))
+              }
+              for (i in (loss_function_pivot_quarter+1):quarter_count){
+              # sigm:
+              quarterly_nets_remaining_matrix_citn[i,j] <- ifelse(j>i, 0, ifelse(time_since_distribution[i,j] >= L_citn[2], 0, citns_distributed_quarterly[j] * exp(k_citn - k_citn/(1-(time_since_distribution[i,j]/L_citn[2])^2))))
               }
             }
   
@@ -649,7 +668,7 @@ save(list = ls(all.names = TRUE), file = file.path(out_dir, paste0(this_country,
 
 }
 
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highcpu-8 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/02_stock_and_flow_prep CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191009_stationary_sigm_loss --command 'cd ${CODE}; Rscript 03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list.tsv
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highcpu-8 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/02_stock_and_flow_prep CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191014_two_param_loss --command 'cd ${CODE}; Rscript 03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list_TESTING.tsv
 
 package_load <- function(package_list){
   # package installation/loading

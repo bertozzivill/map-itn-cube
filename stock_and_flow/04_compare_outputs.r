@@ -246,7 +246,7 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
         geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.3) +
         geom_line(aes(y=nets_distributed_model), size=2, alpha=0.75) +
         geom_point(data=nmcp_data, aes(y=nets_distributed_data), alpha=0.75, size=3) + 
-        geom_line(data=nmcp_data[type=="llin"], aes(y=manufacturer_llins_data), linetype=2, size=1, color="black") +
+        # geom_line(data=nmcp_data[type=="llin"], aes(y=manufacturer_llins_data), linetype=2, size=1, color="black") + # this line plots annual manufacturer llins over the rest
         facet_grid( ~ model) + 
         labs(title= paste("Nets Distributed:", this_country),
              x="Time",
