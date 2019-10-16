@@ -252,7 +252,7 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
       distribution_plot <- ggplot(nets_distributed, aes(x=year, color=type, fill=type)) +
         geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.3) +
         geom_line(aes(y=nets_distributed_model), size=2, alpha=0.75) +
-        geom_point(data=nmcp_data, aes(y=nets_distributed_data), alpha=0.75, size=3) + 
+        geom_point(data=nmcp_data, aes(y=nets_distributed_data), alpha=0.75, size=4) + 
         # geom_line(data=nmcp_data[type=="llin"], aes(y=manufacturer_llins_data), linetype=2, size=1, color="black") + # this line plots annual manufacturer llins over the rest
         facet_grid( ~ model) + 
         labs(title= paste("Nets Distributed:", this_country),
@@ -266,7 +266,11 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
         this_model <- all_model_estimates[[this_model_name]]
         
         stock_manuf <- data.table(model=this_model_name,
-                                  stock=this_model$initial_stock)
+                                  stock=this_model$initial_stock,
+                                  raw_llins_distributed=this_model$raw_llins_distributed,
+                                  llin_distributed_noise = this_model$llin_distributed_noise,
+                                  nmcp_count_llin_est = this_model$nmcp_count_llin_est
+                                  )
         stock_manuf[, year:=(1:nrow(stock_manuf)) + 1999]
         
         return(stock_manuf)
@@ -277,8 +281,10 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
                      model_initial_stock, by=c("model", "year"), all=T)
       stock <- melt(stock, id.vars=c("model", "type", "year"), variable.name="metric")
       
-      stock_plot <- ggplot(stock, aes(x=year)) +
-        geom_line(aes(y=value, linetype=metric), size=1) +
+      stock_plot <- ggplot(stock, aes(x=year, color=metric)) +
+        geom_line(aes(y=value), size=1) +
+        geom_point(aes(y=value)) + 
+        geom_point(data=nmcp_data[type=="llin"], aes(y=nets_distributed_data), alpha=0.75, size=4, color="black") + 
         facet_grid(.~model) + 
         labs(title= paste("LLIN Stock and Distribution:", this_country),
              x="Time",
@@ -378,9 +384,9 @@ if(Sys.getenv("model_dir_1")=="") {
   base_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/"
   func_dir <- "~/repos/map-itn-cube/stock_and_flow/"
   setwd(func_dir)
-  plot_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20191009_stationary_sigm_loss"
+  plot_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20191014_two_param_loss"
   
-  model_dirs <- c("20191009_stationary_sigm_loss", "20191003_no_gp")
+  model_dirs <- c("20191014_two_param_loss", "20191003_no_gp")
   
 } else {
   plot_dir <- Sys.getenv("plot_dir") 
