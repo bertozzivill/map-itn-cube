@@ -14,6 +14,8 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
   make_country_plots <- T
   
   model_names <- gsub("[0-9]{8}_", "", model_dirs)
+  model_order <- sort(model_dirs) # for arranging plots left-to-right chronologically
+  model_order <- gsub("[0-9]{8}_", "", model_order)
   names(model_dirs) <- model_names
   out_label <- paste(model_names, collapse="_VS_")
   
@@ -91,12 +93,15 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
         }else{
           net_loss_params <- all_model_estimates[[this_model_name]][c("k_llin", "L_llin")]
           
+          # only keep the "since 2010" half-life for two-half-life runs
+          L_to_use <- ifelse(length(net_loss_params$L_llin)==1, net_loss_params$L_llin, net_loss_params$L_llin[[2]])
+          
           half_lifes<-c()
           time_points=seq(0,10,.01)
           for_plot_sig <- data.table(iso3=this_country,
                                      model=this_model_name,
                                      time=time_points,
-                                     sig=sigmoid(time_points, net_loss_params$k_llin, net_loss_params$L_llin[[2]])) # only keep the "since 2010" half-life
+                                     sig=sigmoid(time_points, net_loss_params$k_llin, L_to_use)) 
           for_plot_sig[, half_life:=time[which.min(abs(sig-0.5))]]
           
         }
@@ -113,18 +118,28 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
           L_dt[, year:= (1:nrow(L_dt)) + 1999]
           
         }else{
-          L_dt <- data.table(iso3=this_country,
-                             model=this_model_name,
-                             L_type=c("L1", "L2"),
-                             L=all_model_estimates[[this_model_name]]$L_llin)
-          L_cutoff_year <- all_input_data[[this_model_name]]$loss_function_pivot_quarter/4
-          L_labels <- c(rep("L1", L_cutoff_year), rep("L2", all_input_data[[this_model_name]]$year_count-L_cutoff_year))
           
-          L_dt <- merge(L_dt, data.table(year=(1:all_input_data[[this_model_name]]$year_count) + 1999,
-                                         L_type=L_labels,
-                                         model=this_model_name),
-                        by=c("model", "L_type"), all=T)
-          L_dt[, L_type:= NULL]
+          if (!"loss_function_pivot_quarter" %in% names(all_input_data[[this_model_name]])){  # stationary loss param
+            L_dt <- data.table(iso3=this_country,
+                               model=this_model_name,
+                               L=all_model_estimates[[this_model_name]]$L_llin)
+            L_dt <- merge(L_dt, data.table(year=(1:all_input_data[[this_model_name]]$year_count) + 1999,
+                                           model=this_model_name),
+                          by="model", all=T)
+          }else{ # two-level loss param
+            L_dt <- data.table(iso3=this_country,
+                               model=this_model_name,
+                               L_type=c("L1", "L2"),
+                               L=all_model_estimates[[this_model_name]]$L_llin)
+            L_cutoff_year <- all_input_data[[this_model_name]]$loss_function_pivot_quarter/4
+            L_labels <- c(rep("L1", L_cutoff_year), rep("L2", all_input_data[[this_model_name]]$year_count-L_cutoff_year))
+            
+            L_dt <- merge(L_dt, data.table(year=(1:all_input_data[[this_model_name]]$year_count) + 1999,
+                                           L_type=L_labels,
+                                           model=this_model_name),
+                          by=c("model", "L_type"), all=T)
+            L_dt[, L_type:= NULL]
+          }
           
         }
         return(L_dt)
@@ -199,6 +214,12 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
       nets_in_houses <- merge(nets_in_houses, unique(half_life_comparison[[this_country]][, list(model, half_life)]), by="model")
       nets_in_houses[, label:= paste0(model, "\n Half Life ", round(half_life, 2), " yrs")]
       
+      survey_data <- merge(survey_data, unique(nets_in_houses[, list(model, label)]), by="model")
+      
+      # l-to-r order
+      nets_in_houses[, model:=factor(model, levels=model_order)]
+      survey_data[, model:=factor(model, levels=model_order)]
+      
       houses_plot <- ggplot(nets_in_houses, aes(x=date, color=type, fill=type)) +
         geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.3) +
         geom_line(aes(y=nets_houses), size=1) +
@@ -233,8 +254,6 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
       
       nets_distributed <- merge( nets_distributed, uncertainty_for_dist, by=c("model", "type", "year"), all=T)
       
-      
-      
       nmcp_data <- rbindlist(lapply(names(model_dirs), function(this_model_name){
         this_data <- all_input_data[[this_model_name]]
         
@@ -248,11 +267,15 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
         new_nmcp_data[type=="llin", manufacturer_llins_data:=this_data$manufacturer_llins]
       }))
       nmcp_data[, year:=year + 2000-1]
+      
+      # l-to-r order
+      nets_distributed[, model:=factor(model, levels=model_order)]
+      nmcp_data[, model:=factor(model, levels=model_order)]
 
       distribution_plot <- ggplot(nets_distributed, aes(x=year, color=type, fill=type)) +
         geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.3) +
         geom_line(aes(y=nets_distributed_model), size=2, alpha=0.75) +
-        geom_point(data=nmcp_data, aes(y=nets_distributed_data), alpha=0.75, size=4) + 
+        geom_point(data=nmcp_data, aes(y=nets_distributed_data), alpha=0.75, size=3) + 
         # geom_line(data=nmcp_data[type=="llin"], aes(y=manufacturer_llins_data), linetype=2, size=1, color="black") + # this line plots annual manufacturer llins over the rest
         facet_grid( ~ model) + 
         labs(title= paste("Nets Distributed:", this_country),
@@ -266,7 +289,7 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
         this_model <- all_model_estimates[[this_model_name]]
         
         stock_manuf <- data.table(model=this_model_name,
-                                  stock=this_model$initial_stock,
+                                  initial_stock=this_model$initial_stock,
                                   raw_llins_distributed=this_model$raw_llins_distributed,
                                   llin_distributed_noise = this_model$llin_distributed_noise,
                                   nmcp_count_llin_est = this_model$nmcp_count_llin_est
@@ -276,16 +299,20 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
         return(stock_manuf)
       }))
       
+      model_initial_stock[, model:=factor(model, levels=model_order)]
       
-      stock <- merge(nets_distributed[type=="llin", list(model,type, year, distributed=nets_distributed_model)],
+      stock <- merge(nets_distributed[type=="llin", list(model,type, year, adjusted_llins_distributed=nets_distributed_model)],
                      model_initial_stock, by=c("model", "year"), all=T)
       stock <- melt(stock, id.vars=c("model", "type", "year"), variable.name="metric")
       
+      stock[, metric:= factor(metric, levels=c("initial_stock", "nmcp_count_llin_est", "raw_llins_distributed", "adjusted_llins_distributed"))]
+      
       stock_plot <- ggplot(stock, aes(x=year, color=metric)) +
+        geom_point(data=nmcp_data[type=="llin"], aes(y=nets_distributed_data),size=2, alpha=0.5, color="black") +
         geom_line(aes(y=value), size=1) +
         geom_point(aes(y=value)) + 
-        geom_point(data=nmcp_data[type=="llin"], aes(y=nets_distributed_data), alpha=0.75, size=4, color="black") + 
-        facet_grid(.~model) + 
+        facet_grid(.~model) +
+        theme(legend.position = "bottom") + 
         labs(title= paste("LLIN Stock and Distribution:", this_country),
              x="Time",
              y="Net count")
@@ -315,6 +342,7 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
   two_colors <- gg_color_hue(2)
 
   half_life_comparison <- rbindlist(half_life_comparison)
+  half_life_comparison[, model:=factor(model, levels=model_order)]
   half_life_means <- half_life_comparison[, list (sig=mean(sig), half_life=mean(half_life)), by=c("model", "time")]
   midpoints <- unique(half_life_means[, list(model, half_life)])
 
@@ -354,7 +382,7 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
   
 }
 
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive model_dir_1=gs://map_users/amelia/itn/stock_and_flow/results/20191014_two_param_loss model_dir_2=gs://map_users/amelia/itn/stock_and_flow/results/20191003_no_gp CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive plot_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191014_two_param_loss --command 'cd ${CODE}; Rscript 04_compare_outputs.r'
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive model_dir_1=gs://map_users/amelia/itn/stock_and_flow/results/20191014_two_param_loss model_dir_2=gs://map_users/amelia/itn/stock_and_flow/results/20191003_no_gp model_dir_3=gs://map_users/amelia/itn/stock_and_flow/results/20191016_stationary_llin_noise CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive plot_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191014_two_param_loss --command 'cd ${CODE}; Rscript 04_compare_outputs.r'
 package_load <- function(package_list){
   # package installation/loading
   new_packages <- package_list[!(package_list %in% installed.packages()[,"Package"])]
@@ -384,9 +412,9 @@ if(Sys.getenv("model_dir_1")=="") {
   base_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/"
   func_dir <- "~/repos/map-itn-cube/stock_and_flow/"
   setwd(func_dir)
-  plot_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20191014_two_param_loss"
+  plot_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20191009_stationary_sigm_loss"
   
-  model_dirs <- c("20191014_two_param_loss", "20191003_no_gp")
+  model_dirs <- c("20191009_stationary_sigm_loss", "20191003_no_gp")
   
 } else {
   plot_dir <- Sys.getenv("plot_dir") 

@@ -308,8 +308,9 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
 					
 					# add some uncertainty about additional nets distributed
 					# distribution_uncertainty_betapar[1] ~ dunif(1,24) # TEST: setting this to stationary 
+					# llin_distribution_noise[1] ~ dbeta(2,distribution_uncertainty_betapar) 
 					distribution_uncertainty_betapar ~ dunif(1,24)
-					llin_distribution_noise[1] ~ dbeta(2,distribution_uncertainty_betapar) 
+					llin_distribution_noise ~ dbeta(2,distribution_uncertainty_betapar) 
 					
 					# initial distribution count, with uncertainty
 					adjusted_llins_distributed[1] <- raw_llins_distributed[1] + ((initial_stock[1]-raw_llins_distributed[1])*llin_distribution_noise[1]) 
@@ -328,10 +329,10 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
 						
 						# add some uncertainty about additional nets distributed
 						# distribution_uncertainty_betapar[year_idx]~dunif(3,24)
-						llin_distribution_noise[year_idx]~dbeta(2,distribution_uncertainty_betapar)
+						# llin_distribution_noise[year_idx]~dbeta(2,distribution_uncertainty_betapar)
 						
 						# net distribution count, with uncertainty 
-						adjusted_llins_distributed[year_idx] <- raw_llins_distributed[year_idx] + ((initial_stock[year_idx]-raw_llins_distributed[year_idx]) * llin_distribution_noise[year_idx])
+						adjusted_llins_distributed[year_idx] <- raw_llins_distributed[year_idx] + ((initial_stock[year_idx]-raw_llins_distributed[year_idx]) * llin_distribution_noise)
 						
 						# final stock for the year (initial stock minus distribution for the year)
 						final_stock[year_idx] <- initial_stock[year_idx]-adjusted_llins_distributed[year_idx]	
@@ -683,7 +684,7 @@ package_load(c("data.table","raster","rjags", "zoo", "ggplot2"))
 if(Sys.getenv("main_dir")=="") {
   main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/02_stock_and_flow_prep"
   out_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results"
-  this_country <- "BFA"
+  this_country <- "CIV"
 } else {
   main_dir <- Sys.getenv("main_dir")
   out_dir <- Sys.getenv("out_dir") 
