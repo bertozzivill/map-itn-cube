@@ -8,7 +8,7 @@
 ## mean # of nets per household
 ##############################################################################################################
 
-# TODO: why are these not country-specific? and why estimate them in the main model instead of after?
+# TODO: THIS CODE ISN'T WORKING RIGHT NOW. COPY THE OLD VERSION OF THE INDICATORS AND COME BACK TO IT.
 
 library(survey)
 library(zoo)
@@ -19,18 +19,20 @@ library(parallel)
 
 rm(list=ls())
 
-set.seed(98122)
+set.seed(981)
 
 
 emplogit <- function (y, eps = 1e-3){
   log((eps + y)/(1 - y + eps))
 } 
 
-main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data"
+
+main_subdir <- "20191018"
+main_dir <- file.path("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep", main_subdir)
 
 ### Read in all data #####----------------------------------------------------------------------------------------------------------------------------------
 
-HH<-fread( file.path(main_dir, "01_data_prep/itn_hh_survey_data.csv"))
+HH<-fread( file.path(main_dir, "itn_hh_survey_data.csv"))
 
 HH <- HH[!SurveyId %in% c('TZ2012AIS')] # todo: why?
 HH[, hh_sample_wt:=hh_sample_wt/1e6] # adjust sample weight according to DHS specs
@@ -231,7 +233,7 @@ mean_net_outputs <- rbindlist(mean_net_outputs)
 mean_net_outputs[, model_type:="mean_net_count"]
 
 all_outputs <- rbind(no_net_outputs, mean_net_outputs, fill=T)
-write.csv(all_outputs, file=file.path(main_dir, "02_stock_and_flow_prep/indicator_priors.csv"), row.names = F)
+write.csv(all_outputs, file=file.path(main_dir, "indicator_priors.csv"), row.names = F)
 
 # todo: diagnostic plots
 # lp1<-var1[i1] + var1[b1]*data1$y1 

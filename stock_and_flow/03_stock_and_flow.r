@@ -33,7 +33,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   
   # From WHO: NMCP data and manufacturer data
   # todo: compare 2018 and 2019
-  nmcp_data<-fread(file.path(main_dir, "from_who/NMCP_2019.csv"),stringsAsFactors=FALSE)
+  nmcp_data<-fread(file.path(nmcp_manu_dir, "NMCP_2019.csv"),stringsAsFactors=FALSE)
   setnames(nmcp_data, "ITN", "CITN")
   
   # TESTING: Set all NMCP NA's to zero
@@ -41,7 +41,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   nmcp_data[is.na(CITN), CITN:=0]
   
   
-  manufacturer_llins <- fread(file.path(main_dir, "from_who/MANU_2019.csv"),stringsAsFactors=FALSE)
+  manufacturer_llins <- fread(file.path(nmcp_manu_dir, "MANU_2019.csv"),stringsAsFactors=FALSE)
   setnames(manufacturer_llins, names(manufacturer_llins), as.character(manufacturer_llins[1,]))
   manufacturer_llins <- manufacturer_llins[2:nrow(manufacturer_llins),]
   manufacturer_llins <- manufacturer_llins[Country!=""]
@@ -49,7 +49,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   manufacturer_llins <- melt(manufacturer_llins, id.vars=c("MAP_Country_Name", "ISO3"), value.name="llins", variable.name="year")
   
   # From GBD2019 folder: annual population and pop at risk
-  population_full <- fread(file.path(main_dir, "ihme_populations.csv"))
+  population_full <- fread(file.path(nmcp_manu_dir, "ihme_populations.csv"))
   population_full <- population_full[year>=2000 & admin_unit_level=="ADMIN0" & age_bin=="All_Ages", 
                         list(year, iso3, country_name, total_pop, pop_at_risk_pf, prop_pop_at_risk_pf=pop_at_risk_pf/total_pop)
                         ]
@@ -307,10 +307,10 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
 					initial_stock[1] <- manufacturer_llins_est[1] 
 					
 					# add some uncertainty about additional nets distributed
-					# distribution_uncertainty_betapar[1] ~ dunif(1,24) # TEST: setting this to stationary 
-					# llin_distribution_noise[1] ~ dbeta(2,distribution_uncertainty_betapar) 
-					distribution_uncertainty_betapar ~ dunif(1,24)
-					llin_distribution_noise ~ dbeta(2,distribution_uncertainty_betapar) 
+					distribution_uncertainty_betapar[1] ~ dunif(12,24) # TEST: letting this time-vary, but over a much smaller range
+					llin_distribution_noise[1] ~ dbeta(2, distribution_uncertainty_betapar[1]) 
+					# distribution_uncertainty_betapar ~ dunif(1,24)
+					# llin_distribution_noise ~ dbeta(2,distribution_uncertainty_betapar) 
 					
 					# initial distribution count, with uncertainty
 					adjusted_llins_distributed[1] <- raw_llins_distributed[1] + ((initial_stock[1]-raw_llins_distributed[1])*llin_distribution_noise[1]) 
@@ -328,11 +328,11 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
 						raw_llins_distributed[year_idx] <- min(nmcp_count_llin_est[year_idx] , initial_stock[year_idx])					
 						
 						# add some uncertainty about additional nets distributed
-						# distribution_uncertainty_betapar[year_idx]~dunif(3,24)
-						# llin_distribution_noise[year_idx]~dbeta(2,distribution_uncertainty_betapar)
+						distribution_uncertainty_betapar[year_idx]~dunif(12, 24)
+						llin_distribution_noise[year_idx]~dbeta(2, distribution_uncertainty_betapar[year_idx])
 						
 						# net distribution count, with uncertainty 
-						adjusted_llins_distributed[year_idx] <- raw_llins_distributed[year_idx] + ((initial_stock[year_idx]-raw_llins_distributed[year_idx]) * llin_distribution_noise)
+						adjusted_llins_distributed[year_idx] <- raw_llins_distributed[year_idx] + ((initial_stock[year_idx]-raw_llins_distributed[year_idx]) * llin_distribution_noise[year_idx])
 						
 						# final stock for the year (initial stock minus distribution for the year)
 						final_stock[year_idx] <- initial_stock[year_idx]-adjusted_llins_distributed[year_idx]	
@@ -670,7 +670,7 @@ save(list = ls(all.names = TRUE), file = file.path(out_dir, paste0(this_country,
 
 }
 
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highcpu-8 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/02_stock_and_flow_prep CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191016_stationary_llin_noise --command 'cd ${CODE}; Rscript 03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list_TESTING.tsv
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highcpu-8 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20191018 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191018_test_new_ssd --command 'cd ${CODE}; Rscript 03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list_TESTING.tsv
 
 package_load <- function(package_list){
   # package installation/loading
@@ -682,11 +682,13 @@ package_load <- function(package_list){
 package_load(c("data.table","raster","rjags", "zoo", "ggplot2"))
 
 if(Sys.getenv("main_dir")=="") {
-  main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/02_stock_and_flow_prep"
-  out_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results"
+  nmcp_manu_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who"
+  main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20191018"
+  out_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/testing"
   this_country <- "CIV"
 } else {
   main_dir <- Sys.getenv("main_dir")
+  nmcp_manu_dir <- Sys.getenv("nmcp_manu_dir") 
   out_dir <- Sys.getenv("out_dir") 
   this_country <- commandArgs(trailingOnly=TRUE)[1]
 }
