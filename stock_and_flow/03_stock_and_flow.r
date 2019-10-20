@@ -308,7 +308,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
 					initial_stock[1] <- manufacturer_llins_est[1] 
 					
 					# add some uncertainty about additional nets distributed
-					distribution_uncertainty_betapar[1] ~ dunif(12,24) # TEST: letting this time-vary, but over a much smaller range
+					distribution_uncertainty_betapar[1] ~ dunif(20,24) # TEST: letting this time-vary, but over a much smaller range
 					llin_distribution_noise[1] ~ dbeta(2, distribution_uncertainty_betapar[1]) 
 					# distribution_uncertainty_betapar ~ dunif(1,24)
 					# llin_distribution_noise ~ dbeta(2,distribution_uncertainty_betapar) 
@@ -329,7 +329,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
 						raw_llins_distributed[year_idx] <- min(nmcp_count_llin_est[year_idx] , initial_stock[year_idx])					
 						
 						# add some uncertainty about additional nets distributed
-						distribution_uncertainty_betapar[year_idx]~dunif(12, 24)
+						distribution_uncertainty_betapar[year_idx]~dunif(20, 24)
 						llin_distribution_noise[year_idx]~dbeta(2, distribution_uncertainty_betapar[year_idx])
 						
 						# net distribution count, with uncertainty 
@@ -671,7 +671,7 @@ save(list = ls(all.names = TRUE), file = file.path(out_dir, paste0(this_country,
 
 }
 
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highcpu-8 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20191018 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191019_increase_survey_bounding --command 'cd ${CODE}; Rscript 03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list_TESTING.tsv
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highcpu-8 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20191018 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191019_smaller_noise_bounds --command 'cd ${CODE}; Rscript 03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list_TESTING.tsv
 
 package_load <- function(package_list){
   # package installation/loading
