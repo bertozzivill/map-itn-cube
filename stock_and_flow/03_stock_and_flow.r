@@ -138,7 +138,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
     survey_model_estimates <- dcast.data.table(survey_model_estimates, variable + year ~ metric)
     
     # add parameter limits for big model
-    sd_limit_multiplier <- 6
+    sd_limit_multiplier <- 3
     survey_model_estimates <- survey_model_estimates[, list(variable, year, mean, sd, 
                                                             lower_limit= pmax(mean - sd*sd_limit_multiplier, 0),
                                                             upper_limit= pmax(mean + sd*sd_limit_multiplier, 0)
@@ -309,7 +309,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
 					
 					# add some uncertainty about additional nets distributed
 					distribution_uncertainty_betapar[1] ~ dunif(20,24) # TEST: letting this time-vary, but over a much smaller range
-					llin_distribution_noise[1] ~ dbeta(2, distribution_uncertainty_betapar[1]) 
+					llin_distribution_noise[1] ~ dbeta(2, distribution_uncertainty_betapar[1]) T(0, 0.25) # TEST: bounding noise parameter
 					# distribution_uncertainty_betapar ~ dunif(1,24)
 					# llin_distribution_noise ~ dbeta(2,distribution_uncertainty_betapar) 
 					
@@ -329,8 +329,8 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
 						raw_llins_distributed[year_idx] <- min(nmcp_count_llin_est[year_idx] , initial_stock[year_idx])					
 						
 						# add some uncertainty about additional nets distributed
-						distribution_uncertainty_betapar[year_idx]~dunif(20, 24)
-						llin_distribution_noise[year_idx]~dbeta(2, distribution_uncertainty_betapar[year_idx])
+						distribution_uncertainty_betapar[year_idx]~dunif(20, 24) 
+						llin_distribution_noise[year_idx]~dbeta(2, distribution_uncertainty_betapar[year_idx]) T(0, 0.25)
 						
 						# net distribution count, with uncertainty 
 						adjusted_llins_distributed[year_idx] <- raw_llins_distributed[year_idx] + ((initial_stock[year_idx]-raw_llins_distributed[year_idx]) * llin_distribution_noise[year_idx])
@@ -671,7 +671,7 @@ save(list = ls(all.names = TRUE), file = file.path(out_dir, paste0(this_country,
 
 }
 
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highcpu-8 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20191018 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191019_smaller_noise_bounds --command 'cd ${CODE}; Rscript 03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list_TESTING.tsv
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highcpu-8 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20191018 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191020_truncate_noise_dist --command 'cd ${CODE}; Rscript 03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list.tsv
 
 package_load <- function(package_list){
   # package installation/loading

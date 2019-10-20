@@ -231,6 +231,7 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
         geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.3) +
         geom_line(aes(y=nets_houses), size=1) +
         facet_grid(.~label) + 
+        theme(legend.position = "top") +
         labs(title= paste("Nets in Houses:", this_country),
              x="Time",
              y="Net count")
@@ -285,6 +286,7 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
         geom_point(data=nmcp_data, aes(y=nets_distributed_data), alpha=0.75, size=3) + 
         # geom_line(data=nmcp_data[type=="llin"], aes(y=manufacturer_llins_data), linetype=2, size=1, color="black") + # this line plots annual manufacturer llins over the rest
         facet_grid( ~ model) + 
+        theme(legend.position = "top") +
         labs(title= paste("Nets Distributed:", this_country),
              x="Time",
              y="Net count")
@@ -319,7 +321,7 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
         geom_line(aes(y=value), size=1) +
         geom_point(aes(y=value)) + 
         facet_grid(.~model) +
-        theme(legend.position = "bottom") + 
+        theme(legend.position = "top") + 
         labs(title= paste("LLIN Stock and Distribution:", this_country),
              x="Time",
              y="Net count")
@@ -389,7 +391,7 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
   
 }
 
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive model_dir_1=gs://map_users/amelia/itn/stock_and_flow/results/20191019_increase_survey_bounding model_dir_2=gs://map_users/amelia/itn/stock_and_flow/results/20191003_no_gp model_dir_3=gs://map_users/amelia/itn/stock_and_flow/results/20191014_two_param_loss CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive plot_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191019_increase_survey_bounding --command 'cd ${CODE}; Rscript 04_compare_outputs.r'
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive model_dir_1=gs://map_users/amelia/itn/stock_and_flow/results/20191020_truncate_noise_dist model_dir_2=gs://map_users/amelia/itn/stock_and_flow/results/20191003_no_gp model_dir_3=gs://map_users/amelia/itn/stock_and_flow/results/20191014_two_param_loss CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive plot_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191020_truncate_noise_dist --command 'cd ${CODE}; Rscript 04_compare_outputs.r'
 package_load <- function(package_list){
   # package installation/loading
   new_packages <- package_list[!(package_list %in% installed.packages()[,"Package"])]
