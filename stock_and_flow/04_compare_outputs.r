@@ -1,5 +1,5 @@
 ###############################################################################################################
-## compare_new_outputs.r
+## 04_compare_outputs
 ## Amelia Bertozzi-Villa
 ## Samir Bhatt
 ## September 2019
@@ -391,7 +391,7 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
   
 }
 
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive model_dir_1=gs://map_users/amelia/itn/stock_and_flow/results/20191020_truncate_noise_dist model_dir_2=gs://map_users/amelia/itn/stock_and_flow/results/20191003_no_gp model_dir_3=gs://map_users/amelia/itn/stock_and_flow/results/20191014_two_param_loss CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive plot_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191020_truncate_noise_dist --command 'cd ${CODE}; Rscript 04_compare_outputs.r'
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive model_dir_1=gs://map_users/amelia/itn/stock_and_flow/results/20191020_truncate_noise_dist model_dir_2=gs://map_users/amelia/itn/stock_and_flow/results/20191003_no_gp model_dir_3=gs://map_users/amelia/itn/stock_and_flow/results/20191009_stationary_sigm_loss CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive plot_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191020_truncate_noise_dist --command 'cd ${CODE}; Rscript 04_compare_outputs.r'
 package_load <- function(package_list){
   # package installation/loading
   new_packages <- package_list[!(package_list %in% installed.packages()[,"Package"])]
