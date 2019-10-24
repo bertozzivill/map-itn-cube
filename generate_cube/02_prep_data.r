@@ -21,21 +21,26 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
   setnames(iso_gaul_map, c("GAUL_CODE", "COUNTRY_ID", "NAME"), c("gaul", "iso3", "country"))
   
   # load household data and survey-to-country key, keep only those in country list
-  HH<-fread(file.path(input_dir, "database/ALL_HH_Data_26072019.csv")) # todo: come back and delete cols we don't need. also rename this
+  # HH<-fread(file.path(input_dir, "database/ALL_HH_Data_26072019.csv")) # todo: come back and delete cols we don't need. also rename this
+  
+  HH <- fread(file.path(input_dir, "stock_and_flow/itn_hh_survey_data.csv"))
   
   # keep only the years and  columns we use
-  HH<-HH[ISO3 %in% unique(stock_and_flow_outputs$iso3), list(Survey.hh, 
-                                                             Country,
-                                                             iso3=ISO3,
-                                                             Cluster.hh,
+  # temp: keep old unwieldy column names as a direct comparison to the pre-s&f refactored results
+  
+  HH<-HH[iso3 %in% unique(stock_and_flow_outputs$iso3), list(Survey.hh=SurveyId, 
+                                                             Country=CountryName,
+                                                             iso3=iso3,
+                                                             Cluster.hh=clusterid,
+                                                             #hhid,
                                                              latitude,
                                                              longitude,
                                                              year,
                                                              month,
-                                                             sample.w,
-                                                             n.individuals.that.slept.in.surveyed.hhs,
-                                                             n.individuals.that.slept.under.ITN,
-                                                             n.ITN.per.hh)]
+                                                             sample.w=hh_sample_wt,
+                                                             n.individuals.that.slept.in.surveyed.hhs=hh_size,
+                                                             n.individuals.that.slept.under.ITN=n_slept_under_itn,
+                                                             n.ITN.per.hh=n_itn)]
   
   # TODO: data checks
   
@@ -215,8 +220,8 @@ if (Sys.getenv("run_individually")!="" | exists("run_locally")){
   
   if(Sys.getenv("input_dir")=="") {
     input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
-    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190806_local_newsurveys/"
-    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190806_local_newsurveys/"
+    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20191023_local_refactoredstockflow/"
+    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20191023_local_refactoredstockflow/"
     func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
   } else {
     input_dir <- Sys.getenv("input_dir")

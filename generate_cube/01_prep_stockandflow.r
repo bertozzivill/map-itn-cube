@@ -23,31 +23,39 @@ prep_stockandflow <- function(input_dir, func_dir, main_outdir){
   # this image contains quarterly national values for p0=p(hh has 0 nets) and p1=avg # of nets.
   # "out" is a list of length 40 (# of countries), where each list is itself a list of length 2 (p0 and p1).
   # Each p0 and p1 is a data frame with nrow=# of quarters and ncol=1:10 (for houshold sizes 1-10+)
-  load(file.path(input_dir, "net_probs_and_means.rData")) # contains objects names "out" (list of stock and flow time series) and "Cout" (country names)
+  load(file.path(input_dir, "net_probs_and_means.rData")) # contains an object namee "indicator_list" (list of stock and flow time series, named by iso3)
   
   # rename for clarity
-  net_probs_and_means <- out 
-  stock_and_flow_isos<-Cout 
-  rm(out, Cout)
-  names(net_probs_and_means) <- stock_and_flow_isos
+  net_probs_and_means <- indicator_list 
+  rm(indicator_list)
   
   # format and interpolate stock and flow data 
   print("formatting stock and flow outputs")
-  stock_and_flow <- lapply(stock_and_flow_isos, function(this_iso){
+  stock_and_flow <- lapply(names(net_probs_and_means), function(this_iso){
     country_list <- net_probs_and_means[[this_iso]]
     
     # interpolate  from quarterly to monthly values
     quarterly_times <- as.numeric(rownames(country_list))
     start_year <- ceiling(min(quarterly_times))
-    end_year <- floor(max(quarterly_times))
+    end_year <- ceiling(max(quarterly_times))
     
     # get decimal dates for the middle of each month: these are the dates for which we want interpolated values.
     full_times <- seq(as.Date(paste0(start_year, "/1/15")), by = "month", length.out = (end_year-start_year)*12)
     monthly_times <- decimal_date(full_times)
     
+    # Replicate the final quarter of the stock and flow output to have an "anchor" for interpolation
+    extend_years <- lapply(1:2, function(idx){
+      subset <- rbind(country_list[,,idx], country_list[,,idx][nrow(country_list[,,idx]),])
+      return(subset)
+    })
+    updated_country_list <- array(c(extend_years[[1]], extend_years[[2]]), dim=c(nrow(extend_years[[1]]), ncol(extend_years[[1]]), 2))
+    new_quarterly_times <- seq(start_year, end_year, by=0.25)
+    rownames(updated_country_list) <- new_quarterly_times
+    colnames(updated_country_list) <- 1:ncol(updated_country_list)
+    
     # for p0 and p1, interpolate to monthly probability of no nets and monthly mean nets per household, respectively
     country_subset <- lapply(1:2, function(layer){
-      data.table(sapply(colnames(country_list), function(col){approx(quarterly_times, country_list[,col,layer], monthly_times)$y})) 
+      data.table(sapply(colnames(updated_country_list), function(col){approx(new_quarterly_times, updated_country_list[,col,layer], monthly_times)$y})) 
     })
     country_subset <- rbindlist(country_subset)
     
@@ -74,30 +82,10 @@ prep_stockandflow <- function(input_dir, func_dir, main_outdir){
   ##  Calculate national access by country and household size from the surveys used in the stock and flow model ## ------------------------------------------------------------
   
   print("loading and formatting household size distributions")
-  
-  # load table to match gaul codes to country names
-  iso_gaul_map<-fread(file.path(input_dir, "../general/iso_gaul_map.csv")) 
-  setnames(iso_gaul_map, c("GAUL_CODE", "COUNTRY_ID", "NAME"), c("gaul", "iso3", "country"))
-  
+
   # load household size distributions for each survey
-  hh_sizes<-fread(file.path(input_dir, "HHsize.csv"))
-  survey_key=fread(file.path(input_dir, "hh_surveys_key.csv"))
-  
-  # format hh_sizes
-  hh_sizes[, V1:=NULL]
-  hh_sizes <- melt.data.table(hh_sizes, id.vars="HHSurvey", variable.name="hh_size", value.name="prop")
-  hh_sizes[, hh_size:=as.integer(hh_size)]
-  
-  # format survey key; add two surveys present in data but not present in key
-  survey_key[, Status:=NULL]
-  setnames(survey_key, c("Svy Name", "Name"), c("HHSurvey", "country"))
-  survey_key <- rbind(survey_key, data.table(HHSurvey=c("Kenya 2007", "Rwanda 2013"),
-                                             country=c("Kenya", "Rwanda")))
-  
-  # merge with country name map and survey distribution
-  survey_key <- merge(survey_key, iso_gaul_map, by="country", all.x=T)
-  hh_sizes <- merge(hh_sizes, survey_key, by="HHSurvey", all.x=T)
-  
+  hh_sizes<-fread(file.path(input_dir, "hhsize_from_surveys.csv"))
+
   # function to aggregate survey data to find the total distribution of household sizes from 1:10+ across the provided dataset
   find_hh_distribution <- function(props, cap_hh_size=10){
     # where 'props' is a data.table with columns ('hh_size' and 'prop')
@@ -184,7 +172,7 @@ if (Sys.getenv("run_individually")!="" | exists("run_locally")){
   
   if(Sys.getenv("input_dir")=="") {
     input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
-    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190807_local_newstockandflow/"
+    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20191023_local_refactoredstockflow/"
     func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
   } else {
     input_dir <- Sys.getenv("input_dir")

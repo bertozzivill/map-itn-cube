@@ -225,9 +225,6 @@ if(max(all_data$diff, na.rm=T)>1e-15){
 
 all_data[, c("summed_n_itn", "citn_ratio", "diff") :=NULL]
 
-## Fix hh size/slept under itn discrepancy ----------------------------------------------------------------------------------------------------------------------
-
-
 
 ## Test use-nets percapita regression ----------------------------------------------------------------------------------------------------------------------
 
@@ -308,7 +305,7 @@ for_cube <- all_data[, list(SurveyId,
                             year,
                             month,
                             hh_sample_wt,
-                            n_defacto_pop,
+                            hh_size=n_defacto_pop,
                             n_slept_under_itn,
                             n_itn)]
 
@@ -320,11 +317,12 @@ write.csv(for_cube, file.path(out_dir, "itn_hh_survey_data.csv"), row.names=F) #
 
 for_cube[, sample_prop:= hh_sample_wt/sum(hh_sample_wt), by="SurveyId"]
 
-hh_size_props <- for_cube[n_defacto_pop>0, list(hh_prop=sum(sample_prop)), by=list(SurveyId, n_defacto_pop)]
+hh_size_props <- for_cube[hh_size>0, list(prop=sum(sample_prop)), by=list(iso3, SurveyId, hh_size)]
 full_hh_dist <- data.table(expand.grid(unique(hh_size_props$SurveyId), 1:100))
-names(full_hh_dist) <- c("SurveyId", "n_defacto_pop")
-hh_size_props <- merge(hh_size_props, full_hh_dist, by=c("SurveyId", "n_defacto_pop"), all=T)
-hh_size_props[is.na(hh_prop), hh_prop:=0]
+names(full_hh_dist) <- c("SurveyId", "hh_size")
+full_hh_dist <- merge(full_hh_dist, unique(hh_size_props[, list(SurveyId, iso3)]), by="SurveyId", all=T)
+hh_size_props <- merge(hh_size_props, full_hh_dist, by=c("iso3", "SurveyId", "hh_size"), all=T)
+hh_size_props[is.na(prop), prop:=0]
 
 write.csv(hh_size_props, file.path(out_dir, "hhsize_from_surveys.csv"), row.names=F)
 
