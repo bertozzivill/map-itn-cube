@@ -62,37 +62,37 @@ predict_rasters <- function(input_dir, func_dir, cov_dir, main_indir, main_outdi
   temporal_mesh <- copy(inla_outputs[["access_dev"]][["temporal_mesh"]])
   
   ## Find early years to 'squash' TODO: don't  ## ---------------------------------------------------------
-  print("Finding years to squash")
-  stock_and_flow_use <- fread(file.path(input_dir, "stock_and_flow/quarterly_use.csv"))
-  stock_and_flow_use <- stock_and_flow_use[2:nrow(stock_and_flow_use)]
-  
-  # find time span of dataset
-  time_points <- length(names(stock_and_flow_use))-2 # (subtract 1 for the "country" label, and 1 for the year 2000, our starting point)
-  end_year <- 2000 + time_points*0.25
-  names(stock_and_flow_use) <- c("country", seq(2000, end_year, 0.25)) 
-
-  stock_and_flow_use <- melt(stock_and_flow_use, id.vars = "country", variable.name="time", value.name="use")
-  stock_and_flow_use[, year:=floor(as.numeric(as.character(time)))]
-  
-  annual_use <- stock_and_flow_use[year<=max(prediction_years), list(use=mean(use)), by=list(country, year)]
-  annual_use[, to_squash:=as.integer(use<0.02)]
-  squash_map <- dcast.data.table(annual_use, country~year, value.var="to_squash")
-  
-  restrict_indicator <- function(prior_val, current_val){
-    return(ifelse(prior_val==0, 0, current_val))
-  }
-  
-  for (year in prediction_years[2:length(prediction_years)]){
-    squash_map[[as.character(year)]] <- restrict_indicator(squash_map[[as.character(year-1)]], squash_map[[as.character(year)]])
-  }
-  
-  squash_map <- melt(squash_map, id.vars = "country", value.name="to_squash", variable.name="year")
-  squash_map[, year:=as.integer(as.character(year))]
-  squash_map <- merge(squash_map, iso_gaul_map, by="country", all.x=T)
-  
-  # find the country-years for which to 'squash' use to zero
-  squash_map[, country_count:= sum(to_squash), by=list(year)] 
-  years_to_squash <- unique(squash_map[country_count>0]$year)
+  # print("Finding years to squash")
+  # stock_and_flow_use <- fread(file.path(input_dir, "stock_and_flow/quarterly_use.csv"))
+  # stock_and_flow_use <- stock_and_flow_use[2:nrow(stock_and_flow_use)]
+  # 
+  # # find time span of dataset
+  # time_points <- length(names(stock_and_flow_use))-2 # (subtract 1 for the "country" label, and 1 for the year 2000, our starting point)
+  # end_year <- 2000 + time_points*0.25
+  # names(stock_and_flow_use) <- c("country", seq(2000, end_year, 0.25)) 
+  # 
+  # stock_and_flow_use <- melt(stock_and_flow_use, id.vars = "country", variable.name="time", value.name="use")
+  # stock_and_flow_use[, year:=floor(as.numeric(as.character(time)))]
+  # 
+  # annual_use <- stock_and_flow_use[year<=max(prediction_years), list(use=mean(use)), by=list(country, year)]
+  # annual_use[, to_squash:=as.integer(use<0.02)]
+  # squash_map <- dcast.data.table(annual_use, country~year, value.var="to_squash")
+  # 
+  # restrict_indicator <- function(prior_val, current_val){
+  #   return(ifelse(prior_val==0, 0, current_val))
+  # }
+  # 
+  # for (year in prediction_years[2:length(prediction_years)]){
+  #   squash_map[[as.character(year)]] <- restrict_indicator(squash_map[[as.character(year-1)]], squash_map[[as.character(year)]])
+  # }
+  # 
+  # squash_map <- melt(squash_map, id.vars = "country", value.name="to_squash", variable.name="year")
+  # squash_map[, year:=as.integer(as.character(year))]
+  # squash_map <- merge(squash_map, iso_gaul_map, by="country", all.x=T)
+  # 
+  # # find the country-years for which to 'squash' use to zero
+  # squash_map[, country_count:= sum(to_squash), by=list(year)] 
+  # years_to_squash <- unique(squash_map[country_count>0]$year)
   
   
   ## Predict and make rasters by year  ## ---------------------------------------------------------
@@ -207,14 +207,14 @@ predict_rasters <- function(input_dir, func_dir, cov_dir, main_indir, main_outdi
     writeRaster(use_map, file.path(out_dir, paste0("ITN_",this_year,".USE.tif")),NAflag=-9999,overwrite=TRUE)
     writeRaster(use_gap_map, file.path(out_dir, paste0("ITN_",this_year,".GAP.tif")),NAflag=-9999,overwrite=TRUE)
     
-    if (this_year %in% years_to_squash){
-      print(paste(this_year, "squashing some countries to zero"))
-      new_use <- copy(use_map)
-      gauls_to_squash <- squash_map[year==this_year & to_squash==1]$gaul
-      new_use[national_raster %in% gauls_to_squash] <- 0
-      
-      writeRaster(new_use, file.path(out_dir, paste0("ITN_",this_year,".RAKED_USE.tif")),NAflag=-9999,overwrite=TRUE)
-    }
+    # if (this_year %in% years_to_squash){
+    #   print(paste(this_year, "squashing some countries to zero"))
+    #   new_use <- copy(use_map)
+    #   gauls_to_squash <- squash_map[year==this_year & to_squash==1]$gaul
+    #   new_use[national_raster %in% gauls_to_squash] <- 0
+    #   
+    #   writeRaster(new_use, file.path(out_dir, paste0("ITN_",this_year,".RAKED_USE.tif")),NAflag=-9999,overwrite=TRUE)
+    # }
     
     return(paste(this_year, "Success"))
     

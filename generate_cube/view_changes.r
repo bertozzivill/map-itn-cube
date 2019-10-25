@@ -8,7 +8,7 @@
 ## 
 ##############################################################################################################
 
-# dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive old_dir=gs://map_users/amelia/itn/itn_cube/results/20190623_monthly_inla new_dir=gs://map_users/amelia/itn/itn_cube/results/20190806_new_inputs/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input CODE=gs://map_users/amelia/itn/code/generate_cube/view_changes.r --output out_path=gs://map_users/amelia/itn/itn_cube/results/20190806_new_inputs/compare_changes.pdf --command 'Rscript ${CODE}'
+# dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive old_dir=gs://map_users/amelia/itn/itn_cube/results/20190808_new_landcover new_dir=gs://map_users/amelia/itn/itn_cube/results/20191024_refactored_stockflow/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input CODE=gs://map_users/amelia/itn/code/generate_cube/view_changes.r --output out_path=gs://map_users/amelia/itn/itn_cube/results/20191024_refactored_stockflow/compare_changes.pdf --command 'Rscript ${CODE}'
 
 rm(list=ls())
 
@@ -22,8 +22,8 @@ package_load <- function(package_list){
 package_load(c( "raster", "data.table", "rasterVis", "stats", "RColorBrewer", "gridExtra", "ggplot2"))
 
 if(Sys.getenv("func_dir")=="") {
-  new_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190808_new_landcover/"
-  old_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190623_monthly_inla/"
+  new_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20191024_refactored_stockflow/"
+  old_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190808_new_landcover/"
   out_path <- file.path(new_dir, "05_predictions/view_changes.pdf")
   func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
 } else {
@@ -159,9 +159,9 @@ new_covs <- fread(file.path(new_dir, "03_data_covariates.csv"))
 old_covs <- fread(file.path(old_dir, "03_data_covariates.csv"))
 
 # adjust names
-name_key <- fread(file.path(func_dir, "oldnew_covariate_names.csv"))
-setnames(old_covs, name_key$old_name, name_key$common_name)
-setnames(new_covs, name_key$new_name, name_key$common_name)
+# name_key <- fread(file.path(func_dir, "oldnew_covariate_names.csv"))
+# setnames(old_covs, name_key$old_name, name_key$common_name)
+# setnames(new_covs, name_key$new_name, name_key$common_name)
 
 all_covs <- append_dts(old_covs, new_covs)
 cov_names <- names(new_covs)
@@ -194,7 +194,7 @@ for (this_name in names(new_models)){
 
   new_fixed <- new_model$summary.fixed
   new_fixed$cov<-rownames(new_fixed)
-  new_fixed$cov <- plyr::mapvalues(new_fixed$cov, name_key$new_name, name_key$common_name)
+  # new_fixed$cov <- plyr::mapvalues(new_fixed$cov, name_key$new_name, name_key$common_name)
   new_fixed <- data.table(new_fixed)
   new_fixed <- new_fixed[order(cov)]
   new_fixed[, type:="New"]
@@ -207,7 +207,7 @@ for (this_name in names(new_models)){
 
   old_fixed <- old_model$summary.fixed
   old_fixed$cov<-rownames(old_fixed)
-  old_fixed$cov <- plyr::mapvalues(old_fixed$cov, name_key$old_name, name_key$common_name)
+  # old_fixed$cov <- plyr::mapvalues(old_fixed$cov, name_key$old_name, name_key$common_name)
   old_fixed <- data.table(old_fixed)
   old_fixed <- old_fixed[order(cov)]
   old_fixed[, type:="Old"]
@@ -267,6 +267,9 @@ for (var_name in c("\\.MEAN", "\\.DEV", "\\.ACC", "\\.GAP", "\\.USE")){
   stack_diff <- new_stack - old_stack
   names(stack_diff) <- paste0(names(new_stack), ".DIFF")
   
+  # same as wpal("seaside", noblack = T) but mapsuite doesn't work on cloud
+  seaside <- c("#F2E5C5", "#C7D990", "#8BD274", "#50C576", "#2AA989", "#1F819A", "#275293", "#31296F", "#270D37")
+  
   plot_idx <- 1
   for (this_stack in c(new_stack, old_stack, stack_diff)){
     
@@ -276,21 +279,9 @@ for (var_name in c("\\.MEAN", "\\.DEV", "\\.ACC", "\\.GAP", "\\.USE")){
                              xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F)
     }else{
       stackplot <- levelplot(this_stack,
-                             par.settings=rasterTheme(region=brewer.pal(9, "YlGn")),
+                             par.settings=rasterTheme(seaside),
                              xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F)
     }
-    
-    colorcount <- 50
-    breaks <- c(0, seq(0.01, 1, length.out=colorcount))
-    pal <- c("#e9e9e9", rev(wpal("sky", n=60)[1:(colorcount-1)]))
-    
-    pdf(file.path(new_dir, "05_predictions/use_time_series.pdf"), width=11, height=7)
-    
-    print(levelplot(this_stack,
-              par.settings=rasterTheme(region=pal), at=breaks,
-              xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F))
-    graphics.off()
-    
     
     print(stackplot)
     plot_idx <- plot_idx+1
