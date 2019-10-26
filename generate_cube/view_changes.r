@@ -22,8 +22,8 @@ package_load <- function(package_list){
 package_load(c( "raster", "data.table", "rasterVis", "stats", "RColorBrewer", "gridExtra", "ggplot2"))
 
 if(Sys.getenv("func_dir")=="") {
-  new_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20191024_refactored_stockflow/"
-  old_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190808_new_landcover/"
+  new_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190808_new_landcover/"
+  old_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190807_new_stockflow/"
   out_path <- file.path(new_dir, "05_predictions/view_changes.pdf")
   func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
 } else {
@@ -159,6 +159,10 @@ new_covs <- fread(file.path(new_dir, "03_data_covariates.csv"))
 old_covs <- fread(file.path(old_dir, "03_data_covariates.csv"))
 
 # adjust names
+if ("Landcover_0_Water" %in% names(old_covs)){
+  setnames(old_covs, "Landcover_0_Water", "Landcover_17_Water")
+}
+
 # name_key <- fread(file.path(func_dir, "oldnew_covariate_names.csv"))
 # setnames(old_covs, name_key$old_name, name_key$common_name)
 # setnames(new_covs, name_key$new_name, name_key$common_name)
@@ -209,6 +213,9 @@ for (this_name in names(new_models)){
   old_fixed$cov<-rownames(old_fixed)
   # old_fixed$cov <- plyr::mapvalues(old_fixed$cov, name_key$old_name, name_key$common_name)
   old_fixed <- data.table(old_fixed)
+  if ("Landcover_0_Water" %in% old_fixed$cov){
+    old_fixed[cov=="Landcover_0_Water", cov:="Landcover_17_Water"]
+  }
   old_fixed <- old_fixed[order(cov)]
   old_fixed[, type:="Old"]
   old_fixed[, kld:=NULL]
