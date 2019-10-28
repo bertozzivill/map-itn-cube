@@ -45,7 +45,7 @@ mics3_data[mics3_data==0] <- 1e-6 # jags dislikes zeros
 mics3_list <- as.list(mics3_data)
 mics3_list$survey_count <- nrow(mics3_data)
 
-mic3_model_string = "
+mics3_model_string = "
 	model {
 		for(i in 1:survey_count){
 
@@ -65,7 +65,7 @@ mic3_model_string = "
 	}
 "
 
-mics3_model <- jags.model(textConnection(mic3_model_string),
+mics3_model <- jags.model(textConnection(mics3_model_string),
                           data = mics3_list,
                           n.chains = 1,
                           n.adapt = n.adapt)
@@ -110,9 +110,29 @@ no_report_estimates <- no_report_surveydata[, list(surveyid=paste(names, round(t
                                                    n_llin_se=average.number.of.LLINs.per.household*0.01)]
 no_report_estimates[no_report_estimates==0]<-1e-12
 
+### Append details to summary table #####----------------------------------------------------------------------------------------------------------------------------------
+
+all_to_append <- rbind(mics3_estimates, no_report_estimates)
+
+summary_table <- fread(file.path(main_dir, "summary_table_raw.csv"))
+
+summary_to_append <- all_to_append[, list(survey_id=surveyid,
+                                          country,
+                                          iso3,
+                                          svy_years="TODO",
+                                          source=ifelse(surveyid %in% mics3_estimates$surveyid, "MICS3", "TODO: OTHER"),
+                                          cluster_count=0,
+                                          individuals=NA,
+                                          included_in_cube="No"
+                                          )]
+
+summary_table <- rbind(summary_table, summary_to_append)
+write.csv(summary_table, file.path(main_dir, "summary_table_intermediate.csv"), row.names=F)
+
+
 ### Combine and process all surveys #####----------------------------------------------------------------------------------------------------------------------------------
 
-survey_data <- rbind(survey_data,mics3_estimates,no_report_estimates)
+survey_data <- rbind(survey_data,all_to_append)
 survey_data <- survey_data[order(survey_data[,'date']),]
 
 write.csv(survey_data, file.path(main_dir, "prepped_survey_data.csv"), row.names=F)

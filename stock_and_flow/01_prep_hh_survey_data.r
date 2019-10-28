@@ -21,6 +21,7 @@ out_subdir <- "20191018"
 main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/household_surveys"
 out_dir <- file.path("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep", out_subdir)
 dhs_dir <- "/Volumes/GoogleDrive/Shared drives/Data Gathering/Standard_MAP_DHS_Outputs/DHS_ITN_Data/Output/2019-07-24/standard_tables"
+code_dir <-"/Users/bertozzivill/repos/map-itn-cube/stock_and_flow"
 
 # big table of national name/region/code maps
 country_codes <-fread(file.path(main_dir, 'National_Config_Data.csv'))
@@ -178,11 +179,40 @@ all_old_data <- all_old_data[, list(SurveyId,
 all_data <- rbind(all_old_data, dhs_data)
 
 # remove columns about pregnant women and children under 5, we don't use them
+# also drop theoretical capacity and n_itn_used
 to_drop <- names(all_data)[names(all_data) %like% "u5" | names(all_data) %like% "preg"]
+to_drop <- c(to_drop, "itn_theoretical_capacity", "n_itn_used")
 all_data[, (to_drop):=NULL]
 
 # add cleaned mics5 data
 all_data <- rbind(all_data, mics5_data, fill=T)
+
+## Remove all countries not among the 40 for which we run stock and flow  ----------------------------------------------------------------------------------------------------------------------
+
+country_list <- fread(file.path(code_dir, "for_gcloud/batch_country_list.tsv"))
+names(country_list) <- "iso3"
+all_data <- all_data[iso3 %in% country_list$iso3]
+
+## Remove strange null values. TODO: check this upon updating for a new survey list  ----------------------------------------------------------------------------------------------------------------------
+
+# 156 values in Angola 2010-11 have NA year/month values. Set these to the midpoint of the survey. 
+# TODO: should there be 2010 values in here at all?
+all_data[SurveyId=="AO2011MIS" & is.na(year), year:=2011]
+all_data[SurveyId=="AO2011MIS" & is.na(month), month:=3]
+
+# 456 values from the 2012 TZA AIS have null hh sizes, which seem to denote zeros. Convert them to zero
+# (their sample weight is zero anyway)
+all_data[SurveyId== "TZ2012AIS" & is.na(hh_size), hh_size:=0]
+all_data[SurveyId== "TZ2012AIS" & is.na(n_defacto_pop), n_defacto_pop:=0]
+
+# do the same for the one SDN 2009 data point that has a null hhsize 
+all_data[SurveyId== "Sudan 2009" & is.na(hh_size), hh_size:=0]
+
+# There are 32 values, across multiple surveys, that lack information about itn use, llin count, itn count, and who slept under itns.
+# Drop these rows.
+all_data <- all_data[!is.na(n_itn)]
+
+# for the remaining columns, nulls are acceptable.
 
 ## Fix ITN count discrepancy  ----------------------------------------------------------------------------------------------------------------------
 
@@ -309,6 +339,7 @@ for_cube <- all_data[, list(SurveyId,
                             n_slept_under_itn,
                             n_itn)]
 
+# drops latitude/longitude nulls
 for_cube <- for_cube[complete.cases(for_cube)]
 write.csv(for_cube, file.path(out_dir, "itn_hh_survey_data.csv"), row.names=F) # TODO: compare this to the net data currently being used
 
@@ -326,12 +357,48 @@ hh_size_props[is.na(prop), prop:=0]
 
 write.csv(hh_size_props, file.path(out_dir, "hhsize_from_surveys.csv"), row.names=F)
 
+## Collect summary details on survey for supplement table  ----------------------------------------------------------------------------------------------------------------------
+
+summary_table <- lapply(unique(all_data$SurveyId), function(survey_name){
+                        print(survey_name)
+                        this_survey <- all_data[SurveyId==survey_name]
+                        
+                        survey_years <- unique(this_survey$year)
+                        if (length(survey_years)>2){
+                          print("UNEXPECTED SURVEY YEAR COUNT")
+                        }
+                        survey_label <- ifelse(length(survey_years)==1, as.character(survey_years), paste0(min(survey_years), "-", max(survey_years)))
+                        
+                        survey_source <- ifelse(survey_name %like% "DHS", "DHS",
+                                                ifelse(survey_name %like% "MIS", "MIS",
+                                                       ifelse(survey_name %like% "MICS", "MICS",
+                                                              ifelse(survey_name %like% "AIS", "AIS",
+                                                                     "TODO: OTHER"))))
+                        cluster_count <- length(unique(this_survey[!is.na(latitude) & !is.na(longitude)]$clusterid))
+                        
+                        output <- data.table(survey_id=survey_name,
+                                             country=unique(this_survey$CountryName),
+                                             iso3=unique(this_survey$iso3),
+                                             svy_years=survey_label,
+                                             source=survey_source,
+                                             cluster_count=cluster_count,
+                                             individuals=sum(this_survey$n_defacto_pop),
+                                             included_in_cube=ifelse(cluster_count>0, "Yes", "No")
+                                             )
+                        return(output)
+                      })
+summary_table <- rbindlist(summary_table)
+
+# check to be sure the table is accurately representing the cube dataset
+summary_cube_diff <- setdiff(unique(summary_table[included_in_cube=="Yes"]$survey_id),
+                              unique(for_cube$SurveyId))
+if(length(summary_cube_diff)>0){
+  stop("INCORRECT SUMMARIZATION OF CUBE DATA")
+}
+
+write.csv(summary_table, file.path(out_dir, "summary_table_raw.csv"), row.names=F)
 
 ## SUMMARIZE DATA FOR STOCK AND FLOW  ----------------------------------------------------------------------------------------------------------------------
-
-# todo: drop non-african countries
-
-all_data <- all_data[!is.na(hh_size) & !is.na(year)]
 
 all_data[, hh_sample_wt:=hh_sample_wt/1e6] # as per dhs specs, apparently (ask sam). 
 
