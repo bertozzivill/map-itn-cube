@@ -126,7 +126,12 @@ summary_to_append <- all_to_append[, list(survey_id=surveyid,
                                           included_in_cube="No"
                                           )]
 
+
 summary_table <- rbind(summary_table, summary_to_append)
+summary_table[, demographics:=""]
+summary_table[, representativeness:= ""]
+summary_table[, notes:=ifelse(source=="TODO: OTHER", "manually modified source", "")]
+summary_table <- summary_table[order(notes, source, country, svy_years)]
 write.csv(summary_table, file.path(main_dir, "summary_table_intermediate.csv"), row.names=F)
 
 

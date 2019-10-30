@@ -128,6 +128,7 @@ mics5_data<- mics5_data[SurveyId!="ST2014MICS"]
 # "other" data-- unsure, hunt through Z:\Malaria data\Surveys from other sources
 old_other_data <-fread(file.path(main_dir, "other_hh.csv"))
 
+# dropping b/c too many nulls, these should be captured as summaries in MIS surveys.
 old_other_data <- old_other_data[!Survey.hh %in% c("Malawi2010", "Zambia 2010", "Zambia 2012")]
 
 ## AGGREGATE ALL DATA  ----------------------------------------------------------------------------------------------------------------------
@@ -371,9 +372,10 @@ summary_table <- lapply(unique(all_data$SurveyId), function(survey_name){
                         
                         survey_source <- ifelse(survey_name %like% "DHS", "DHS",
                                                 ifelse(survey_name %like% "MIS", "MIS",
-                                                       ifelse(survey_name %like% "MICS", "MICS",
+                                                       ifelse(survey_name %like% "MICS", "MICS5",
                                                               ifelse(survey_name %like% "AIS", "AIS",
-                                                                     "TODO: OTHER"))))
+                                                                     ifelse(survey_name %in% unique(old_mics_data$Survey.hh), "MICS4", "TODO: OTHER")
+                                                                     ))))
                         cluster_count <- length(unique(this_survey[!is.na(latitude) & !is.na(longitude)]$clusterid))
                         
                         output <- data.table(survey_id=survey_name,

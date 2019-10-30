@@ -12,7 +12,7 @@ library(ggplot2)
 
 rm(list=ls())
 
-main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_data/household_surveys/mics5_raw"
+main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/household_surveys/mics5_raw"
 
 
 # read in data

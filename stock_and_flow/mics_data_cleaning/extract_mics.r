@@ -13,11 +13,11 @@ rm(list=ls())
 # directory setup
 this_svy <- "mics5"
 
-func_dir <- "~/repos/map-itn-cube/stock_and_flow/custom_data_cleaning/"
+func_dir <- "~/repos/map-itn-cube/stock_and_flow/mics_data_cleaning/"
 in_dir <- "/Volumes/map_data/MICS_Automation/Acquisition/NEW/03 Processed"
-main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_data/household_surveys"
+main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/household_surveys"
 out_dir <- file.path(main_dir, paste0(this_svy, "_raw"))
-dir.create(out_dir, showWarnings=F, recursive=T)
+# dir.create(out_dir, showWarnings=F, recursive=T)
 svy_dir <- file.path(in_dir, this_svy, "Ready to Extract/")
 data_fnames <- list.files(svy_dir)
 
