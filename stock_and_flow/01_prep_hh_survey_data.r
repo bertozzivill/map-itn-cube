@@ -16,7 +16,7 @@ library(lubridate)
 
 rm(list=ls())
 
-out_subdir <- "20191018"
+out_subdir <- "20191031"
 
 main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/household_surveys"
 out_dir <- file.path("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep", out_subdir)
@@ -149,7 +149,6 @@ old_survey_key <- merge(old_survey_key, country_codes[, list(CountryName=MAP_Cou
 all_old_data <- merge(all_old_data, old_survey_key, by="Survey.hh", all.x=T)
 
 # rename to correspond to new column names
-# todo: drop itn_theoretical_capacity if you don't need it
 all_old_data <- all_old_data[, list(SurveyId, 
                                     CountryName, 
                                     iso3,
@@ -342,7 +341,7 @@ for_cube <- all_data[, list(SurveyId,
 
 # drops latitude/longitude nulls
 for_cube <- for_cube[complete.cases(for_cube)]
-write.csv(for_cube, file.path(out_dir, "itn_hh_survey_data.csv"), row.names=F) # TODO: compare this to the net data currently being used
+write.csv(for_cube, file.path(out_dir, "itn_hh_survey_data.csv"), row.names=F) 
 
 
 ## Find household size distributions from surveys  ----------------------------------------------------------------------------------------------------------------------
