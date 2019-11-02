@@ -70,80 +70,117 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
       print("Calculating net retention curves")
       half_life_comparison[[this_country]] <- rbindlist(lapply(model_names, function(this_model_name){
         
+        time_points <- seq(0,10,.01)
+        
+        # net loss that changes every year
         if ("mv_k_llin" %in% names(all_model_estimates[[this_model_name]])){
-          net_loss_params <- all_model_estimates[[this_model_name]][c("mv_k_llin", "mv_L_llin")]
+          net_loss_params <- all_model_estimates[[this_model_name]][c("mv_k_llin", "mv_L_llin", "mv_k_citn", "mv_L_citn")]
           
-          half_lifes<-c()
-          net_loss_sig <- rbindlist(lapply(1:length(net_loss_params$mv_k_llin), function(idx){
-            time_points=seq(0,10,.01)
-            data.table(base_year=idx+1999,
-                       time=time_points,
-                       sig=sigmoid(time_points, net_loss_params$mv_k_llin[idx], net_loss_params$mv_L_llin[idx])
-            )
+          net_loss_sig <- lapply(c("citn", "llin"), function(net_type){
             
-          }))
+                            this_k <- net_loss_params[[paste0("mv_k_", net_type)]]
+                            this_L <- net_loss_params[[paste0("mv_L_", net_type)]]
+                            
+                            this_net_loss_sig <- rbindlist(lapply(1:length(this_k), function(idx){
+                                                  data.table(iso3=this_country,
+                                                             model=this_model_name,
+                                                             net_type=net_type,
+                                                             base_year=idx+1999,
+                                                             time=time_points,
+                                                             sig=sigmoid(time_points, this_k[idx], this_L[idx])
+                                                  )
+                                                }))
+                            this_net_loss_sig[, half_life:=time[which.min(abs(sig-0.5))], by="base_year"]
+                            return(this_net_loss_sig)
+                            
+                          })
+          net_loss_sig <- rbindlist(net_loss_sig)
           
-          net_loss_sig[, half_life:=time[which.min(abs(sig-0.5))], by="base_year"]
+          # # average last three years for plot
+          # for_plot_sig <- net_loss_sig[base_year>=(max(base_year)-2), list(iso3=this_country,
+          #                                                                  model=this_model_name,
+          #                                                                  sig=mean(sig),
+          #                                                                  half_life=mean(half_life)), by=c("net_type", "time")]
+        }else{ # static or two-level net loss
+          net_loss_params <- all_model_estimates[[this_model_name]][c("k_llin", "L_llin", "k_citn", "L_citn")]
           
-          # average last three years for plot
-          for_plot_sig <- net_loss_sig[base_year>=(max(base_year)-2), list(iso3=this_country,
-                                                                           model=this_model_name,
-                                                                           sig=mean(sig),
-                                                                           half_life=mean(half_life)), by="time"]
-        }else{
-          net_loss_params <- all_model_estimates[[this_model_name]][c("k_llin", "L_llin")]
+          net_loss_sig <- lapply(c("citn", "llin"), function(net_type){
+            
+            this_k <- net_loss_params[[paste0("k_", net_type)]]
+            this_L <- net_loss_params[[paste0("L_", net_type)]]
+            
+            this_net_loss_sig <- rbindlist(lapply(1:length(this_L), function(idx){
+              data.table(iso3=this_country,
+                         model=this_model_name,
+                         net_type=net_type,
+                         loss_idx=idx,
+                         time=time_points,
+                         sig=sigmoid(time_points, this_k, this_L[idx])
+              )
+            }))
+            this_net_loss_sig[, half_life:=time[which.min(abs(sig-0.5))], by="loss_idx"]
+            return(this_net_loss_sig)
+            
+          })
+          net_loss_sig <- rbindlist(net_loss_sig)
           
-          # only keep the "since 2010" half-life for two-half-life runs
-          L_to_use <- ifelse(length(net_loss_params$L_llin)==1, net_loss_params$L_llin, net_loss_params$L_llin[[2]])
+          # expand this to a time series table
+          this_year_count <- 1:all_input_data[[this_model_name]]$year_count + 1999
+          to_merge_table <- data.table(expand.grid(time_points, this_year_count, c("citn", "llin")))
+          names(to_merge_table) <- c("time", "base_year", "net_type")
           
-          half_lifes<-c()
-          time_points=seq(0,10,.01)
-          for_plot_sig <- data.table(iso3=this_country,
-                                     model=this_model_name,
-                                     time=time_points,
-                                     sig=sigmoid(time_points, net_loss_params$k_llin, L_to_use)) 
-          for_plot_sig[, half_life:=time[which.min(abs(sig-0.5))]]
-          
+          if (!"loss_function_pivot_quarter" %in% names(all_input_data[[this_model_name]])){
+            
+            net_loss_sig[, loss_idx:= NULL]
+            net_loss_sig <- merge(to_merge_table, net_loss_sig, by=c("net_type", "time"), all=T)
+            
+          }else{
+            L_cutoff_year <- all_input_data[[this_model_name]]$loss_function_pivot_quarter/4 + 1999
+            to_merge_table[, loss_idx:=ifelse(base_year<=L_cutoff_year, 1, 2)]
+            net_loss_sig <- merge(to_merge_table, net_loss_sig, by=c("net_type", "loss_idx", "time"), all=T)
+            net_loss_sig[, loss_idx:= NULL]
+            
+          }
         }
         
-        return(for_plot_sig)
+        return(net_loss_sig)
       }), use.names = T)
       
       # temp
-      compare_L[[this_country]] <- rbindlist(lapply(model_names, function(this_model_name){
-        if ("mv_L_llin" %in% names(all_model_estimates[[this_model_name]])){
-          L_dt <- data.table(iso3=this_country,
-                             model=this_model_name,
-                             L=all_model_estimates[[this_model_name]]$mv_L_llin)
-          L_dt[, year:= (1:nrow(L_dt)) + 1999]
-          
-        }else{
-          
-          if (!"loss_function_pivot_quarter" %in% names(all_input_data[[this_model_name]])){  # stationary loss param
-            L_dt <- data.table(iso3=this_country,
-                               model=this_model_name,
-                               L=all_model_estimates[[this_model_name]]$L_llin)
-            L_dt <- merge(L_dt, data.table(year=(1:all_input_data[[this_model_name]]$year_count) + 1999,
-                                           model=this_model_name),
-                          by="model", all=T)
-          }else{ # two-level loss param
-            L_dt <- data.table(iso3=this_country,
-                               model=this_model_name,
-                               L_type=c("L1", "L2"),
-                               L=all_model_estimates[[this_model_name]]$L_llin)
-            L_cutoff_year <- all_input_data[[this_model_name]]$loss_function_pivot_quarter/4
-            L_labels <- c(rep("L1", L_cutoff_year), rep("L2", all_input_data[[this_model_name]]$year_count-L_cutoff_year))
-            
-            L_dt <- merge(L_dt, data.table(year=(1:all_input_data[[this_model_name]]$year_count) + 1999,
-                                           L_type=L_labels,
-                                           model=this_model_name),
-                          by=c("model", "L_type"), all=T)
-            L_dt[, L_type:= NULL]
-          }
-          
-        }
-        return(L_dt)
-      }), use.names = T)
+      # compare_L[[this_country]] <- rbindlist(lapply(model_names, function(this_model_name){
+      #   if ("mv_L_llin" %in% names(all_model_estimates[[this_model_name]])){
+      #     L_dt <- data.table(iso3=this_country,
+      #                        model=this_model_name,
+      #                        L=all_model_estimates[[this_model_name]]$mv_L_llin)
+      #     L_dt[, year:= (1:nrow(L_dt)) + 1999]
+      #     
+      #   }else{
+      #     
+      #     if (!"loss_function_pivot_quarter" %in% names(all_input_data[[this_model_name]])){  # stationary loss param
+      #       L_dt <- data.table(iso3=this_country,
+      #                          model=this_model_name,
+      #                          L=all_model_estimates[[this_model_name]]$L_llin)
+      #       L_dt <- merge(L_dt, data.table(year=(1:all_input_data[[this_model_name]]$year_count) + 1999,
+      #                                      model=this_model_name),
+      #                     by="model", all=T)
+      #     }else{ # two-level loss param
+      #       L_dt <- data.table(iso3=this_country,
+      #                          model=this_model_name,
+      #                          L_type=c("L1", "L2"),
+      #                          L=all_model_estimates[[this_model_name]]$L_llin)
+      #       L_cutoff_year <- all_input_data[[this_model_name]]$loss_function_pivot_quarter/4
+      #       L_labels <- c(rep("L1", L_cutoff_year), rep("L2", all_input_data[[this_model_name]]$year_count-L_cutoff_year))
+      #       
+      #       L_dt <- merge(L_dt, data.table(year=(1:all_input_data[[this_model_name]]$year_count) + 1999,
+      #                                      L_type=L_labels,
+      #                                      model=this_model_name),
+      #                     by=c("model", "L_type"), all=T)
+      #       L_dt[, L_type:= NULL]
+      #     }
+      #     
+      #   }
+      #   return(L_dt)
+      # }), use.names = T)
     
       ### Compare Indicator parameters to priors #####----------------------------------------------------------------------------------------------------------------------------------
       print("Finding indicator priors")
@@ -211,8 +248,18 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
         }
       }))
       
-      nets_in_houses <- merge(nets_in_houses, unique(half_life_comparison[[this_country]][, list(model, half_life)]), by="model")
-      nets_in_houses[, label:= paste0(model, "\n Half Life ", round(half_life, 2), " yrs")]
+      # generate labels stating half life in first and last three years of time series
+      
+      start_halflives <- half_life_comparison[[this_country]][base_year<=(max(base_year)+2) & net_type=="llin", 
+                                                              list(half_life_start=mean(half_life)), by="model"]
+      
+      end_halflives <- half_life_comparison[[this_country]][base_year>=(max(base_year)-2) & net_type=="llin", 
+                                                            list(half_life_end=mean(half_life)), by="model"]
+      halflife_labels <- merge(start_halflives, end_halflives, by="model")
+      halflife_labels[, label:= paste0(model, "\n LLIN Half Life ", round(half_life_start, 2), "/", round(half_life_end, 2),  " yrs" )]
+      
+      
+      nets_in_houses <- merge(nets_in_houses, halflife_labels[, list(model, label)], by="model")
       
       # l-to-r order
       model_order_dt <- data.table(model=model_order,
@@ -352,26 +399,32 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
 
   half_life_comparison <- rbindlist(half_life_comparison)
   half_life_comparison[, model:=factor(model, levels=model_order)]
-  half_life_means <- half_life_comparison[, list (sig=mean(sig), half_life=mean(half_life)), by=c("model", "time")]
-  midpoints <- unique(half_life_means[, list(model, half_life)])
+  
+  
+  for_sigmoids <- half_life_comparison[base_year>=(max(base_year)-2), 
+                                       list(sig=mean(sig),
+                                            half_life=mean(half_life)), by=c("iso3", "model", "net_type", "time")]
+  
+  half_life_means <- for_sigmoids[, list (sig=mean(sig), half_life=mean(half_life)), by=c("model", "net_type", "time")]
+  midpoints <- unique(half_life_means[, list(model, net_type, half_life)])
 
-  print(ggplot(half_life_comparison, aes(x=time, y=sig)) +
+  print(ggplot(for_sigmoids, aes(x=time, y=sig)) +
           geom_line(aes(group=iso3), alpha=0.5, color=two_colors[2]) +
           geom_line(data=half_life_means, size=2, color=two_colors[1]) +
           geom_vline(data=midpoints, aes(xintercept=half_life)) +
-          facet_grid(.~model) +
+          facet_grid(net_type~model) +
           labs(title="Net Retention by Country",
                x="Time since net received (years)",
                y="Prop. of nets retained"))
 
 
-  country_lambdas <- unique(half_life_comparison[, list(model, iso3, half_life)])
-  descending_order <- country_lambdas[model==model_names[[2]]][order(half_life, decreasing=T)]$iso3
+  country_lambdas <- unique(for_sigmoids[, list(model, net_type, iso3, half_life)])
+  descending_order <- country_lambdas[model==model_names[[2]] & net_type=="llin"][order(half_life, decreasing=T)]$iso3
   country_lambdas[, iso3:= factor(iso3, levels = descending_order)]
 
   print(ggplot(country_lambdas, aes(x=iso3, y=half_life)) +
           geom_text(aes(label=iso3)) +
-          facet_grid(.~model) +
+          facet_grid(net_type~model) +
           ylim(0, 4) +
           theme(axis.text.x = element_text(angle=45, hjust=1),
                 legend.position = "none") +
@@ -379,19 +432,28 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
                y="Net Half-life (years)"))
 
   
-  compare_L <- rbindlist(compare_L)
-  print(ggplot(compare_L, aes(x=year, y=L)) +
+  # half-life time series
+  half_life_over_time <- unique(half_life_comparison[, list(model, net_type, iso3, base_year, half_life)])
+  
+  print(ggplot(half_life_over_time[net_type=="llin"], aes(x=base_year, y=half_life)) +
     geom_line(aes(color=model)) +
-    facet_wrap(~iso3) +
+    facet_wrap(.~iso3) +
     labs(x="Year",
-         y="L_param",
-         title="L parameter of loss function over time"))
+         y="Half-Life",
+         title="Half life of loss function over time, LLINs"))
+  
+  print(ggplot(half_life_over_time[net_type=="citn"], aes(x=base_year, y=half_life)) +
+          geom_line(aes(color=model)) +
+          facet_wrap(.~iso3) +
+          labs(x="Year",
+               y="Half-Life",
+               title="Half life of loss function over time, cITNs"))
   
   graphics.off()
   
 }
 
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive model_dir_1=gs://map_users/amelia/itn/stock_and_flow/results/20191025_no_nettype_specific_loss model_dir_2=gs://map_users/amelia/itn/stock_and_flow/results/20191003_no_gp model_dir_3=gs://map_users/amelia/itn/stock_and_flow/results/20191020_truncate_noise_dist CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive plot_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191025_no_nettype_specific_loss --command 'cd ${CODE}; Rscript 04_compare_outputs.r'
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive model_dir_1=gs://map_users/amelia/itn/stock_and_flow/results/20191031_limit_L_variability model_dir_2=gs://map_users/amelia/itn/stock_and_flow/results/20191003_no_gp model_dir_3=gs://map_users/amelia/itn/stock_and_flow/results/20191020_truncate_noise_dist CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive plot_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191031_limit_L_variability --command 'cd ${CODE}; Rscript 04_compare_outputs.r'
 package_load <- function(package_list){
   # package installation/loading
   new_packages <- package_list[!(package_list %in% installed.packages()[,"Package"])]
@@ -423,7 +485,7 @@ if(Sys.getenv("model_dir_1")=="") {
   setwd(func_dir)
   plot_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20191009_stationary_sigm_loss"
   
-  model_dirs <- c("20191009_stationary_sigm_loss", "20191003_no_gp")
+  model_dirs <- c("20191016_stationary_llin_noise", "20191009_stationary_sigm_loss", "20191003_no_gp")
   
 } else {
   plot_dir <- Sys.getenv("plot_dir") 
