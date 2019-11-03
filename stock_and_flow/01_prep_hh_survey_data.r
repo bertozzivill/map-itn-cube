@@ -16,7 +16,7 @@ library(lubridate)
 
 rm(list=ls())
 
-out_subdir <- "20191031"
+out_subdir <- "20191102"
 
 main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/household_surveys"
 out_dir <- file.path("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep", out_subdir)
@@ -87,7 +87,9 @@ print("reading older dhs data")
 old_dhs_data <-fread(file.path(main_dir, "older_dhs_hh_06_october.csv"),stringsAsFactors=FALSE)
 
 # keep only surveys that don't overlap with newer DHS data-- see data_checking.r for how we got these survey values specifically
-old_surveys_to_keep <- c("TZ2007AIS", "ML2010OTH", "KE2007BM", "KE2010BM", "NM2009SPA")
+# old_surveys_to_keep <- c("TZ2007AIS", "ML2010OTH", "KE2007BM", "KE2010BM", "NM2009SPA")
+# TEST: exclude kenya 2007
+old_surveys_to_keep <- c("TZ2007AIS", "ML2010OTH", "KE2010BM", "NM2009SPA")
 to_keep_ids <- old_survey_key[SurveyId %in% old_surveys_to_keep]$Survey.hh
 old_dhs_data <- old_dhs_data[Survey.hh %in% to_keep_ids]
 
