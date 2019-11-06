@@ -27,7 +27,7 @@ emplogit <- function (y, eps = 1e-3){
 } 
 
 
-main_subdir <- "20191018"
+main_subdir <- "20191102"
 main_dir <- file.path("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep", main_subdir)
 
 ### Read in all data #####----------------------------------------------------------------------------------------------------------------------------------
@@ -48,7 +48,7 @@ aggregated_svy_data <- lapply(unique(HH$SurveyId), function(this_svy){
   dstrat<-svydesign(ids=~clusterid, data=subset, weight=~hh_sample_wt) # set up survey design
   
   ## HH size and population	
-  hh_size<-as.numeric(as.data.frame(svymean(~n_defacto_pop, dstrat))) 
+  hh_size<-as.numeric(as.data.frame(svymean(~hh_size, dstrat))) 
   
   ## itn and llin counts in HH
   net_counts <- as.numeric(as.data.frame(svymean(~n_itn, dstrat))) 
@@ -69,11 +69,11 @@ nets.per.capita <- aggregated_svy_data$nets_percapita
 hh_size_max<-10 # number of house categories
 
 for_indicators <- HH[, list(SurveyId, CountryName, iso3, clusterid, hhid, hh_sample_wt,
-                            n_defacto_pop=pmin(n_defacto_pop, 10), n_itn)]
+                            hh_size=pmin(hh_size, 10), n_itn)]
 
 # Find indicators from data
 svy_indicators <- lapply(1:hh_size_max, function(hhsize){
-  subset <- for_indicators[n_defacto_pop==hhsize]
+  subset <- for_indicators[hh_size==hhsize]
   
   num <- subset[, list(denom_sample=sum(hh_sample_wt, na.rm = T)), by="SurveyId"]
   denom <- subset[n_itn==0, list(num_sample=sum(hh_sample_wt, na.rm = T)), by="SurveyId"]
@@ -105,7 +105,79 @@ truncated_poiss_mean<-function(M){
 svy_indicators[, adj_mean_nets:= sapply(mean_nets, truncated_poiss_mean)]
 
 
-### Run models #####----------------------------------------------------------------------------------------------------------------------------------
+## test: what if you run a linear regression instead?
+
+extract_from_lm <- function(lm_obj){
+  these_outputs <- coef(summary(lm_obj))[, 1:2]
+  new_names <- rownames(these_outputs)
+  these_outputs <- data.table(these_outputs)
+  names(these_outputs) <- c("mean", "se")
+  these_outputs[, var:=new_names]
+  return(these_outputs)
+}
+
+
+nonet_prop_test <- svy_indicators[, list (emplogit_prop_no_net, hhsize, hhsize_squared=hhsize**2,
+                                   nets_percapita, nets_percapita_squared=nets_percapita**2, nets_percapita_cubed=nets_percapita**3)]
+nonet_prop_regression <- lm(emplogit_prop_no_net ~ hhsize + hhsize_squared + nets_percapita + nets_percapita_squared + nets_percapita_cubed,
+                            data = nonet_prop_test)
+
+nonet_prop_results <- extract_from_lm(nonet_prop_regression)
+nonet_prop_results <- nonet_prop_results[, list(model="regression", var, mean, se)]
+
+mean_nets_results_raw <- lapply(1:10, function(hh_size){
+  this_nets_regression <- lm(adj_mean_nets ~  nets_percapita, data=svy_indicators[hhsize==hh_size])
+  these_results <- extract_from_lm(this_nets_regression)
+  these_results[, hhsize:=hh_size]
+  return(these_results)
+})
+mean_nets_results_raw <- rbindlist(mean_nets_results_raw)
+mean_nets_results <- mean_nets_results_raw[, list(model="regression", 
+                                                    var=ifelse(var=="nets_percapita", "beta", "alpha"),
+                                                    hhsize,
+                                                    mean,
+                                                    se)]
+
+
+from_stan <- fread(file.path(main_dir, "indicator_priors.csv"))
+from_stan <- from_stan[!variable %like% "tau"]
+from_stan <- dcast.data.table(from_stan, model_type + variable + hhsize ~ metric, value.var = "value")
+
+nonet_stan <- from_stan[model_type=="no_net_prob", list(model="stan", 
+                                                        var=c("(Intercept)", "nets_percapita", "nets_percapita_squared", "nets_percapita_cubed", "hhsize", "hhsize_squared"),
+                                                        mean, se=sd)]
+
+compare_nonet <- rbind(nonet_stan, nonet_prop_results)
+
+mean_nets_stan <- from_stan[model_type=="mean_net_count", list(model="stan",
+                                                               var=gsub("_mean_nets", "", variable),
+                                                               hhsize,
+                                                               mean, se=sd)]
+
+compare_mean_nets <- rbind(mean_nets_results, mean_nets_stan, use.names = T)
+
+
+ggplot(compare_nonet, aes(x=var, y=mean, color=model)) + 
+  geom_linerange(aes(ymin=mean-1.96*se, ymax=mean+1.96*se)) + 
+  geom_point(size=4) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle=45, hjust=1)) +
+  labs(title="Prop of Households Wihout Nets: Regression vs Stan",
+       x="", 
+       y="Coefficient")
+
+
+ggplot(compare_mean_nets, aes(x=hhsize, y=mean, color=model)) + 
+  geom_linerange(aes(ymin=mean-1.96*se, ymax=mean+1.96*se)) + 
+  geom_point(size=4) +
+  facet_grid(~var) + 
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle=45, hjust=1)) +
+  labs(title="Mean Nets Per Household: Regression vs Stan",
+       x="Household Size", 
+       y="Coefficient")
+
+ ### Run models #####----------------------------------------------------------------------------------------------------------------------------------
 
 prop_no_nets <- as.list(svy_indicators[, list(emplogit_prop_no_net, hhsize, nets_percapita)])
 prop_no_nets$N <- nrow(svy_indicators)
