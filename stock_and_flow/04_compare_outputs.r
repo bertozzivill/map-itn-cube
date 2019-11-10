@@ -25,7 +25,10 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
   
   # start list to store half life details
   half_life_comparison <- list()
-  compare_L <- list()
+  nets_in_houses_all <- list()
+  nmcp_data_all <- list()
+  stock_all <- list()
+  survey_data_all <- list()
   
   if (make_country_plots){
     pdf(file.path(plot_dir, paste0("compare_outputs_", out_label,".pdf")), height=11, width=8.5)
@@ -146,67 +149,6 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
         return(net_loss_sig)
       }), use.names = T)
       
-      # temp
-      # compare_L[[this_country]] <- rbindlist(lapply(model_names, function(this_model_name){
-      #   if ("mv_L_llin" %in% names(all_model_estimates[[this_model_name]])){
-      #     L_dt <- data.table(iso3=this_country,
-      #                        model=this_model_name,
-      #                        L=all_model_estimates[[this_model_name]]$mv_L_llin)
-      #     L_dt[, year:= (1:nrow(L_dt)) + 1999]
-      #     
-      #   }else{
-      #     
-      #     if (!"loss_function_pivot_quarter" %in% names(all_input_data[[this_model_name]])){  # stationary loss param
-      #       L_dt <- data.table(iso3=this_country,
-      #                          model=this_model_name,
-      #                          L=all_model_estimates[[this_model_name]]$L_llin)
-      #       L_dt <- merge(L_dt, data.table(year=(1:all_input_data[[this_model_name]]$year_count) + 1999,
-      #                                      model=this_model_name),
-      #                     by="model", all=T)
-      #     }else{ # two-level loss param
-      #       L_dt <- data.table(iso3=this_country,
-      #                          model=this_model_name,
-      #                          L_type=c("L1", "L2"),
-      #                          L=all_model_estimates[[this_model_name]]$L_llin)
-      #       L_cutoff_year <- all_input_data[[this_model_name]]$loss_function_pivot_quarter/4
-      #       L_labels <- c(rep("L1", L_cutoff_year), rep("L2", all_input_data[[this_model_name]]$year_count-L_cutoff_year))
-      #       
-      #       L_dt <- merge(L_dt, data.table(year=(1:all_input_data[[this_model_name]]$year_count) + 1999,
-      #                                      L_type=L_labels,
-      #                                      model=this_model_name),
-      #                     by=c("model", "L_type"), all=T)
-      #       L_dt[, L_type:= NULL]
-      #     }
-      #     
-      #   }
-      #   return(L_dt)
-      # }), use.names = T)
-    
-      ### Compare Indicator parameters to priors #####----------------------------------------------------------------------------------------------------------------------------------
-      print("Finding indicator priors")
-      indicator_comparison <- rbindlist(lapply(model_names, function(this_model_name){
-        this_indicator_priors <- all_input_data[[this_model_name]][c("alpha_nonet_prop_mean", "alpha_nonet_prop_sd", "b1_nonet_prop_mean", "b1_nonet_prop_sd", "b2_nonet_prop_mean", "b2_nonet_prop_sd", "b3_nonet_prop_mean", "b3_nonet_prop_sd", 
-                                                                     "p1_nonet_prop_mean", "p1_nonet_prop_sd", "p2_nonet_prop_mean", "p2_nonet_prop_sd", "tau_nonet_prop_mean", "tau_nonet_prop_sd", "alpha_mean_nets_mean", "alpha_mean_nets_sd",
-                                                                     "beta_mean_nets_mean", "beta_mean_nets_sd", "tau_mean_nets_mean", "tau_mean_nets_sd")]
-        this_indicator_estimates <- all_model_estimates[[this_model_name]][c("p1_nonet_prop", "p2_nonet_prop", "b1_nonet_prop", "b2_nonet_prop", "b3_nonet_prop",  "alpha_mean_nets", "beta_mean_nets")]
-        rbindlist(lapply(names(this_indicator_estimates), function(varname){
-          data.table(var=varname,
-                     model=this_model_name,
-                     model_val=this_indicator_estimates[[varname]],
-                     prior_val=this_indicator_priors[[paste0(varname, "_mean")]],
-                     prior_sd=this_indicator_priors[[paste0(varname, "_sd")]])
-        }))
-      }))
-      
-      indicator_prior_plot <- ggplot(indicator_comparison, aes(x=prior_val, y=model_val, color=model)) +
-        geom_abline() + 
-        geom_linerange(aes(ymin=prior_val-prior_sd*1.96, ymax=prior_val + prior_sd*1.96)) +
-        geom_point() +
-        facet_wrap(~var, scales="free") +
-        theme(legend.position="none") +
-        labs(title= paste("Indicator Priors vs estimated:", this_country),
-             x="Prior Value",
-             y="Model Value")
       
       ### Plot quarterly nets in houses compared to survey data #####----------------------------------------------------------------------------------------------------------------------------------
       
@@ -286,6 +228,9 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
       if (nrow(survey_data)>0){
         houses_plot <- houses_plot + geom_pointrange(data=survey_data, aes(y=svy_net_count, ymin=svy_net_lower, ymax=svy_net_upper), alpha=0.85)
       }
+      
+      nets_in_houses_all <- append_to_countrylist(nets_in_houses, nets_in_houses_all, this_country)
+      survey_data_all <- append_to_countrylist(survey_data, survey_data_all, this_country)
       
       ### Plot annual net distributions vs nmcp data #####----------------------------------------------------------------------------------------------------------------------------------
       print("plotting net distribution")
@@ -373,6 +318,10 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
              x="Time",
              y="Net count")
       
+      
+      nmcp_data_all <- append_to_countrylist(nmcp_data, nmcp_data_all, this_country)
+      stock_all <- append_to_countrylist(stock, stock_all, this_country)
+      
       ### Aggregate Plots #####----------------------------------------------------------------------------------------------------------------------------------
       
       if (make_country_plots){
@@ -388,6 +337,13 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
   
   graphics.off()
   
+  ### Aggregate relevant datasets #####----------------------------------------------------------------------------------------------------------------------------------
+  nets_in_houses_all <- rbindlist(nets_in_houses_all)
+  survey_data_all <- rbindlist(survey_data_all)
+  nmcp_data_all <- rbindlist(nmcp_data_all)
+  stock_all <- rbindlist(stock_all)
+  
+  save(nets_in_houses_all, survey_data_all, nmcp_data_all, stock_all, file=file.path(plot_dir, "for_plotting.RData"))
   
   ### Plot all net loss sigmoids #####----------------------------------------------------------------------------------------------------------------------------------
 
@@ -419,7 +375,8 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
 
 
   country_lambdas <- unique(for_sigmoids[, list(model, net_type, iso3, half_life)])
-  descending_order <- country_lambdas[model==model_names[[2]] & net_type=="llin"][order(half_life, decreasing=T)]$iso3
+  sorting_model <- ifelse(length(model_names)==1, model_names[[1]], model_names[[2]])
+  descending_order <- country_lambdas[model==sorting_model & net_type=="llin"][order(half_life, decreasing=T)]$iso3
   country_lambdas[, iso3:= factor(iso3, levels = descending_order)]
 
   print(ggplot(country_lambdas, aes(x=iso3, y=half_life)) +
@@ -461,7 +418,7 @@ package_load <- function(package_list){
   lapply(package_list, library, character.only=T)
 }
 
-package_load(c("data.table","rjags", "zoo", "ggplot2", "gridExtra"))
+package_load(c("data.table","rjags", "zoo", "ggplot2", "gridExtra", "rlist"))
 theme_set(theme_minimal(base_size = 12))
 
 
@@ -477,15 +434,18 @@ gg_color_hue <- function(n) {
   hcl(h = hues, l = 65, c = 100)[1:n]
 }
 
-
+append_to_countrylist <- function(dt, listname, this_iso3){
+  dt[, iso3:=this_iso3]
+  return(list.append(listname, dt))
+}
 
 if(Sys.getenv("model_dir_1")=="") {
   base_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/"
   func_dir <- "~/repos/map-itn-cube/stock_and_flow/"
   setwd(func_dir)
-  plot_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20191009_stationary_sigm_loss"
+  plot_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20191031_limit_L_variability"
   
-  model_dirs <- c("20191016_stationary_llin_noise", "20191009_stationary_sigm_loss", "20191003_no_gp")
+  model_dirs <- c("20191031_limit_L_variability")
   
 } else {
   plot_dir <- Sys.getenv("plot_dir") 

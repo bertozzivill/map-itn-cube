@@ -199,8 +199,8 @@ format_stan_output <- function(stan_fit, aggregate=T){
     outputs$metric <- c("mean", "sd")
     outputs <- melt(outputs, id.vars = "metric")
   }else{
-    outputs[, rowid:= 1:nrow(outputs)]
-    outputs <- melt(outputs, id.vars="rowid")
+    outputs[, sample:= 1:nrow(outputs)]
+    outputs <- melt(outputs, id.vars="sample")
   }
   
   outputs[, chain:= gsub("chain:([0-9]*)\\..*", "\\1", variable)]
@@ -213,8 +213,9 @@ format_stan_output <- function(stan_fit, aggregate=T){
 
 # Prop w/o nets
 traceplot(no_net_fit)
-no_net_outputs <- format_stan_output(no_net_fit)
+no_net_outputs <- format_stan_output(no_net_fit, aggregate=F)
 no_net_outputs[, model_type:="no_net_prob"]
+
 
 # TODO: diagnostic plot
 # test_plot_nonets <- var0[i1] + var0[b1]*data2$y + var0[p1]*data2$x + var0[b2]*(data2$y^2) + var0[b3]*(data2$y^3) + var0[p2]*(data2$x^2)
@@ -224,7 +225,7 @@ no_net_outputs[, model_type:="no_net_prob"]
 
 mean_net_outputs <- lapply(1:hh_size_max, function(this_hhsize){
   
-  these_net_outputs <- format_stan_output(mean_net_fit[[this_hhsize]])
+  these_net_outputs <- format_stan_output(mean_net_fit[[this_hhsize]], aggregate=F)
   these_net_outputs[, hhsize:=this_hhsize]
   return(these_net_outputs)
 })
