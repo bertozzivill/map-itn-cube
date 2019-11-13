@@ -32,6 +32,7 @@ use_stack <- stack(paste0("ITN_", years, ".USE.tif"))
 access_stack <- stack(paste0("ITN_", years, ".ACC.tif"))
 # new_use_stack <- mask(use_stack, orig_use_stack)
 use_gap_stack <- access_stack - use_stack
+names(use_gap_stack) <- paste("GAP", years)
 
 access_plot <- levelplot(access_stack,
                        par.settings=rasterTheme(region= wpal("seaside", noblack = T)), at= seq(0, 1, 0.025),
@@ -41,21 +42,11 @@ use_plot <- levelplot(use_stack,
                       par.settings=rasterTheme(region= wpal("seaside", noblack = T)), at= seq(0, 1, 0.025),
                       xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F) 
 
-
-
-bound <- 0.4
-negbound <- 0-bound
-
-
-new_use_gap_stack <- reclassify(use_gap_stack, cbind(-Inf, negbound, negbound), right=T)
-new_use_gap_stack <- reclassify(new_use_gap_stack, cbind(bound, Inf, bound), right=T)
-
-# color: #74677e
 # divpal <- c(pnw_palette("Lake", 60)[10:60],  rev(pnw_palette("Shuksan", 50))[1:10], rev(pnw_palette("Sunset", 50)[10:50]))
 divpal <- c(pnw_palette("Lake", 60)[10:59],  rev(pnw_palette("Shuksan", 35))[3:17], rev(pnw_palette("Starfish", 75))[1:35])
 
-diff_plot <- levelplot(new_use_gap_stack,
-                      par.settings=rasterTheme(region= divpal), at= seq(-0.45, 0.45, 0.025),
+diff_plot <- levelplot(use_gap_stack[[19]],
+                      par.settings=rasterTheme(region= divpal_old), at= seq(-0.75, 0.75, 0.025),
                       xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F) 
 
 pdf("/Users/bertozzivill/Dropbox (IDM)/Malaria Team Folder/projects/map_itn_cube/astmh_2019/access_use_timeseries.pdf", width=11, height=7)
@@ -63,11 +54,6 @@ pdf("/Users/bertozzivill/Dropbox (IDM)/Malaria Team Folder/projects/map_itn_cube
   print(use_plot)
   print(diff_plot)
 graphics.off()
-
-
-levelplot(use_gap_stack[[19]],
-          par.settings=rasterTheme(region= c(pnw_palette("Winter", 50),  rev(pnw_palette("Shuksan", 50)))), at= seq(-0.5, 0.5, 0.025),
-          xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F) 
 
 
 
