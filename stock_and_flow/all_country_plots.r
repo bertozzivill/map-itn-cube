@@ -42,12 +42,15 @@ survey_data_all <- merge(survey_data_all, iso_map, by="iso3", all.x=T)
 stock_all <- merge(stock_all, iso_map, by="iso3", all.x=T)
 nmcp_data_all <- merge(nmcp_data_all, iso_map, by="iso3", all.x=T)
 
+nets_in_houses_all[, new_label:= gsub("limit_L_variability", country, label), by=country]
+survey_data_all[, new_label:= gsub("limit_L_variability", country, label), by=country]
+
 houses_plot <- ggplot(nets_in_houses_all, aes(x=date, color=type, fill=type)) +
                 geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.3) +
                 geom_line(aes(y=nets_houses), size=1) +
                 geom_pointrange(data=survey_data_all, aes(y=svy_net_count, ymin=svy_net_lower, ymax=svy_net_upper), alpha=0.85) + 
-                facet_wrap(.~country, scales="free") + 
-                theme(legend.position = "top") +
+                facet_wrap(.~new_label, scales="free") + 
+                theme(legend.position = "bottom") +
                 labs(title= "",
                      x="Time",
                      y="Net count (Millions)")

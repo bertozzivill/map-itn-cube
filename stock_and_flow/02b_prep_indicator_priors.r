@@ -158,34 +158,48 @@ no_net_fit <- stan(model_code=no_nets_model,
 
 mean_nets_model <- "data {
             int<lower=1> N;
-            vector[N] nets_percapita; // formerly y1-10
-            vector[N] adj_mean_nets; //formerly z1-10
+            int<lower=0> p;
+            matrix[N, p] preds;
+            vector[N] adj_mean_nets;
             }
         parameters {
-            real alpha_mean_nets; //formerly i1-10
-            real beta_mean_nets; //fomerly b1-10
-            real<lower=0> tau_mean_nets; //formerly tau1-10
+            vector[p] beta_mean_nets; 
+            real<lower=0> tau_mean_nets; 
          } 
-
          model {
-      			alpha_mean_nets ~ uniform(-20,20);
-      			beta_mean_nets ~ uniform(-20,20);
-			      tau_mean_nets ~ gamma(0.1,0.1);
-			      adj_mean_nets ~ normal(alpha_mean_nets + beta_mean_nets*nets_percapita, tau_mean_nets);
+        			 beta_mean_nets ~ uniform(-20,20);
+  			      tau_mean_nets ~ gamma(0.1,0.1);
+  			      
+  			      adj_mean_nets ~ normal(preds*beta_mean_nets, tau_mean_nets);
         }"
 
+mean_nets_dt <- svy_indicators[, list(hhsize, nets_percapita)]
 
-mean_net_fit <- lapply(1:hh_size_max, function(this_hhsize){
-  mean_nets <- as.list(svy_indicators[hhsize==this_hhsize, list(adj_mean_nets, hhsize, nets_percapita)])
-  mean_nets$N <- nrow(svy_indicators[hhsize==this_hhsize])
-  
-  this_mean_net_fit <-	stan(model_code=mean_nets_model,
-                           warmup=warm,
-                           data = mean_nets, 
-                           chains=chains, 
-                           iter=iterations,verbose = FALSE, refresh = -1)
-  return(this_mean_net_fit)
-})
+for(this_hhsize in 2:10){
+  mean_nets_dt[, ind:=ifelse(hhsize==this_hhsize, 1, 0)]
+  mean_nets_dt[, interaction:=ind*nets_percapita]
+  setnames(mean_nets_dt, c("ind", "interaction"), c(paste0("hhsize_", this_hhsize),
+                                                    paste0("hhsize_netspercapita_", this_hhsize)))
+}
+mean_nets_dt[, hhsize:=NULL]
+mean_nets_dt[, intercept:=1]
+setcolorder(mean_nets_dt, c("intercept",
+                            "nets_percapita",
+                            paste0("hhsize_", 2:10),
+                            paste0("hhsize_netspercapita_", 2:10)))
+
+mean_nets <- list(N=nrow(mean_nets_dt),
+                  p=ncol(mean_nets_dt),
+                  preds=as.matrix(mean_nets_dt),
+                  adj_mean_nets=svy_indicators$adj_mean_nets)
+
+mean_net_fit <-	stan(model_code=mean_nets_model,
+                         warmup=warm,
+                         data = mean_nets, 
+                         chains=chains, 
+                         iter=iterations,
+                         verbose = F,
+                         refresh = -1)
 
 
 ### Extract model outputs #####----------------------------------------------------------------------------------------------------------------------------------
