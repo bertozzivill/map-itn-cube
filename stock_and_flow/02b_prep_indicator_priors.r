@@ -11,7 +11,7 @@
 
 library(survey)
 library(zoo)
-library(raster)
+library(plyr)
 library(rstan)
 library(data.table)
 library(parallel)
@@ -28,8 +28,7 @@ emplogit <- function (y, eps = 1e-3){
   log((eps + y)/(1 - y + eps))
 } 
 
-
-main_subdir <- "20191107"
+main_subdir <- "20191118"
 main_dir <- file.path("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep", main_subdir)
 
 ### Read in all data #####----------------------------------------------------------------------------------------------------------------------------------
@@ -178,15 +177,15 @@ mean_nets_dt <- svy_indicators[, list(hhsize, nets_percapita)]
 for(this_hhsize in 2:10){
   mean_nets_dt[, ind:=ifelse(hhsize==this_hhsize, 1, 0)]
   mean_nets_dt[, interaction:=ind*nets_percapita]
-  setnames(mean_nets_dt, c("ind", "interaction"), c(paste0("hhsize_", this_hhsize),
-                                                    paste0("hhsize_netspercapita_", this_hhsize)))
+  setnames(mean_nets_dt, c("ind", "interaction"), c(paste0("intercept_hhsize_", this_hhsize),
+                                                    paste0("nets_percapita_hhsize_", this_hhsize)))
 }
 mean_nets_dt[, hhsize:=NULL]
 mean_nets_dt[, intercept:=1]
 setcolorder(mean_nets_dt, c("intercept",
                             "nets_percapita",
-                            paste0("hhsize_", 2:10),
-                            paste0("hhsize_netspercapita_", 2:10)))
+                            paste0("intercept_hhsize_", 2:10),
+                            paste0("nets_percapita_hhsize_", 2:10)))
 
 mean_nets <- list(N=nrow(mean_nets_dt),
                   p=ncol(mean_nets_dt),
@@ -236,18 +235,26 @@ no_net_outputs[, model_type:="no_net_prob"]
 # plot(plogis(lp0),plogis(data2$z))
 
 # Mean nets
+traceplot(mean_net_fit)
+mean_net_output <- format_stan_output(mean_net_fit, aggregate=F)
 
-mean_net_outputs <- lapply(1:hh_size_max, function(this_hhsize){
-  
-  these_net_outputs <- format_stan_output(mean_net_fit[[this_hhsize]], aggregate=F)
-  these_net_outputs[, hhsize:=this_hhsize]
-  return(these_net_outputs)
-})
+# restructure to reconstruct hhsize-specific intercepts and slopes
+mean_net_output <- mean_net_output[variable!="tau_mean_nets"]
+mean_net_output[, variable:= mapvalues(variable, unique(mean_net_output$variable),
+                                      names(mean_nets_dt))]
+mean_net_output[, label:= ifelse(variable %in% c("intercept", "nets_percapita"),
+                      "reference", 
+                      gsub(".*_(hhsize_.*)", "\\1", variable))]
+mean_net_output[, type:=ifelse(variable %like% "intercept", "intercept", "nets_percapita_slope")]
+mean_net_output <- dcast.data.table(mean_net_output, sample + type ~ label, value.var = "value")
+mean_net_output <- melt(mean_net_output, id.vars=c("sample", "type", "reference"))
+mean_net_output[, full_value:=reference + value]
+mean_net_output <- rbind(unique(mean_net_output[, list(sample, variable=paste0(type, "_hhsize_1"), value=reference)]),
+                         mean_net_output[, list(sample, variable=paste0(type, "_", variable), value=full_value)])
+mean_net_output[, chain:=1]
+mean_net_output[, model_type:="mean_net_count"]
 
-mean_net_outputs <- rbindlist(mean_net_outputs)
-mean_net_outputs[, model_type:="mean_net_count"]
-
-all_outputs <- rbind(no_net_outputs, mean_net_outputs, fill=T)
+all_outputs <- rbind(no_net_outputs, mean_net_output, fill=T)
 write.csv(all_outputs, file=file.path(main_dir, "indicator_priors.csv"), row.names = F)
 
 # todo: diagnostic plots

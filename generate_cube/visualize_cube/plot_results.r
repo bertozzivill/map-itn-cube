@@ -18,12 +18,13 @@ orig_dir <- "/Volumes/map_data/mastergrids/Model_Data/Pf_2015_AfricaModels/Inter
 main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20191102_new_stockflow_data/05_predictions"
 shape_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/shapefiles/"
 setwd(main_dir)
+out_dir <- "/Users/bertozzivill/Dropbox (IDM)/Malaria Team Folder/projects/map_itn_cube/astmh_2019/"
 
 # todo: map of survey cluster points
 # survey_data <- fread("../02_survey_data.csv")
 
-# Africa<-readOGR(file.path(shape_dir, "Africa.shp"))
-# Africa <- gSimplify(Africa, tol=0.1, topologyPreserve=TRUE)
+Africa<-readOGR(file.path(shape_dir, "Africa.shp"))
+Africa <- gSimplify(Africa, tol=0.1, topologyPreserve=TRUE)
 
 years <- 2000:2018
 
@@ -46,25 +47,21 @@ use_plot <- levelplot(use_stack,
 divpal <- c(pnw_palette("Lake", 60)[10:59],  rev(pnw_palette("Shuksan", 35))[3:17], rev(pnw_palette("Starfish", 75))[1:35])
 
 diff_plot <- levelplot(use_gap_stack[[19]],
-                      par.settings=rasterTheme(region= divpal_old), at= seq(-0.75, 0.75, 0.025),
+                      par.settings=rasterTheme(region= divpal), at= seq(-0.75, 0.75, 0.025),
                       xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F) 
 
-pdf("/Users/bertozzivill/Dropbox (IDM)/Malaria Team Folder/projects/map_itn_cube/astmh_2019/access_use_timeseries.pdf", width=11, height=7)
+pdf(file.path(out_dir, "access_use_timeseries.pdf"), width=11, height=7)
   print(access_plot)
   print(use_plot)
   print(diff_plot)
 graphics.off()
 
 
-
-access_stack <- stack(paste0("ITN_", years, ".ACC.tif"))
 mean_stack <- stack(paste0("ITN_", years, ".MEAN.tif"))
-gap_stack <- access_stack - use_stack
 dev_stack <- access_stack - mean_stack
+names(dev_stack) <- paste("DEV", years)
 
-
-
-pdf(file.path(main_dir, "..", "06_plots", "year_by_year.pdf"), width=11, height=7)
+pdf(file.path(out_dir, "cube_by_year.pdf"), width=11, height=7)
 for (this_year in years){
   print(this_year)
   year_idx <- this_year - min(years) + 1
@@ -75,15 +72,15 @@ for (this_year in years){
   
   prop_plot <- levelplot(props,
                          par.settings=rasterTheme(region= wpal("seaside", noblack = T)), at= seq(0, 1, 0.025),
-                         xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(3,1)) +
+                         xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(3,1))  +
                           latticeExtra::layer(sp.polygons(Africa))
   
   devs <- stack(subset(dev_stack, year_idx),
-                subset(gap_stack, year_idx))
+                subset(use_gap_stack, year_idx))
   names(devs) <- c("Access Dev", "Use Gap")
   
   dev_plot <- levelplot(devs,
-                        par.settings=rasterTheme(region= brewer.pal(10, "RdBu")), at= seq(-1, 1, 0.025),
+                        par.settings=rasterTheme(region= divpal), at= seq(-1, 1, 0.025),
                         xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(2,1)) +
                         latticeExtra::layer(sp.polygons(Africa))
   
