@@ -210,21 +210,9 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   
   main_input_list <- c(main_input_list, nmcp_list)
   
-  ### Store population at risk and IRS parameters.  #####----------------------------------------------------------------------------------------------------------------------------------
+  ### Store population at risk parameters.  #####----------------------------------------------------------------------------------------------------------------------------------
   # store population at risk parameter 
   main_input_list$PAR <- mean(this_pop$prop_pop_at_risk_pf)
-  
-  # TODO: update IRS from WHO data or anita work, find PAR for surveys more rigorously
-  
-  # UNTIL WE UPDATE: don't discount any PAR based on IRS coverage
-  # "IRS" refers to the proportion of the population *not* covered by IRS
-  # if(this_country=='Mozambique'){ main_input_list$IRS=(1-0.1)
-  # }else if(this_country=='Madagascar'){ main_input_list$IRS=(1-0.24)
-  # }else if(this_country=='Zimbabwe'){ main_input_list$IRS=(1-0.48)
-  # }else if(this_country=='Eritrea'){ main_input_list$IRS=(1-0.1)
-  # }else{ main_input_list$IRS=1}
-  
-  main_input_list$IRS <- 1
   
   ### create "counter" matrix that marks time since net distribution for each quarter   #####----------------------------------------------------------------------------------------------------------------------------------
   quarter_count <- main_input_list$quarter_count
@@ -429,9 +417,8 @@ accounting <- "for(i in 1:quarter_count){
 				quarterly_nets_in_houses_llin[i]<-sum(quarterly_nets_remaining_matrix_llin[i,1:quarter_count])
 				quarterly_nets_in_houses_citn[i]<-sum(quarterly_nets_remaining_matrix_citn[i,1:quarter_count])
 				
-				# total_percapita_nets is the percapita net count in the true population-at-risk (accounting for IRS)
-				# NOTE: this is where you could input some sort of filter to determine 'pop at risk' in places like ssd as including availability of getting a net
-				total_percapita_nets[i] <- max( (quarterly_nets_in_houses_llin[i]+quarterly_nets_in_houses_citn[i])/(PAR*IRS*population[(round(i/4+0.3))]), 0) 
+				# total_percapita_nets is the percapita net count in the true population-at-risk
+				total_percapita_nets[i] <- max( (quarterly_nets_in_houses_llin[i]+quarterly_nets_in_houses_citn[i])/(PAR*population[(round(i/4+0.3))]), 0) 
 			}"
 
 # triggered if there are no nulls in survey data (survey_llin_sd or survey_citn_sd). pretty sure this only happens when there are no surveys, but need to confirm
