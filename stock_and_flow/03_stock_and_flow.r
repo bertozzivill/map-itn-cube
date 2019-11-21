@@ -256,13 +256,18 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   
   indicator_priors <- fread(file.path(main_dir, "indicator_priors.csv"))
   
-  no_net_props <- dcast.data.table(indicator_priors[model_type=="no_net_prob"], variable  ~ metric, value.var = "value")
-  no_net_prop_priors <- unlist(lapply(unique(no_net_props$variable), extract_prior, no_net_props))
+  no_net_props <- dcast.data.table(indicator_priors[model_type=="no_net_prob"], sample  ~ variable, value.var = "value")
   
-  mean_net_counts <- dcast.data.table(indicator_priors[model_type=="mean_net_count"], variable + hhsize ~ metric, value.var = "value")
-  mean_net_count_priors <- unlist(lapply(unique(mean_net_counts$variable), extract_prior, mean_net_counts), recursive = F)
+  mean_net_counts <- indicator_priors[model_type=="mean_net_count"]
+  mean_net_counts[, variable:=factor(variable, levels=c(paste0("intercept_hhsize_", 1:10), paste0("nets_percapita_slope_hhsize_", 1:10)))]
+  mean_net_counts <-   mean_net_counts[order(variable)]
   
-  main_input_list <- c(main_input_list, as.list(no_net_prop_priors), mean_net_count_priors, list(max_hhsize=10))
+  mean_net_counts_intercept <- dcast.data.table(  mean_net_counts[variable %like% "intercept"], sample  ~ variable, value.var = "value")
+  mean_net_counts_slope <- dcast.data.table(  mean_net_counts[variable %like% "slope"], sample  ~ variable, value.var = "value")
+  
+  main_input_list <- c(main_input_list, as.list(no_net_props[,2:7]), 
+                       list(mean_net_counts_intercept=as.matrix(mean_net_counts_intercept[,2:11]),
+                            mean_net_counts_slope=as.matrix(mean_net_counts_slope[,2:11]), max_hhsize=10))
   
   ### Main model string  #####----------------------------------------------------------------------------------------------------------------------------------
   
@@ -437,30 +442,27 @@ surveys <- "for(i in 1:survey_count){
 
 indicators <- "
 
-      # priors for nonet prop
-      alpha_nonet_prop ~ dnorm(alpha_nonet_prop_mean, alpha_nonet_prop_sd^-2) 
-      p1_nonet_prop ~ dnorm(p1_nonet_prop_mean, p1_nonet_prop_sd^-2) 
-      p2_nonet_prop ~ dnorm(p2_nonet_prop_mean, p2_nonet_prop_sd^-2) 
-      b1_nonet_prop ~ dnorm(b1_nonet_prop_mean, b1_nonet_prop_sd^-2) 
-      b2_nonet_prop ~ dnorm(b2_nonet_prop_mean, b2_nonet_prop_sd^-2) 
-      b3_nonet_prop ~ dnorm(b3_nonet_prop_mean, b3_nonet_prop_sd^-2) 
+      nonet_trace ~ dunif(1,5000)
+			nonet_sample <- round(nonet_trace)
+
+			mean_net_trace ~ dunif(1,5000)
+			mean_net_sample <- round(mean_net_trace)
       
       # priors for mean nets
       for(i in 1:max_hhsize){
-			  alpha_mean_nets[i] ~ dnorm(alpha_mean_nets_mean[i], alpha_mean_nets_sd[i]^-2)
-			  beta_mean_nets[i] ~ dnorm(beta_mean_nets_mean[i], beta_mean_nets_sd[i]^-2)
+			  alpha_mean_nets[i] <- mean_net_counts_intercept[mean_net_sample, i]
+			  beta_mean_nets[i] <- mean_net_counts_slope[mean_net_sample, i]
 			}
       
       for (i in 1:quarter_count){
         for (j in 1:max_hhsize){
-          nonet_prop_est[i,j] <- alpha_nonet_prop + p1_nonet_prop*j + p2_nonet_prop*pow(j,2) + b1_nonet_prop*total_percapita_nets[i] + b2_nonet_prop*pow(total_percapita_nets[i],2) + b3_nonet_prop*pow(total_percapita_nets[i],3)
+          nonet_prop_est[i,j] <- alpha_nonet_prop[nonet_sample] + p1_nonet_prop[nonet_sample]*j + p2_nonet_prop[nonet_sample]*pow(j,2) + b1_nonet_prop[nonet_sample]*total_percapita_nets[i] + b2_nonet_prop[nonet_sample]*pow(total_percapita_nets[i],2) + b3_nonet_prop[nonet_sample]*pow(total_percapita_nets[i],3)
           mean_net_count_est[i,j] <- alpha_mean_nets[j] + beta_mean_nets[j]*total_percapita_nets[i]
         }
       }
 
 "
 # test_snippet(paste( model_preface, nmcp_llins, nmcp_citns, annual_stock_and_flow, llin_quarterly, citn_quarterly, accounting, indicators, model_suffix), test_data = main_input_list)
-
 
 if(any(is.na(main_input_list$survey_llin_sd)) | any(is.na(main_input_list$survey_citn_sd))){
   full_model_string <- paste(model_preface, 
@@ -671,7 +673,7 @@ package_load(c("data.table","raster","rjags", "zoo", "ggplot2"))
 
 if(Sys.getenv("main_dir")=="") {
   nmcp_manu_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who"
-  main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20191031"
+  main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20191118"
   out_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/testing"
   this_country <- "KEN"
 } else {
