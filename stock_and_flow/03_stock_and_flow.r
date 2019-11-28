@@ -587,7 +587,6 @@ posterior_densities <- lapply(uncertainty_vals, function(this_name){
 })
 posterior_densities <- rbindlist(posterior_densities)
 
-# todo: net half-lives
 
 
 ### Indicators  #####----------------------------------------------------------------------------------------------------------------------------------
