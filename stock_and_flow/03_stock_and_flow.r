@@ -57,6 +57,9 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   # From 02a_prep_stock_and_flow: survey data
   survey_data <- fread(file.path(main_dir, "prepped_survey_data.csv"))
   
+  # TEST: Remove mystery 2011 SLE 
+  survey_data <- survey_data[surveyid!="SierraLeone2011"]
+  
   # subset data
   this_survey_data <- survey_data[iso3 %in% this_country,]
   this_manufacturer_llins <- manufacturer_llins[ISO3==this_country]
@@ -341,7 +344,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
           k_llin <- 20 
           
           # allow rate of loss to vary before and after the cutoff loss_function_pivot_quarter, but only so much
-          # TEST: only one citn loss rate
+          # TEST: only one llin loss rate
           L_llin[1] ~ dunif(4,20.7)
           # L_llin[2] ~ dunif(L_llin[1]-2.5, L_llin[1]+2.5)
           L_llin[2] <- L_llin[1]
@@ -555,7 +558,8 @@ toc <- Sys.time()
 time_elapsed <- toc-tic
 print(paste("Time elapsed for model fitting:", time_elapsed))
 
-
+time_df <- data.table(iso3=this_country, time=time_elapsed)
+write.csv(time_df, file=file.path(out_dir, paste0(this_country, "_time.csv")), row.names = F)
 
 ### Extract values  #####----------------------------------------------------------------------------------------------------------------------------------
 
@@ -662,7 +666,7 @@ save(list = ls(all.names = TRUE), file = file.path(out_dir, paste0(this_country,
 
 }
 
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-8 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20191118 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191122_test_ind_priors --command 'cd ${CODE}; Rscript 03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list_TESTING.tsv
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-8 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20191118 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191127_single_loss_fn --command 'cd ${CODE}; Rscript 03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list.tsv
 
 package_load <- function(package_list){
   # package installation/loading
