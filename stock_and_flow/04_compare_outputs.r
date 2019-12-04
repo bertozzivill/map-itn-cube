@@ -22,6 +22,7 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
   reference_dir <- file.path(base_dir, model_dirs[[1]])
   
   countries <- gsub("([A-Z]{3})_all_output\\.RData", "\\1", list.files(reference_dir)[list.files(reference_dir) %like% ".RData"])
+  countries <- countries[nchar(countries)==3]
   
   # start list to store summary details
   half_life_comparison <- list()

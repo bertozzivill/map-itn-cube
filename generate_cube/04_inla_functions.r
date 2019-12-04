@@ -111,9 +111,8 @@ run_inla <- function(data, outcome_var, cov_vars, start_year, end_year){
   stack_est<-inla.stack(stack_est)
   
   model_formula<- as.formula(paste(
-    paste("response ~ -1 + Intercept  + "),
-    paste("f(field, model=spde_matern, group=field.group, control.group=list(model='ar1')) + ",sep=""),
-    paste(cov_vars,collapse="+"),
+    "response ~ -1 + Intercept  + f(field, model=spde_matern, group=field.group, control.group=list(model='ar1')) + ",
+    paste(cov_vars, collapse="+"),
     sep=""))
   
   #-- Call INLA and get results --#
@@ -121,10 +120,10 @@ run_inla <- function(data, outcome_var, cov_vars, start_year, end_year){
                       data=inla.stack.data(stack_est),
                       family=c("gaussian"),
                       control.predictor=list(A=inla.stack.A(stack_est), compute=TRUE,quantiles=NULL),
-                      control.compute=list(cpo=TRUE,waic=TRUE),
+                      control.compute=list(cpo=TRUE,waic=TRUE, config=TRUE),
                       keep=FALSE, verbose=TRUE,
                       control.inla= list(strategy = "gaussian",
-                                         int.strategy="ccd", # close composite design ?
+                                         int.strategy="ccd",
                                          verbose=TRUE,
                                          step.factor=1,
                                          stupid.search=FALSE)
