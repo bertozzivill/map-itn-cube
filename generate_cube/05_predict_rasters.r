@@ -143,15 +143,15 @@ predict_rasters <- function(input_dir, func_dir, cov_dir, main_indir, main_outdi
                                                       by=list(iso3, year, cellnumber)]
     summary_access <- summary_access[order(cellnumber)]
     
-    # save monthly rasters
-    print("saving monthly access")
-    for (this_month in 1:12){
-      this_access_map <-  copy(national_raster)
-      this_access <- acc_dev_predictions_transformed[month==this_month]
-      this_access_map[this_access$cellnumber] <- this_access$access
-      this_access_map[!is.na(national_raster) & is.na(this_access_map)] <- 0
-      writeRaster(this_access_map, file.path(out_dir, "monthly_access", paste0("ITN_",this_year,  ".", this_month, ".ACC.tif")),NAflag=-9999,overwrite=TRUE)
-    }
+    # # save monthly rasters
+    # print("saving monthly access")
+    # for (this_month in 1:12){
+    #   this_access_map <-  copy(national_raster)
+    #   this_access <- acc_dev_predictions_transformed[month==this_month]
+    #   this_access_map[this_access$cellnumber] <- this_access$access
+    #   this_access_map[!is.na(national_raster) & is.na(this_access_map)] <- 0
+    #   writeRaster(this_access_map, file.path(out_dir, "monthly_access", paste0("ITN_",this_year,  ".", this_month, ".ACC.tif")),NAflag=-9999,overwrite=TRUE)
+    # }
     
     access_map <- copy(national_raster)
     access_map[summary_access$cellnumber] <- summary_access$access

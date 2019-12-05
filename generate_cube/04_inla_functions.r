@@ -120,7 +120,7 @@ run_inla <- function(data, outcome_var, cov_vars, start_year, end_year){
                       data=inla.stack.data(stack_est),
                       family=c("gaussian"),
                       control.predictor=list(A=inla.stack.A(stack_est), compute=TRUE,quantiles=NULL),
-                      control.compute=list(cpo=TRUE,waic=TRUE, config=TRUE),
+                      control.compute=list(cpo=TRUE,waic=TRUE, config=F), # set config to TRUE when ready to run uncertainty
                       keep=FALSE, verbose=TRUE,
                       control.inla= list(strategy = "gaussian",
                                          int.strategy="ccd",

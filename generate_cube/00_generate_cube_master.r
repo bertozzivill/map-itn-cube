@@ -27,7 +27,7 @@ package_load(c("zoo","raster","VGAM", "doParallel", "data.table", "lubridate", "
                "rgdal", "INLA", "RColorBrewer", "cvTools", "boot", "stringr", "dismo", "gbm", "pryr"))
 
 # current dsub:
-# dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-highmem-64 --disk-size 400 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20190807 func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input CODE=gs://map_users/amelia/itn/code/generate_cube/00_generate_cube_master.r --output-recursive main_dir=gs://map_users/amelia/itn/itn_cube/results/20191204_single_loss_fn --command 'Rscript ${CODE}'
+# dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-highmem-64 --disk-size 400 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20190807 func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input CODE=gs://map_users/amelia/itn/code/generate_cube/00_generate_cube_master.r --output-recursive main_dir=gs://map_users/amelia/itn/itn_cube/results/20191204_stripped_covariates --command 'Rscript ${CODE}'
 
 ##  Environment Prep  ------------------------------------------------------------
 input_dir <- Sys.getenv("input_dir")
@@ -69,7 +69,7 @@ time_passed(tic, toc)
 print("STEP 4: Running access deviation and use gap regressions")
 tic <- Sys.time()
 source(file.path(func_dir, "04_dev_and_gap.r"))
-run_dev_gap_models(input_dir, func_dir, main_indir=main_dir, main_outdir=main_dir, start_year, end_year)
+run_dev_gap_models(input_dir, func_dir, main_indir=main_dir, main_outdir=main_dir, start_year, end_year+1)
 toc <- Sys.time()
 time_passed(tic, toc)
 
