@@ -22,8 +22,8 @@ package_load <- function(package_list){
 package_load(c( "raster", "data.table", "rasterVis", "stats", "RColorBrewer", "gridExtra", "ggplot2"))
 
 if(Sys.getenv("func_dir")=="") {
-  new_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190808_new_landcover/"
-  old_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190807_new_stockflow/"
+  new_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20191204_stripped_covariates/"
+  old_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20191024_refactored_stockflow/"
   out_path <- file.path(new_dir, "05_predictions/view_changes.pdf")
   func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
 } else {
@@ -226,12 +226,15 @@ for (this_name in names(new_models)){
   old_hyperpar[, type:="Old"]
 
   all_toplot <- rbind(new_fixed, old_fixed)
-  all_toplot[, cov_id:=rep(1:length(unique(cov)), 2)]
-  all_toplot <- melt.data.table(all_toplot, id.vars=c("type", "cov", "cov_id"))
+  # all_toplot[, cov_id:=rep(1:length(unique(cov)), 2)]
+  # all_toplot <- melt.data.table(all_toplot, id.vars=c("type", "cov", "cov_id"))
 
-  diff_plot <- ggplot(all_toplot, aes(x=value, y=cov)) +
-                geom_point(aes(color=type)) +
-                facet_wrap(~variable) +
+  setnames(all_toplot, c("0.025quant", "0.5quant", "0.975quant"), c("quant_025", "quant_50", "quant_975"))
+  diff_plot <- ggplot(all_toplot, aes(x=mean, y=cov)) +
+                geom_point(aes(color=type), alpha=0.75) +
+                geom_errorbarh(aes(color=type, xmin=quant_025, xmax=quant_975), alpha=0.75) +
+                # facet_wrap(~variable) +
+                coord_cartesian(xlim=c(-2.5, 2.5)) + 
                 labs(title=paste("INLA comparision:", this_name),
                      x="Value",
                      y="") +
@@ -241,7 +244,6 @@ for (this_name in names(new_models)){
   print(diff_plot)
 
 }
-
 
 # 05: .tifs
 print("comparing old and new raster files")

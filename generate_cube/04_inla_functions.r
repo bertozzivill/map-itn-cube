@@ -90,6 +90,7 @@ run_inla <- function(data, outcome_var, cov_vars, start_year, end_year){
   # prep data for model fitting
   cov_list<-data[, cov_vars, with=F]
   cov_list$time <- data$capped_time
+  cov_list$iso3 <- data$iso3 
   cov_list <-as.list(cov_list)
   
   # generate observation matrix
@@ -112,6 +113,7 @@ run_inla <- function(data, outcome_var, cov_vars, start_year, end_year){
   
   model_formula<- as.formula(paste(
     "response ~ -1 + Intercept  + f(field, model=spde_matern, group=field.group, control.group=list(model='ar1')) + ",
+    "f(iso3, model='iid') +", # add random effect
     paste(cov_vars, collapse="+"),
     sep=""))
   
