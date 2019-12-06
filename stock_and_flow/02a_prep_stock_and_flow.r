@@ -21,7 +21,7 @@ n.iter=50000
 thin=10
 
 source("jags_functions.r")
-main_subdir <- "20191118"
+main_subdir <- "20191205"
 main_dir <- file.path("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep", main_subdir)
 input_dir <- file.path(main_dir, "../../00_survey_nmcp_manufacturer")
 
@@ -138,6 +138,29 @@ write.csv(summary_table, file.path(main_dir, "summary_table_intermediate.csv"), 
 ### Combine and process all surveys #####----------------------------------------------------------------------------------------------------------------------------------
 
 survey_data <- rbind(survey_data,all_to_append)
-survey_data <- survey_data[order(survey_data[,'date']),]
+survey_data <- survey_data[order(iso3, date),]
+
+
+### Assign a random "order" variable for sensitivity analysis #####----------------------------------------------------------------------------------------------------------------------------------
+set.seed(92)
+survey_data[, chron_order:=seq_along(date), by="iso3"]
+survey_data[, rev_chron_order:=rev(seq_along(date)), by="iso3"]
+survey_data[, random_order:=sample(chron_order), by="iso3"]
 
 write.csv(survey_data, file.path(main_dir, "prepped_survey_data.csv"), row.names=F)
+
+### Generate a submission tsv for sensitivity analysis (save this to your repo) #####----------------------------------------------------------------------------------------------------------------------------------
+
+for_tsv <- survey_data[, list(survey_count=chron_order, tot_count=.N), by="iso3"]
+# keep only countries with over 5 surveys, drop final count (we already run that, it's the "full" version)
+for_tsv <- for_tsv[survey_count<tot_count & tot_count>5, list(this_country=iso3, survey_count)]
+base_count <- nrow(for_tsv)
+
+# replicate, add order_type
+for_tsv <- rbindlist(list(for_tsv, for_tsv, for_tsv))
+for_tsv[, order_type:=rep(c("chron_order", "rev_chron_order", "random_order"), each=base_count)]
+write.table(for_tsv, file.path(main_dir, "batch_sensitivity.tsv"), quote=FALSE, sep='\t', row.names=F)
+
+
+
+

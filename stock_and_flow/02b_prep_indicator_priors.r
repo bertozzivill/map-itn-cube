@@ -1,7 +1,7 @@
 ###############################################################################################################
 ## prep_priors.r
 ## Amelia Bertozzi-Villa
-## Samir Bhatt
+## Samir Bhatt 
 ## September 2019
 ## 
 ## Adapted from "indicator stan prior.r"-- find prior estimates for prop of people with no nets and 
@@ -28,7 +28,7 @@ emplogit <- function (y, eps = 1e-3){
   log((eps + y)/(1 - y + eps))
 } 
 
-main_subdir <- "20191118"
+main_subdir <- "20191205"
 main_dir <- file.path("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep", main_subdir)
 
 ### Read in all data #####----------------------------------------------------------------------------------------------------------------------------------
