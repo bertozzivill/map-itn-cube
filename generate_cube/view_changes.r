@@ -8,7 +8,7 @@
 ## 
 ##############################################################################################################
 
-# dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive old_dir=gs://map_users/amelia/itn/itn_cube/results/20191204_stripped_covariates new_dir=gs://map_users/amelia/itn/itn_cube/results/20191205_add_country_RE/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input CODE=gs://map_users/amelia/itn/code/generate_cube/view_changes.r --output out_path=gs://map_users/amelia/itn/itn_cube/results/20191205_add_country_RE/compare_changes.pdf --command 'Rscript ${CODE}'
+# dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive old_dir=gs://map_users/amelia/itn/itn_cube/results/20191206_covselect_all_covs/ new_dir=gs://map_users/amelia/itn/itn_cube/results/20191207_covselect_no_landcover/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input CODE=gs://map_users/amelia/itn/code/generate_cube/view_changes.r --output out_path=gs://map_users/amelia/itn/itn_cube/results/20191207_covselect_no_landcover/compare_changes.pdf --command 'Rscript ${CODE}'
 
 rm(list=ls())
 
@@ -269,12 +269,22 @@ compare_tifs <- function(old_tif, new_tif, name="", cutoff=0.001){
   return(stackplot)
 }
 
-for (var_name in c("\\.MEAN", "\\.DEV", "\\.ACC", "\\.GAP", "\\.USE")){
+for (var_name in c("\\.MEAN", "\\.ACC", "\\.USE")){
   print(paste("predicting for", var_name))
   new_stack <- stack(file.path(new_raster_dir, new_files[grepl(var_name, new_files)]))
   old_stack <- stack(file.path(old_raster_dir, old_files[grepl(var_name, old_files)]))
   stack_diff <- new_stack - old_stack
   names(stack_diff) <- paste0(names(new_stack), ".DIFF")
+  
+  # same as custom palette from plot_results.r
+  divpal <- c("#524710", "#514B11", "#4F4F13", "#4D5315", "#4B5717", "#4A5C18", "#48601A", "#46641C", "#45681E", "#456D25", "#46722B", "#467731", "#477C37", "#48813D", "#488543",
+   "#498A4A", "#498F50", "#4C9259", "#4F9563", "#52986D", "#559B77", "#589D82", "#5BA08C", "#5EA396", "#61A6A0", "#65A8A9", "#69AAAD", "#6CABB2", "#70ADB6", "#74AFBB",
+   "#78B0BF", "#7CB2C4", "#80B4C8", "#84B5CD", "#8CBAD2", "#94C0D7", "#9DC5DC", "#A5CBE1", "#AED1E6", "#B7D6EB", "#BFDCF0", "#C8E1F6", "#CEE5F9", "#D2E7FA", "#D6E9FA",
+   "#DAEAFB", "#DEECFC", "#E2EEFC", "#E6EFFD", "#EAF1FE", "#FBF1DF", "#FAECDA", "#F9E7D5", "#F7E2D0", "#F6DECE", "#F5D9CC", "#F4D5CA", "#F2D1C8", "#F1CDC7", "#F0C9C7",
+   "#EEC6C7", "#EDC2C7", "#EBBFC7", "#E9BBC7", "#E5B9C7", "#E69B99", "#E29899", "#DE9599", "#DB9299", "#D78F99", "#D48D99", "#D08A99", "#CD8799", "#C98499", "#C58299",
+   "#C27F99", "#BE7C99", "#BB7999", "#B77899", "#B37699", "#AF7599", "#AB739A", "#A7729A", "#A3719A", "#9F6F9B", "#9B6E9B", "#976D9B", "#936B9C", "#8F6A9C", "#8B689C",
+   "#87679C", "#83679C", "#7F669C", "#7C669C", "#78659C", "#74659C", "#70649B", "#6C649B", "#68639B", "#64639B")
+  
   
   # same as wpal("seaside", noblack = T) but mapsuite doesn't work on cloud
   seaside <- c("#F2E5C5", "#C7D990", "#8BD274", "#50C576", "#2AA989", "#1F819A", "#275293", "#31296F", "#270D37")
@@ -284,7 +294,7 @@ for (var_name in c("\\.MEAN", "\\.DEV", "\\.ACC", "\\.GAP", "\\.USE")){
     
     if (plot_idx==3){
       stackplot <- levelplot(this_stack,
-                             par.settings=rasterTheme(region=brewer.pal(10, "RdBu")), at=seq(-1,1,0.05),
+                             par.settings=rasterTheme(region= divpal), at=seq(-0.75,0.75, 0.025),
                              xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F)
     }else{
       stackplot <- levelplot(this_stack,
