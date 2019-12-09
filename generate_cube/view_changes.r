@@ -208,6 +208,8 @@ for (this_name in names(new_models)){
   new_hyperpar$cov<-rownames(new_hyperpar)
   new_hyperpar <- data.table(new_hyperpar)
   new_hyperpar[, type:="New"]
+  
+  new_waic <- new_model$waic$waic
 
   old_fixed <- old_model$summary.fixed
   old_fixed$cov<-rownames(old_fixed)
@@ -224,6 +226,8 @@ for (this_name in names(new_models)){
   old_hyperpar$cov<-rownames(old_hyperpar)
   old_hyperpar <- data.table(old_hyperpar)
   old_hyperpar[, type:="Old"]
+  
+  old_waic <- old_model$waic$waic
 
   all_toplot <- rbind(new_fixed, old_fixed)
   # all_toplot[, cov_id:=rep(1:length(unique(cov)), 2)]
@@ -235,7 +239,8 @@ for (this_name in names(new_models)){
                 geom_errorbarh(aes(color=type, xmin=quant_025, xmax=quant_975), alpha=0.75) +
                 # facet_wrap(~variable) +
                 coord_cartesian(xlim=c(-2.5, 2.5)) + 
-                labs(title=paste("INLA comparision:", this_name),
+                labs(title=paste("INLA comparision:", this_name, "\n", 
+                                 "Old WAIC:", old_waic, "New Waic", new_waic),
                      x="Value",
                      y="") +
                 theme(legend.position = "bottom",

@@ -72,7 +72,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
     
     print(this_survey_data)
   }
-  outdir_suffix <- ifelse(is.na(sensitivity_type), "", paste0("_", sensitivity_type))
+  outdir_suffix <- ifelse(is.na(sensitivity_type), "", paste0("_", sensitivity_survey_count, "_surveys_", sensitivity_type))
   
   ### Formulate means and confidence around survey data #####----------------------------------------------------------------------------------------------------------------------------------
   
@@ -105,13 +105,6 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
     this_survey_data <- merge(this_survey_data, this_pop[, list(year, population=total_pop)], by="year", all.x=T)
     
     totnet_calc_list <- c(as.list(this_survey_data), list(survey_count = nrow(this_survey_data)))
-    
-    # NOTE: I see no evidence that any of these surveys are not nationally representative; comment out
-    ########### ADJUSTMENT FOR SURVEYS NOT CONDUCTED NATIONALLY BUT ON A POPULATION AT RISK BASIS
-    # if(this_country=='Ethiopia') totnet_calc_list$population=c(68186507,75777180)
-    # if(this_country=='Namibia') totnet_calc_list$population[totnet_calc_list$names%in%'Namibia 2009']=1426602
-    # if(this_country=='Kenya') totnet_calc_list$population[totnet_calc_list$names%in%'Kenya 2007']=31148650
-    ###############################################################################################
     
     survey_model_string = '
 			model {
