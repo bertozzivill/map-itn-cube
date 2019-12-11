@@ -23,11 +23,7 @@ prep_stockandflow <- function(input_dir, func_dir, main_outdir){
   # this image contains quarterly national values for p0=p(hh has 0 nets) and p1=avg # of nets.
   # "out" is a list of length 40 (# of countries), where each list is itself a list of length 2 (p0 and p1).
   # Each p0 and p1 is a data frame with nrow=# of quarters and ncol=1:10 (for houshold sizes 1-10+)
-  load(file.path(input_dir, "net_probs_and_means.rData")) # contains an object namee "indicator_list" (list of stock and flow time series, named by iso3)
-  
-  # rename for clarity
-  net_probs_and_means <- indicator_list 
-  rm(indicator_list)
+  load(file.path(input_dir, "net_probs_and_means.rData")) # contains an object named "net_probs_and_means" (list of stock and flow time series, named by iso3)
   
   # format and interpolate stock and flow data 
   print("formatting stock and flow outputs")

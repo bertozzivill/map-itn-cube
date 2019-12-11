@@ -18,12 +18,13 @@ aggregate_indicators <- function(reference_dir, list_out_dir){
 
   ### Country Loop  #####----------------------------------------------------------------------------------------------------------------------------------
   
-  indicator_list <- lapply(countries, function(this_country){
+  net_probs_and_means <- lapply(countries, function(this_country){
     print(paste("Collecting output for", this_country))
     
     new_fname <- file.path(reference_dir, paste0(this_country, "_all_output.RData"))
     load(new_fname)
     
+    # TODO: leave or keep the final quarter?
     prop_no_nets <- model_estimates$nonet_prop_est
     mean_nets <- model_estimates$mean_net_count_est
     
@@ -33,9 +34,9 @@ aggregate_indicators <- function(reference_dir, list_out_dir){
     return(combined)
   })
 
-  names(indicator_list) <- countries
-  print(paste("indicator list has length", length(indicator_list)))
-  save(indicator_list, file=file.path(list_out_dir, "net_probs_and_means.rData"))
+  names(net_probs_and_means) <- countries
+  print(paste("indicator list has length", length(net_probs_and_means)))
+  save(net_probs_and_means, file=file.path(list_out_dir, "net_probs_and_means.rData"))
   
 } 
 

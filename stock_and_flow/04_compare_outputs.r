@@ -100,12 +100,7 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
                             
                           })
           net_loss_sig <- rbindlist(net_loss_sig)
-          
-          # # average last three years for plot
-          # for_plot_sig <- net_loss_sig[base_year>=(max(base_year)-2), list(iso3=this_country,
-          #                                                                  model=this_model_name,
-          #                                                                  sig=mean(sig),
-          #                                                                  half_life=mean(half_life)), by=c("net_type", "time")]
+        
         }else{ # static or two-level net loss
           net_loss_params <- all_model_estimates[[this_model_name]][c("k_llin", "L_llin", "k_citn", "L_citn")]
           
@@ -335,8 +330,8 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
       print(paste("No comparison file found for", this_country))
     }
     
-    time_dt <- fread(file.path(reference_dir, paste0(this_country, "_time.csv")))
-    timing_all <- list.append(timing_all, time_dt)
+    # time_dt <- fread(file.path(reference_dir, paste0(this_country, "_time.csv")))
+    # timing_all <- list.append(timing_all, time_dt)
     
   }
   
@@ -349,10 +344,11 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
   stock_all <- rbindlist(stock_all)
   
   save(nets_in_houses_all, survey_data_all, nmcp_data_all, stock_all, file=file.path(plot_dir, "for_plotting.RData"))
-  timing_all <- rbindlist(timing_all)
-  print("SAVING TIMING DATA")
-  print(file.path(plot_dir, "timing_all.csv"))
-  write.csv(timing_all, file=file.path(plot_dir, "timing_all.csv"), row.names=F)
+  
+  # timing_all <- rbindlist(timing_all)
+  # print("SAVING TIMING DATA")
+  # print(file.path(plot_dir, "timing_all.csv"))
+  # write.csv(timing_all, file=file.path(plot_dir, "timing_all.csv"), row.names=F)
   
   ### Plot all net loss sigmoids #####----------------------------------------------------------------------------------------------------------------------------------
 
@@ -452,9 +448,9 @@ if(Sys.getenv("model_dir_1")=="") {
   base_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/"
   func_dir <- "~/repos/map-itn-cube/stock_and_flow/"
   setwd(func_dir)
-  plot_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20191031_limit_L_variability"
+  plot_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20191209_clean_code"
   
-  model_dirs <- c("20191031_limit_L_variability")
+  model_dirs <- c("20191209_clean_code", "20191205_new_surveydata", "20191003_no_gp")
   
 } else {
   plot_dir <- Sys.getenv("plot_dir") 
