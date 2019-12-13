@@ -330,8 +330,8 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
       print(paste("No comparison file found for", this_country))
     }
     
-    # time_dt <- fread(file.path(reference_dir, paste0(this_country, "_time.csv")))
-    # timing_all <- list.append(timing_all, time_dt)
+    time_dt <- fread(file.path(reference_dir, paste0(this_country, "_time.csv")))
+    timing_all <- list.append(timing_all, time_dt)
     
   }
   
@@ -345,11 +345,11 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
   
   save(nets_in_houses_all, survey_data_all, nmcp_data_all, stock_all, file=file.path(plot_dir, "for_plotting.RData"))
   
-  # timing_all <- rbindlist(timing_all)
-  # print("SAVING TIMING DATA")
-  # print(file.path(plot_dir, "timing_all.csv"))
-  # write.csv(timing_all, file=file.path(plot_dir, "timing_all.csv"), row.names=F)
-  
+  timing_all <- rbindlist(timing_all)
+  print("SAVING TIMING DATA")
+  print(file.path(plot_dir, "timing_all.csv"))
+  write.csv(timing_all, file=file.path(plot_dir, "timing_all.csv"), row.names=F)
+
   ### Plot all net loss sigmoids #####----------------------------------------------------------------------------------------------------------------------------------
 
   print("plotting net retention curves")
@@ -415,7 +415,7 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
   
 }
 
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive model_dir_1=gs://map_users/amelia/itn/stock_and_flow/results/20191205_new_surveydata model_dir_2=gs://map_users/amelia/itn/stock_and_flow/results/20191127_single_loss_fn CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive plot_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191205_new_surveydata --command 'cd ${CODE}; Rscript 04_compare_outputs.r'
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive model_dir_1=gs://map_users/amelia/itn/stock_and_flow/results/20191209_clean_code model_dir_2=gs://map_users/amelia/itn/stock_and_flow/results/20191205_new_surveydata model_dir_3=gs://map_users/amelia/itn/stock_and_flow/results/20191003_no_gp CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive plot_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191209_clean_code --command 'cd ${CODE}; Rscript 04_compare_outputs.r'
 package_load <- function(package_list){
   # package installation/loading
   new_packages <- package_list[!(package_list %in% installed.packages()[,"Package"])]

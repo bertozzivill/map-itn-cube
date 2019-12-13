@@ -15,10 +15,10 @@ base_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/"
 func_dir <- "~/repos/map-itn-cube/stock_and_flow/"
 setwd(func_dir)
 source("jags_functions.r")
-plot_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20191207_sensitivity_test"
+plot_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20191210_clean_sensitivity_test"
 
-sensitivity_dir <- "20191207_sensitivity_test"
-reference_dir <- "20191205_new_surveydata"
+sensitivity_dir <- "20191210_clean_sensitivity_test"
+reference_dir <- "20191209_clean_code"
 
 out_label <- paste0("sensitivity_", sensitivity_dir, "_vs_", reference_dir)
 
@@ -61,36 +61,37 @@ extract_sensitivity_outputs <- function(in_fname){
   # Net crop time series
   survey_count <- main_input_list$survey_count
   uncertainty_vars <- c("quarterly_nets_in_houses_citn", "quarterly_nets_in_houses_llin")
-  nets_in_houses <- posterior_densities[metric %in% uncertainty_vars]
-  nets_in_houses <- nets_in_houses[order(metric, year)]
+  nets_in_houses <- rbindlist(lapply(uncertainty_vars, extract_posteriors, posterior_densities=raw_posterior_densities))
+  nets_in_houses <- nets_in_houses[order(variable, quarter)]
   nets_in_houses[, mean:= c(model_estimates$quarterly_nets_in_houses_citn, model_estimates$quarterly_nets_in_houses_llin)]
-  nets_in_houses[, net_type:= gsub("quarterly_nets_in_houses_", "", metric)]
+  nets_in_houses[, net_type:= gsub("quarterly_nets_in_houses_", "", variable)]
   nets_in_houses <- merge(nets_in_houses, half_lives, by="net_type", all.x=T)
   nets_in_houses <- nets_in_houses[, list(iso3=this_country,
                                           sensitivity_type=sensitivity_type,
                                           survey_count=survey_count,
                                           metric="net_crop",
                                           net_type,
-                                          date=year,
+                                          date=((quarter-1)/4+start_year),
                                           half_life, mean, lower, upper)]
-  # Survey points and uncertainty
-  model_survey_data <- data.table(iso3=this_country,
-                                  sensitivity_type=sensitivity_type,
-                                  survey_count=survey_count,
-                                  date=rep(this_survey_data$date, 2),
-                                  net_type = rep(c("llin", "citn"), each=survey_count),
-                                  svy_nets_mean = c(main_input_list$survey_llin_count, main_input_list$survey_citn_count),
-                                  svy_nets_lower = c(main_input_list$survey_llin_lowerlim, main_input_list$survey_citn_lowerlim),
-                                  svy_nets_upper = c(main_input_list$survey_llin_upperlim, main_input_list$survey_citn_upperlim),
-                                  quarter_start = rep(main_input_list$survey_quarter_start_indices, 2),
-                                  quarter_end = rep(main_input_list$survey_quarter_end_indices, 2),
-                                  quarter_prop_completed = rep(main_input_list$quarter_prop_completed, 2),
-                                  quarter_prop_remaining = rep(main_input_list$quarter_prop_remaining, 2),
-                                  chron_order = rep(this_survey_data$chron_order, 2),
-                                  rev_chron_order = rep(this_survey_data$rev_chron_order,2),
-                                  random_order = rep(this_survey_data$random_order, 2)
-  )
   
+  # Survey points and uncertainty from "survey_total_nets" object
+  model_survey_data <- survey_total_nets[, list(iso3=this_country,
+                                                sensitivity_type=sensitivity_type,
+                                                survey_count=survey_count,
+                                                date,
+                                                net_type,
+                                                svy_nets_mean=mean,
+                                                svy_nets_lower=lower_limit,
+                                                svy_nets_upper=upper_limit,
+                                                quarter_start = rep(main_input_list$survey_quarter_start_indices, 2),
+                                                quarter_end = rep(main_input_list$survey_quarter_end_indices, 2),
+                                                quarter_prop_completed = rep(main_input_list$quarter_prop_completed, 2),
+                                                quarter_prop_remaining = rep(main_input_list$quarter_prop_remaining, 2),
+                                                chron_order,
+                                                rev_chron_order,
+                                                random_order
+                                                )]
+
   return(list(net_crop=nets_in_houses,
               survey_data=model_survey_data))
   
