@@ -32,7 +32,7 @@ if(Sys.getenv("input_dir")=="") {
   main_outdir <- Sys.getenv("main_outdir")
 }
 
-prediction_years <- 2000:2019
+prediction_years <- 2000:2020
 
 # Functions ------------------------------------------------------------
 

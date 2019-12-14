@@ -22,7 +22,7 @@ disk_size <- 400
 core_dir <- "gs://map_users/amelia/itn/itn_cube/"
 cloud_func_dir <- "gs://map_users/amelia/itn/code/generate_cube/"
 cov_dir <- "gs://mastergrids_5km/"
-cov_outlabel <- "20190807"
+cov_outlabel <- "20191214"
 
 # machine options
 dsub_str <- "dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1"
