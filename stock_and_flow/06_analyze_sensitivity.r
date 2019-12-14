@@ -183,7 +183,7 @@ for (this_country in countries){
                                 geom_line(aes(y=mean), size=1) +
                                 geom_pointrange(data=reference_survey_data, aes(y=svy_nets_mean, ymin=svy_nets_lower, ymax=svy_nets_upper), alpha=0.85, color="black") + 
                                 geom_pointrange(data=survey_data, aes(y=svy_nets_mean, ymin=svy_nets_lower, ymax=svy_nets_upper), alpha=0.85) + 
-                                geom_text(data=mse[net_type=="llin" & error_type=="out_of_sample"], x=2005, y=max(reference_net_crop$mean), aes(label=paste0("RMSE:\n", rmse_millions))) + 
+                                geom_text(data=mse[net_type=="llin" & error_type=="out_of_sample"], x=2005, y=max(reference_net_crop$mean), aes(label=paste0("RMSE:\n", rmse_millions)), color="black") + 
                                 scale_shape_manual(values=c(15, 16)) + 
                                 theme_minimal() +
                                 theme(legend.position = "none") + 
@@ -214,7 +214,50 @@ for (this_country in countries){
     all_crop[[this_country]] <- rbind(net_crop, reference_net_crop)
 }
 graphics.off()
+
+gg_color_hue <- function(n) {
+  hues = seq(15, 375, length = n + 1)
+  hcl(h = hues, l = 65, c = 100)[1:n]
+}
+plot_colors <- c(gg_color_hue(2), "#778899")
+
 all_mse <- rbindlist(all_mse)
 all_crop <- rbindlist(all_crop)
+
+all_mse <- all_mse[sensitivity_type!="reference"]
+all_mse[, sensitivity_type:= factor(sensitivity_type, levels=c("Chronological", "Reverse Chronological", "Random"))]
+all_crop[, sensitivity_type:= factor(sensitivity_type, levels=c("Chronological", "Reverse Chronological", "Random", "reference"))]
+
+all_rmse_plot <- ggplot(all_mse[!sensitivity_type %in% c("reference") & error_type=="out_of_sample" & net_type=="llin"], aes(x=survey_count, y=rmse_millions, color=sensitivity_type)) + 
+                geom_point() + 
+                geom_line() + 
+                theme_minimal() + 
+                theme(legend.title =  element_blank()) + 
+                facet_grid(iso3~sensitivity_type, scales="free_y") + 
+                scale_color_manual(values=plot_colors) + 
+                scale_x_continuous(breaks=1:max(all_mse$survey_count)) + 
+                labs(x="Survey Count", 
+                     y="RMSE",
+                     title="Out-of-Sample RMSE for Sensitivity Analysis")
+
+all_half_lives <- unique(all_crop[net_type=="llin", list(iso3, sensitivity_type, survey_count, half_life)])
+all_halflife_plot <- ggplot(all_half_lives[!sensitivity_type %in% c("reference")], aes(x=survey_count, y=half_life, color=sensitivity_type)) + 
+                      geom_hline(data=all_half_lives[sensitivity_type=="reference", list(iso3, survey_count, half_life)], aes(yintercept=half_life), color="black") + 
+                      geom_point() + 
+                      geom_line() + 
+                      theme_minimal() +
+                      theme(legend.title =  element_blank()) + 
+                      facet_grid(iso3~sensitivity_type, scales="free_y") + 
+                      scale_color_manual(values=plot_colors) + 
+                      scale_x_continuous(breaks=1:max(all_half_lives$survey_count)) + 
+                      labs(x="Survey Count", 
+                           y="LLIN Half-Life (Years)",
+                           title="Half Life Sensitivity Analysis")
+
+pdf(file.path(plot_dir, "sensitivity_summary.pdf"), width=8.5, height=11)
+  print(all_rmse_plot)
+  print(all_halflife_plot)
+graphics.off()
+
 write.csv(all_mse, file=file.path(plot_dir, "all_mse_metrics.csv"), row.names=F)
 write.csv(all_crop, file=file.path(plot_dir, "all_net_crop.csv"), row.names=F)
