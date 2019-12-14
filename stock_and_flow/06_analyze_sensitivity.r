@@ -10,19 +10,29 @@
 rm(list=ls())
 library(data.table)
 library(ggplot2)
+library(gridExtra)
 
-base_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/"
-func_dir <- "~/repos/map-itn-cube/stock_and_flow/"
-setwd(func_dir)
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive sensitivity_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191211_full_sensitivity reference_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191209_clean_code CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive plot_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191211_full_sensitivity --command 'cd ${CODE}; Rscript 06_analyze_sensitivity.r'
+
+if(Sys.getenv("sensitivity_dir")=="") {
+  func_dir <- "~/repos/map-itn-cube/stock_and_flow/"
+  setwd(func_dir)
+  plot_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20191211_full_sensitivity"
+  
+  sensitivity_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20191211_full_sensitivity"
+  reference_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20191209_clean_code"
+  
+} else {
+  plot_dir <- Sys.getenv("plot_dir") 
+  sensitivity_dir <- Sys.getenv("sensitivity_dir") 
+  reference_dir <- Sys.getenv("reference_dir") 
+}
+
 source("jags_functions.r")
-plot_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20191210_clean_sensitivity_test"
-
-sensitivity_dir <- "20191210_clean_sensitivity_test"
-reference_dir <- "20191209_clean_code"
 
 out_label <- paste0("sensitivity_", sensitivity_dir, "_vs_", reference_dir)
 
-sensitivity_files <- list.files(file.path(base_dir, sensitivity_dir))
+sensitivity_files <- list.files(sensitivity_dir)
 sensitivity_files <- sensitivity_files[grep("([A-Z]{3})_all_output.*_order\\.RData", sensitivity_files)]
 countries <- unique(gsub("([A-Z]{3})_all_output.*_order\\.RData", "\\1", sensitivity_files))
 
@@ -97,14 +107,50 @@ extract_sensitivity_outputs <- function(in_fname){
   
 }
 
+calculate_mse <- function(mse_dt, reference_data){
+  
+  mse_dt <- mse_dt[order(sensitivity_type, survey_count, net_type, date)]
+  mse_dt[, quarter:=(date-2000)*4+1]
+  
+  mse_dt <- cbind(mse_dt[quarter %in% reference_data$quarter_start, list(iso3, sensitivity_type, survey_count, net_type, quarter_start=quarter, start_mean=mean)],
+                  mse_dt[quarter %in% reference_data$quarter_end, list(quarter_end=quarter, end_mean=mean)])
+  
+  sens_names <- unique(mse_dt$sensitivity_type)
+  if (length(sens_names)==1 & sens_names[[1]]=="reference"){
+    surveys_for_mse <- reference_data[, list(sensitivity_type="reference", net_type, quarter_start, quarter_end, svy_nets_mean,
+                                             quarter_prop_completed, quarter_prop_remaining, survey_index=chron_order)]
+  }else{
+    surveys_for_mse <- melt(reference_data, id.vars=c("net_type", "quarter_start", "quarter_end", "svy_nets_mean", "quarter_prop_completed", "quarter_prop_remaining"),
+                            measure.vars = c("chron_order", "rev_chron_order", "random_order"),
+                            variable.name="sensitivity_type",
+                            value.name="survey_index")
+  }
+  
+  mse_dt <- merge(mse_dt, surveys_for_mse, 
+                  by=c("sensitivity_type", "net_type", "quarter_start", "quarter_end"))
+  
+  mse_dt[, estimated_mean:=start_mean*quarter_prop_completed + end_mean*quarter_prop_remaining]
+  mse_dt[, error:= svy_nets_mean - estimated_mean]
+  mse_dt[, squared_error:= error*error]
+  mse_dt[, error_type:= ifelse(survey_index<=survey_count, "in_sample", "out_of_sample")]
+  mse <- mse_dt[, list(mse=mean(squared_error)), by=list(iso3, sensitivity_type, survey_count, error_type, net_type)]
+  mse <- mse[order(sensitivity_type, survey_count, net_type, error_type)]
+  mse[, rmse:= sqrt(mse)]
+  mse[, rmse_millions:= round(rmse/1000000, 2)]
+  
+  return(mse)
+}
 
+all_mse <- list()
+all_crop <- list()
 
+pdf(file.path(plot_dir, "sensitivity_plots.pdf"), width=8.5, height=11)
 for (this_country in countries){
   print(paste("analyzing sensitivity for", this_country))
   reference_fname <- paste0(this_country, "_all_output.RData")
   
   these_sensitivity_files <- sensitivity_files[sensitivity_files %like% this_country]
-  in_dirs <- file.path(base_dir, sensitivity_dir, these_sensitivity_files)
+  in_dirs <- file.path(sensitivity_dir, these_sensitivity_files)
   
   sensitivity_outputs <- lapply(in_dirs, extract_sensitivity_outputs)
  
@@ -115,70 +161,60 @@ for (this_country in countries){
     return(in_list[[2]])
   }))
   
-  net_crop[, sensitivity_type:= factor(sensitivity_type, levels=c("chron_order", "rev_chron_order", "random_order"))]
-  survey_data[, sensitivity_type:= factor(sensitivity_type, levels=c("chron_order", "rev_chron_order", "random_order"))]
-  
-  reference_outputs <- extract_sensitivity_outputs(file.path(base_dir, reference_dir, reference_fname))
+  reference_outputs <- extract_sensitivity_outputs(file.path(reference_dir, reference_fname))
   reference_net_crop <- reference_outputs[[1]]
   reference_survey_data <- reference_outputs[[2]]
-  reference_survey_data[, sensitivity_type:=NULL]
+  reference_survey_data[, c("sensitivity_type", "survey_count"):=NULL]
    
-  # todo: make into a function so you can do the same thing to the reference data
   # Mean Squared Error
-  for_mse <- copy(net_crop)
+  mse <- calculate_mse(net_crop, reference_survey_data)
+  reference_mse <- calculate_mse(reference_net_crop, reference_survey_data)
   
-  if (max(reference_survey_data$date)>max(for_mse$date)){
-    # replicate final quarter TODO: remove when you fix this bug
-    to_append <- for_mse[date==max(date)]
-    to_append[, date:=date+0.25]
-    for_mse <- rbind(for_mse, to_append)
-  }
-  
-  for_mse <- for_mse[order(sensitivity_type, survey_count, net_type, date)]
-  for_mse[, quarter:=(date-2000)*4+1]
-  
-  for_mse <- cbind(for_mse[quarter %in% reference_survey_data$quarter_start, list(sensitivity_type, survey_count, net_type, quarter_start=quarter, start_mean=mean)],
-                   for_mse[quarter %in% reference_survey_data$quarter_end, list(quarter_end=quarter, end_mean=mean)])
-  
-  surveys_for_mse <- melt(reference_survey_data, id.vars=c("net_type", "quarter_start", "quarter_end", "svy_nets_mean", "quarter_prop_completed", "quarter_prop_remaining"),
-                          measure.vars = c("chron_order", "rev_chron_order", "random_order"),
-                          variable.name="sensitivity_type",
-                          value.name="survey_index")
-  for_mse <- merge(for_mse, surveys_for_mse, 
-                   by=c("sensitivity_type", "net_type", "quarter_start", "quarter_end"))
-  
-  for_mse[, estimated_mean:=start_mean*quarter_prop_completed + end_mean*quarter_prop_remaining]
-  for_mse[, error:= svy_nets_mean - estimated_mean]
-  for_mse[, squared_error:= error*error]
-  for_mse[, error_type:= ifelse(survey_index<=survey_count, "in_sample", "out_of_sample")]
-  mse <- for_mse[, list(mse=mean(squared_error)), by=list(sensitivity_type, error_type, net_type)]
-  mse <- mse[order(sensitivity_type, net_type, error_type)]
-  mse[, rmse:= sqrt(mse)]
-  mse[, rmse_millions:= round(rmse/1000000, 2)]
-  
+  net_crop[, sensitivity_type:= factor(sensitivity_type, levels=c("chron_order", "rev_chron_order", "random_order"), 
+                                       labels=c("Chronological", "Reverse Chronological", "Random"))]
+  survey_data[, sensitivity_type:= factor(sensitivity_type, levels=c("chron_order", "rev_chron_order", "random_order"), 
+                                          labels=c("Chronological", "Reverse Chronological", "Random"))]
+  mse[, sensitivity_type:= factor(sensitivity_type, levels=c("chron_order", "rev_chron_order", "random_order"), 
+                                          labels=c("Chronological", "Reverse Chronological", "Random"))]
+
   ## Plotting 
-    ggplot(net_crop, aes(x=date, color=net_type, fill=net_type, shape=net_type)) +
-    geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.3) +
-    geom_line(aes(y=mean), size=1) +
-    geom_pointrange(data=reference_survey_data, aes(y=svy_nets_mean, ymin=svy_nets_lower, ymax=svy_nets_upper), alpha=0.85, color="black") + 
-    geom_pointrange(data=survey_data, aes(y=svy_nets_mean, ymin=svy_nets_lower, ymax=svy_nets_upper), alpha=0.85) + 
-    geom_text(data=mse[net_type=="llin" & error_type=="out_of_sample"], x=2005, y=6e+07, aes(label=paste0("RMSE:\n", rmse_millions))) + 
-    scale_shape_manual(values=c(15, 16)) + 
-    facet_grid(.~sensitivity_type) +
-    labs(title= paste("Sensitivity Analysis"),
-         x="Time",
-         y="Net count")
+    sensitivity_plot <- ggplot(net_crop, aes(x=date, color=net_type, fill=net_type, shape=net_type)) +
+                                geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.3) +
+                                geom_line(aes(y=mean), size=1) +
+                                geom_pointrange(data=reference_survey_data, aes(y=svy_nets_mean, ymin=svy_nets_lower, ymax=svy_nets_upper), alpha=0.85, color="black") + 
+                                geom_pointrange(data=survey_data, aes(y=svy_nets_mean, ymin=svy_nets_lower, ymax=svy_nets_upper), alpha=0.85) + 
+                                geom_text(data=mse[net_type=="llin" & error_type=="out_of_sample"], x=2005, y=max(reference_net_crop$mean), aes(label=paste0("RMSE:\n", rmse_millions))) + 
+                                scale_shape_manual(values=c(15, 16)) + 
+                                theme_minimal() +
+                                theme(legend.position = "none") + 
+                                facet_grid(survey_count~sensitivity_type) +
+                                labs(title= paste("Sensitivity Analysis:", this_country),
+                                     x="Time",
+                                     y="Net count")
     
-    ggplot(reference_net_crop, aes(x=date, color=net_type, fill=net_type, shape=net_type)) +
-      geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.3) +
-      geom_line(aes(y=mean), size=1) +
-      geom_pointrange(data=reference_survey_data, aes(y=svy_nets_mean, ymin=svy_nets_lower, ymax=svy_nets_upper), alpha=0.85) + 
-      scale_shape_manual(values=c(15, 16)) + 
-      labs(title= paste("All Data"),
-           x="Time",
-           y="Net count")
-  
+    reference_plot <- ggplot(reference_net_crop, aes(x=date, color=net_type, fill=net_type, shape=net_type)) +
+                              geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.3) +
+                              geom_line(aes(y=mean), size=1) +
+                              geom_pointrange(data=reference_survey_data, aes(y=svy_nets_mean, ymin=svy_nets_lower, ymax=svy_nets_upper), alpha=0.85) +
+                              geom_text(data=reference_mse[net_type=="llin"], x=2005, y=max(reference_net_crop$mean), aes(label=paste0("RMSE:\n", rmse_millions))) + 
+                              scale_shape_manual(values=c(15, 16)) +
+                              theme_minimal() +
+                              labs(title= paste("All Data"),
+                                   x="Time",
+                                   y="Net count")
+    
+    # lay <- rbind(c(1,1,1,1,1,NA,NA),
+    #              c(1,1,1,1,1,2,2),
+    #              c(1,1,1,1,1,NA,NA))
+    # 
+    # grid.arrange(grobs = list(sensitivity_plot, reference_plot), layout_matrix = lay)
+    print(sensitivity_plot)
+    
+    all_mse[[this_country]] <- rbind(mse, reference_mse)
+    all_crop[[this_country]] <- rbind(net_crop, reference_net_crop)
 }
-
-
-
+graphics.off()
+all_mse <- rbindlist(all_mse)
+all_crop <- rbindlist(all_crop)
+write.csv(all_mse, file=file.path(plot_dir, "all_mse_metrics.csv"), row.names=F)
+write.csv(all_crop, file=file.path(plot_dir, "all_net_crop.csv"), row.names=F)
