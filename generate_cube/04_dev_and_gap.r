@@ -35,9 +35,32 @@ run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, sta
   print(cov_names)
   
   # test restricting covariates
-  # cov_names <- cov_names[!cov_names %like% "Landcover"]
-  cov_names <- cov_names[!cov_names %like% "Snow_And_Ice"]
-  
+  cov_names <- cov_names[!cov_names %like% "Snow_And_Ice"] # all 0's for Africa
+  selected_cov_names <- list(access_dev=c("Aridity_Index_v2.Synoptic.Overall.Data.5km.mean",
+                                        "pf_seasonality",
+                                        "Landcover_2_Evergreen_Broadleaf_Forest",
+                                        "Landcover_4_Deciduous_Broadleaf_Forest",
+                                        "Landcover_10_Grasslands",
+                                        "Landcover_11_Permanent_Wetlands",
+                                        "Landcover_16_Barren_Or_Sparsely_Populated",
+                                        "Landcover_17_Water",
+                                        "EVI",
+                                        "TCW",
+                                        "TSI"
+                                        ),
+                           use_gap=c("Aridity_Index_v2.Synoptic.Overall.Data.5km.mean",
+                                     "pf_seasonality",
+                                     "Landcover_2_Evergreen_Broadleaf_Forest",
+                                     "Landcover_4_Deciduous_Broadleaf_Forest",
+                                     "Landcover_9_Savannas",
+                                     "Landcover_11_Permanent_Wetlands",
+                                     "Landcover_12_Croplands",
+                                     "Landcover_17_Water",
+                                     "EVI",
+                                     "TCW",
+                                     "TSI"))
+  cov_names <- unique(c(selected_cov_names[[1]], selected_cov_names[[2]]))
+
   # drop any covariates that are all one value
   for(cov in cov_names){
     uniques <- unique(data[[cov]])
@@ -89,7 +112,13 @@ run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, sta
   registerDoParallel(ncores-2)
   inla_outputs<-foreach(outcome_var=c("ihs_emp_access_dev", "ihs_gap2")) %dopar% {
     
-    inla_results <- run_inla(data, outcome_var, cov_names, start_year, end_year)
+    if (outcome_var %like% "access"){
+      these_cov_names <- selected_cov_names[["access_dev"]]
+    }else{
+      these_cov_names <- selected_cov_names[["use_gap"]]
+    }
+    
+    inla_results <- run_inla(data, outcome_var, these_cov_names, start_year, end_year)
     
     inla_results <- c(inla_results, theta=ifelse(outcome_var=="ihs_emp_access_dev", theta_acc, theta_use))
     
@@ -124,8 +153,8 @@ if (Sys.getenv("run_individually")!=""){
   
   if(Sys.getenv("input_dir")=="") {
     input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
-    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190808_new_landcover/"
-    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190808_new_landcover/"
+    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20191102_new_stockflow_data/"
+    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20191102_new_stockflow_data/"
     func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
   } else {
     input_dir <- Sys.getenv("input_dir")

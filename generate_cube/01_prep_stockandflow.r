@@ -25,6 +25,10 @@ prep_stockandflow <- function(input_dir, func_dir, main_outdir){
   # Each p0 and p1 is a data frame with nrow=# of quarters and ncol=1:10 (for houshold sizes 1-10+)
   load(file.path(input_dir, "net_probs_and_means.rData")) # contains an object named "net_probs_and_means" (list of stock and flow time series, named by iso3)
   
+  # rename for clarity	
+  net_probs_and_means <- indicator_list 	
+  rm(indicator_list)
+  
   # format and interpolate stock and flow data 
   print("formatting stock and flow outputs")
   stock_and_flow <- lapply(names(net_probs_and_means), function(this_iso){
