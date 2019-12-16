@@ -25,10 +25,6 @@ prep_stockandflow <- function(input_dir, func_dir, main_outdir){
   # Each p0 and p1 is a data frame with nrow=# of quarters and ncol=1:10 (for houshold sizes 1-10+)
   load(file.path(input_dir, "net_probs_and_means.rData")) # contains an object named "net_probs_and_means" (list of stock and flow time series, named by iso3)
   
-  # rename for clarity	
-  net_probs_and_means <- indicator_list 	
-  rm(indicator_list)
-  
   # format and interpolate stock and flow data 
   print("formatting stock and flow outputs")
   stock_and_flow <- lapply(names(net_probs_and_means), function(this_iso){
@@ -43,19 +39,9 @@ prep_stockandflow <- function(input_dir, func_dir, main_outdir){
     full_times <- seq(as.Date(paste0(start_year, "/1/15")), by = "month", length.out = (end_year-start_year)*12)
     monthly_times <- decimal_date(full_times)
     
-    # Replicate the final quarter of the stock and flow output to have an "anchor" for interpolation
-    extend_years <- lapply(1:2, function(idx){
-      subset <- rbind(country_list[,,idx], country_list[,,idx][nrow(country_list[,,idx]),])
-      return(subset)
-    })
-    updated_country_list <- array(c(extend_years[[1]], extend_years[[2]]), dim=c(nrow(extend_years[[1]]), ncol(extend_years[[1]]), 2))
-    new_quarterly_times <- seq(start_year, end_year, by=0.25)
-    rownames(updated_country_list) <- new_quarterly_times
-    colnames(updated_country_list) <- 1:ncol(updated_country_list)
-    
     # for p0 and p1, interpolate to monthly probability of no nets and monthly mean nets per household, respectively
     country_subset <- lapply(1:2, function(layer){
-      data.table(sapply(colnames(updated_country_list), function(col){approx(new_quarterly_times, updated_country_list[,col,layer], monthly_times)$y})) 
+      data.table(sapply(colnames(country_list), function(col){approx(quarterly_times, country_list[,col,layer], monthly_times)$y})) 
     })
     country_subset <- rbindlist(country_subset)
     
@@ -172,7 +158,7 @@ if (Sys.getenv("run_individually")!="" | exists("run_locally")){
   
   if(Sys.getenv("input_dir")=="") {
     input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
-    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20191023_local_refactoredstockflow/"
+    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20191216_local_testlongertime/"
     func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
   } else {
     input_dir <- Sys.getenv("input_dir")
