@@ -35,30 +35,9 @@ run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, sta
   print(cov_names)
   
   # test restricting covariates
-  cov_names <- cov_names[!cov_names %like% "Snow_And_Ice"] # all 0's for Africa
-  selected_cov_names <- list(access_dev=c("Aridity_Index_v2.Synoptic.Overall.Data.5km.mean",
-                                        "pf_seasonality",
-                                        "Landcover_2_Evergreen_Broadleaf_Forest",
-                                        "Landcover_4_Deciduous_Broadleaf_Forest",
-                                        "Landcover_10_Grasslands",
-                                        "Landcover_11_Permanent_Wetlands",
-                                        "Landcover_16_Barren_Or_Sparsely_Populated",
-                                        "Landcover_17_Water",
-                                        "EVI",
-                                        "TCW",
-                                        "TSI"
-                                        ),
-                           use_gap=c("Aridity_Index_v2.Synoptic.Overall.Data.5km.mean",
-                                     "pf_seasonality",
-                                     "Landcover_2_Evergreen_Broadleaf_Forest",
-                                     "Landcover_4_Deciduous_Broadleaf_Forest",
-                                     "Landcover_9_Savannas",
-                                     "Landcover_11_Permanent_Wetlands",
-                                     "Landcover_12_Croplands",
-                                     "Landcover_17_Water",
-                                     "EVI",
-                                     "TCW",
-                                     "TSI"))
+  cov_names <- cov_names[!cov_names %like% "Snow_And_Ice" & !cov_names %like% "Needleleaf"] # all 0's for Africa
+  selected_cov_names <- list(access_dev=cov_names,
+                           use_gap=cov_names)
   cov_names <- unique(c(selected_cov_names[[1]], selected_cov_names[[2]]))
 
   # drop any covariates that are all one value

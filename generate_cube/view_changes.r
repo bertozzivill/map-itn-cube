@@ -8,7 +8,7 @@
 ## 
 ##############################################################################################################
 
-# dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive old_dir=gs://map_users/amelia/itn/itn_cube/results/20191206_covselect_all_covs/ new_dir=gs://map_users/amelia/itn/itn_cube/results/20191214_covselect_refined_covs/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input CODE=gs://map_users/amelia/itn/code/generate_cube/view_changes.r --output out_path=gs://map_users/amelia/itn/itn_cube/results/20191214_covselect_refined_covs/compare_changes.pdf --command 'Rscript ${CODE}'
+# dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive old_dir=gs://map_users/amelia/itn/itn_cube/results/20191206_covselect_all_covs/ new_dir=gs://map_users/amelia/itn/itn_cube/results/20191207_covselect_no_landcover/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input CODE=gs://map_users/amelia/itn/code/generate_cube/view_changes.r --output out_path=gs://map_users/amelia/itn/itn_cube/results/20191207_covselect_no_landcover/compare_changes.pdf --command 'Rscript ${CODE}'
 
 rm(list=ls())
 
@@ -210,6 +210,7 @@ for (this_name in names(new_models)){
   new_hyperpar[, type:="New"]
   
   new_waic <- new_model$waic$waic
+  new_cpo <- mean(new_model$cpo$cpo)
 
   old_fixed <- old_model$summary.fixed
   old_fixed$cov<-rownames(old_fixed)
@@ -228,6 +229,7 @@ for (this_name in names(new_models)){
   old_hyperpar[, type:="Old"]
   
   old_waic <- old_model$waic$waic
+  old_cpo <- mean(old_model$cpo$cpo)
 
   all_toplot <- rbind(new_fixed, old_fixed)
   # all_toplot[, cov_id:=rep(1:length(unique(cov)), 2)]
@@ -240,7 +242,8 @@ for (this_name in names(new_models)){
                 # facet_wrap(~variable) +
                 coord_cartesian(xlim=c(-2.5, 2.5)) + 
                 labs(title=paste("INLA comparision:", this_name, "\n", 
-                                 "Old WAIC:", old_waic, "New Waic", new_waic),
+                                 "Old WAIC:", old_waic, "New WAIC:", new_waic, "\n",
+                                 "Old CPO:", old_cpo, "New CPO:", new_cpo),
                      x="Value",
                      y="") +
                 theme(legend.position = "bottom",
