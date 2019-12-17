@@ -49,7 +49,8 @@ run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, sta
                                           "Landcover_17_Water",
                                           "EVI",
                                           "TCW",
-                                          "TSI"
+                                          "TSI",
+                                          "Accessibility.2015.Annual.Data.5km.mean"
                               ),
                               use_gap=c("Aridity_Index_v2.Synoptic.Overall.Data.5km.mean",
                                         "pf_seasonality",
@@ -61,7 +62,8 @@ run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, sta
                                         "Landcover_17_Water",
                                         "EVI",
                                         "TCW",
-                                        "TSI"))
+                                        "TSI",
+                                        "Accessibility.2015.Annual.Data.5km.mean"))
   cov_names <- unique(c(selected_cov_names[[1]], selected_cov_names[[2]]))
 
   # drop any covariates that are all one value
