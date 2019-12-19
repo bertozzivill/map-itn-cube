@@ -7,7 +7,7 @@
 ## Main script for the stock and flow model
 ##############################################################################################################
 
-run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out_dir){
+run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out_dir, sensitivity_survey_count=NA, sensitivity_type=NA){
   
   print(paste("RUNNING STOCK AND FLOW FOR", this_country))
   
@@ -59,6 +59,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
   if (!is.na(sensitivity_survey_count)){
     print(paste("RUNNING SENSITIVITY ANALYSIS: ", sensitivity_survey_count, "SURVEYS, IN ", sensitivity_type))
     
+    sensitivity_survey_count <- as.integer(sensitivity_survey_count)
     setnames(this_survey_data, sensitivity_type, "this_order")
     this_survey_data <- this_survey_data[this_order<=sensitivity_survey_count]
     setnames(this_survey_data, "this_order", sensitivity_type)
@@ -554,7 +555,7 @@ save(list = ls(all.names = TRUE), file = file.path(out_dir, paste0(this_country,
 # dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highmem-2 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20191205 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191209_clean_code --command 'cd ${CODE}; Rscript 03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list.tsv
 
 # DSUB FOR SENSITIVITY ANALYSIS
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highmem-2 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20191205 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191211_full_sensitivity --command 'cd ${CODE}; Rscript 03_stock_and_flow.r ${this_country} ${survey_count} ${order_type}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_sensitivity.tsv
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highmem-2 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20191205 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191211_full_sensitivity --command 'cd ${CODE}; Rscript 03_stock_and_flow.r ${this_country} ${survey_count} ${order_type}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_sensitivity_TESTING.tsv
 
 
 package_load <- function(package_list){
@@ -570,9 +571,9 @@ if(Sys.getenv("main_dir")=="") {
   nmcp_manu_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who"
   main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20191205"
   out_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/testing"
-  this_country <- "NGA"
-  sensitivity_survey_count <- NA
-  sensitivity_type <- NA # "chron_order"
+  this_country <- "SEN"
+  sensitivity_survey_count <- 2
+  sensitivity_type <-  "chron_order"
 } else {
   main_dir <- Sys.getenv("main_dir")
   nmcp_manu_dir <- Sys.getenv("nmcp_manu_dir") 
@@ -591,7 +592,7 @@ gg_color_hue <- function(n) {
   hcl(h = hues, l = 65, c = 100)[1:n]
 }
 
-run_stock_and_flow(this_country, start_year, end_year, main_dir, out_dir)
+run_stock_and_flow(this_country, start_year, end_year, main_dir, out_dir, sensitivity_survey_count, sensitivity_type)
 
 
 
