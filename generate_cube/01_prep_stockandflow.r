@@ -91,7 +91,7 @@ prep_stockandflow <- function(input_dir, func_dir, main_outdir){
   # find household distribution across all surveys
   hh_dist_all <- find_hh_distribution(hh_sizes)
   
-  # find household distribution by country
+  # find household distribution by country, using hh_dist_all if there is no hh survey data available
   hh_distributions <- lapply(unique(stock_and_flow$iso3), function(this_iso){
     if (this_iso %in% unique(hh_sizes$iso3)){
       this_hh_dist <- find_hh_distribution(hh_sizes[iso3==this_iso])

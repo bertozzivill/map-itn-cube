@@ -21,12 +21,9 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
   setnames(iso_gaul_map, c("GAUL_CODE", "COUNTRY_ID", "NAME"), c("gaul", "iso3", "country"))
   
   # load household data and survey-to-country key, keep only those in country list
-  # HH<-fread(file.path(input_dir, "database/ALL_HH_Data_26072019.csv")) # todo: come back and delete cols we don't need. also rename this
-  
   HH <- fread(file.path(input_dir, "stock_and_flow/itn_hh_survey_data.csv"))
   
   # keep only the years and  columns we use
-  # temp: keep old unwieldy column names as a direct comparison to the pre-s&f refactored results
   
   HH<-HH[iso3 %in% unique(stock_and_flow_outputs$iso3), list(Survey.hh=SurveyId, 
                                                              Country=CountryName,
@@ -64,7 +61,6 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
   registerDoParallel(ncores-2)
   
   cluster_stats<-foreach(i=1:length(unique_surveys),.combine=rbind) %dopar% { 
-  # for (i in 1:length(unique_surveys)){
     this_survey<-unique_surveys[i]
     # print(this_survey)
     this_survey_data=HH[Survey.hh==this_survey,] # keep only household data for the survey in question
@@ -92,7 +88,7 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
       warning("Your stock and flow values did not merge properly")
     }
     
-    # weight stock and flow values by survey propotions to calculate survey-based access
+    # weight stock and flow values by survey proportions to calculate survey-based access
     household_props[, weighted_prob_no_nets:=hh_size_prop*stockflow_prob_no_nets]
     household_props[, weighted_prob_any_net:=hh_size_prop*(1-stockflow_prob_no_nets)]
     
@@ -121,10 +117,41 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
                                                   national_access=weighted.mean(stock_and_flow_access, n.individuals.that.slept.in.surveyed.hhs) # formerly Amean
     ),
     by=list(iso3, Cluster.hh, time, year, month)]
-     
-    summary_by_cluster <- summary_by_cluster[order(Cluster.hh)]
+  
     setnames(summary_by_cluster, "Cluster.hh", "cluster")
     
+    # the code above generates some "time" estimates that don't correspond to specific months--re-bin time to adjust this.
+    time_map <- unique(this_survey_data[, list(time, year, month)])
+    time_map <- time_map[order(time)]
+    time_map[,interval:=1:nrow(time_map)]
+    
+    summary_by_cluster[, count:=.N, by=cluster]
+    if (max(summary_by_cluster$count)>1){
+      print("repositioning time")
+      to_aggregate <- summary_by_cluster[count>1]
+      summary_by_cluster <- summary_by_cluster[count==1]
+      
+      to_aggregate <- to_aggregate[, list(survey=this_survey,
+                                                    time=weighted.mean(time, cluster_pop),
+                                                    lat=mean(lat),
+                                                    lon=mean(lon),
+                                                    access_count=sum(access_count), 
+                                                    cluster_pop=sum(cluster_pop), 
+                                                    use_count=sum(use_count),
+                                                    net_count=sum(net_count), 
+                                                    national_access=weighted.mean(national_access, cluster_pop),
+                                                    count=mean(count)
+      ),
+      by=list(iso3, cluster)]
+      to_aggregate[, interval:=findInterval(time, time_map$time)]
+      setnames(to_aggregate, "time", "old_time")
+      to_aggregate <- merge(to_aggregate, time_map, by="interval", all.x=T)
+      to_aggregate[, c("interval", "old_time"):=NULL]
+      summary_by_cluster <- rbind(summary_by_cluster, to_aggregate, use.names=T)
+    }
+    summary_by_cluster[, count:=NULL]
+    summary_by_cluster <- summary_by_cluster[order(cluster)]
+  
     return(summary_by_cluster)
   }
   
