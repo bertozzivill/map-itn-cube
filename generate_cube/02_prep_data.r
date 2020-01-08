@@ -130,15 +130,15 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
       print("repositioning time")
       to_aggregate <- summary_by_cluster[count>1]
       summary_by_cluster <- summary_by_cluster[count==1]
-      
+
       to_aggregate <- to_aggregate[, list(survey=this_survey,
                                                     time=weighted.mean(time, cluster_pop),
                                                     lat=mean(lat),
                                                     lon=mean(lon),
-                                                    access_count=sum(access_count), 
-                                                    cluster_pop=sum(cluster_pop), 
+                                                    access_count=sum(access_count),
+                                                    cluster_pop=sum(cluster_pop),
                                                     use_count=sum(use_count),
-                                                    net_count=sum(net_count), 
+                                                    net_count=sum(net_count),
                                                     national_access=weighted.mean(national_access, cluster_pop),
                                                     count=mean(count)
       ),
@@ -184,13 +184,11 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
   final_data$cellnumber<-cellnumbers 
   centroid_latlongs<-xyFromCell(national_raster, cellnumbers)
   
-  # TODO: check for data points that are duplicates of each other from different sources
-  
+
   # update lat/long values
   final_data[, lon:=centroid_latlongs[,1]]
   final_data[, lat:=centroid_latlongs[,2]]
   
-  # TODO: what to do about multiple surveys within a single pixel-quarter? What about pixels that span national boundaries?
   survey_map <- final_data[, list(survey, cellnumber, time)]
   survey_map[, survey_count:=length(unique(survey)), by=list(cellnumber, time)]
   print(paste(length(unique(survey_map[survey_count>1]$cellnumber)), "pixel-quarters have more than one survey! Keeping all data, but naming with the first survey for now."))
@@ -247,8 +245,8 @@ if (Sys.getenv("run_individually")!="" | exists("run_locally")){
   
   if(Sys.getenv("input_dir")=="") {
     input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
-    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20191023_local_refactoredstockflow/"
-    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20191023_local_refactoredstockflow/"
+    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200107_fix_cluster_agg/"
+    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200107_fix_cluster_agg/"
     func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
   } else {
     input_dir <- Sys.getenv("input_dir")

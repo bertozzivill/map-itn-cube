@@ -24,7 +24,6 @@ aggregate_indicators <- function(reference_dir, list_out_dir){
     new_fname <- file.path(reference_dir, paste0(this_country, "_all_output.RData"))
     load(new_fname)
     
-    # TODO: leave or keep the final quarter?
     prop_no_nets <- model_estimates$nonet_prop_est
     mean_nets <- model_estimates$mean_net_count_est
     
