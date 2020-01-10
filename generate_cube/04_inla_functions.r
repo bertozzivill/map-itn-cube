@@ -74,7 +74,7 @@ run_inla <- function(data, outcome_var, cov_vars, start_year, end_year){
   INLA:::inla.dynload.workaround() 
   
   # generate spatial mesh using unique xyz values 
-  # TODO: is this all xyz is used for?
+  
   spatial_mesh = inla.mesh.2d(loc= unique(data[, list(x,y,z)]),
                               cutoff=0.006,
                               min.angle=c(25,25),
