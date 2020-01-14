@@ -66,7 +66,7 @@ calc_access <- function(hh_props, max_nets=40, return_mean=F){
   # calculate access
   net_dist_test <- copy(net_dist)
   net_dist[, pop_weight:=hh_size*weighted_net_prob]
-  net_dist[, prop_in_bin:=pop_weight/sum(pop_weight)]
+  net_dist[, prop_in_bin:=pop_weight/sum(pop_weight)] # convert from proportions among household to proportions among the population
   net_dist[, access_weight:= pmin(2*net_count/hh_size, 1)]
   net_dist[, prop_with_access:=access_weight * prop_in_bin]
   

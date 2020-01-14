@@ -16,11 +16,11 @@ library(lubridate)
 
 rm(list=ls())
 
-out_subdir <- "20191205"
+out_subdir <- "20200110"
 
 main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/household_surveys"
 out_dir <- file.path("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep", out_subdir)
-dhs_dir <- "/Volumes/GoogleDrive/Shared drives/Data Gathering/Standard_MAP_DHS_Outputs/DHS_ITN_Data/Output/2019-11-28/standard_tables"
+dhs_dir <- "/Volumes/GoogleDrive/Shared drives/dhs-outputs/Standard_MAP_DHS_Outputs/DHS_ITN_Data/Output/2019-11-28/standard_tables"
 code_dir <-"/Users/bertozzivill/repos/map-itn-cube/stock_and_flow"
 
 dir.create(out_dir, showWarnings = F, recursive = T)
