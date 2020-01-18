@@ -18,6 +18,7 @@ predict_rasters <- function(input_dir, func_dir, cov_dir, main_indir, main_outdi
   if (!dir.exists(out_dir)){
     dir.create(out_dir)
     dir.create(file.path(out_dir, "monthly_access"))
+    dir.create(file.path(out_dir, "monthly_use"))
     }
   
   # TODO: load shapefiles and templates only when you're actually plotting (objects named World, Africa, Water, img)
@@ -143,15 +144,15 @@ predict_rasters <- function(input_dir, func_dir, cov_dir, main_indir, main_outdi
                                                       by=list(iso3, year, cellnumber)]
     summary_access <- summary_access[order(cellnumber)]
     
-    # # save monthly rasters
-    # print("saving monthly access")
-    # for (this_month in 1:12){
-    #   this_access_map <-  copy(national_raster)
-    #   this_access <- acc_dev_predictions_transformed[month==this_month]
-    #   this_access_map[this_access$cellnumber] <- this_access$access
-    #   this_access_map[!is.na(national_raster) & is.na(this_access_map)] <- 0
-    #   writeRaster(this_access_map, file.path(out_dir, "monthly_access", paste0("ITN_",this_year,  ".", this_month, ".ACC.tif")),NAflag=-9999,overwrite=TRUE)
-    # }
+    # save monthly access rasters
+    print("saving monthly access")
+    for (this_month in 1:12){
+      this_access_map <-  copy(national_raster)
+      this_access <- acc_dev_predictions_transformed[month==this_month]
+      this_access_map[this_access$cellnumber] <- this_access$access
+      this_access_map[!is.na(national_raster) & is.na(this_access_map)] <- 0
+      writeRaster(this_access_map, file.path(out_dir, "monthly_access", paste0("ITN_",this_year,  ".", this_month, ".ACC.tif")),NAflag=-9999,overwrite=TRUE)
+    }
     
     access_map <- copy(national_raster)
     access_map[summary_access$cellnumber] <- summary_access$access
@@ -206,6 +207,16 @@ predict_rasters <- function(input_dir, func_dir, cov_dir, main_indir, main_outdi
     print(paste(this_year, "writing use tifs"))
     writeRaster(use_map, file.path(out_dir, paste0("ITN_",this_year,".USE.tif")),NAflag=-9999,overwrite=TRUE)
     writeRaster(use_gap_map, file.path(out_dir, paste0("ITN_",this_year,".GAP.tif")),NAflag=-9999,overwrite=TRUE)
+    
+    # save monthly rasters of use
+    print("saving monthly use")
+    for (this_month in 1:12){
+      this_use_map <-  copy(national_raster)
+      this_use <- use_gap_predictions_transformed[month==this_month]
+      this_use_map[this_use$cellnumber] <- this_use$use
+      this_use_map[!is.na(national_raster) & is.na(this_use_map)] <- 0
+      writeRaster(this_use_map, file.path(out_dir, "monthly_use", paste0("ITN_",this_year,  ".", this_month, ".ACC.tif")),NAflag=-9999,overwrite=TRUE)
+    }
     
     # if (this_year %in% years_to_squash){
     #   print(paste(this_year, "squashing some countries to zero"))

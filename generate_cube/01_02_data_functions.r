@@ -73,14 +73,6 @@ calc_access <- function(hh_props, max_nets=40, return_mean=F){
   access_stats <- net_dist[, list(stock_and_flow_access=sum(prop_with_access)/sum(prop_in_bin)), by=hh_size] 
   all_access_stats <- sum(net_dist$prop_with_access)
   
-  # # calculate access OLD WAY
-  # net_dist[, prop_with_access:=net_count*2*weighted_net_prob]
-  # net_dist[, prop_in_bin:=hh_size*weighted_net_prob]
-  # net_dist[, prop_with_access:=pmin(prop_with_access, prop_in_bin)] # cap access proportion at proportion of population
-  # access_stats <- net_dist[, list(stock_and_flow_access=sum(prop_with_access)/sum(prop_in_bin)), by=hh_size] 
-  # all_access_stats <- sum(net_dist$prop_with_access)/sum(net_dist$prop_in_bin)
-  # 
-  
   if(return_mean){
     return(all_access_stats)
   }else{
