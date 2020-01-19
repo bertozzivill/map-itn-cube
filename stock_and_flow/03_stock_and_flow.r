@@ -7,7 +7,7 @@
 ## Main script for the stock and flow model
 ##############################################################################################################
 
-run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out_dir, sensitivity_survey_count=NA, sensitivity_type=NA){
+run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmcp_manu_dir, out_dir, sensitivity_survey_count=NA, sensitivity_type=NA){
   
   print(paste("RUNNING STOCK AND FLOW FOR", this_country))
   
@@ -173,8 +173,8 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
                             quarter_count = length(quarter_timesteps),
                             survey_count = totnet_calc_list$survey_count,
                             population = this_pop$total_pop
-    )
-  }
+      )
+    }
   
   ### Format NMCP reports  #####----------------------------------------------------------------------------------------------------------------------------------
   
@@ -305,257 +305,368 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, out
 						final_stock[year_idx] <- initial_stock[year_idx]-adjusted_llins_distributed[year_idx]	
 					}"
   
-  # loss functions and quarterly distribution-- see section 3.2.2.3
-  llin_quarterly <- 
-          "
-          #  stationary sigmoidal loss parameter
-          k_llin <- 20 
-          
-          # Rate of loss (specifically, L is the time at which loss=100%)
-          L_llin ~ dunif(4,20.7)
-          
-          # find proportions for quarterly llin distributions
-          for(j in 1:year_count){
-            quarter_draws_llin[j,1] ~ dunif(0,1)
-            quarter_draws_llin[j,2] ~ dunif(0,1)
-            quarter_draws_llin[j,3] ~ dunif(0,1)
-            quarter_draws_llin[j,4] ~ dunif(0,1)
-            quarter_draws_llin[j,5] <- sum(quarter_draws_llin[j,1:4])
+    # loss functions and quarterly distribution-- see section 3.2.2.3
+    llin_quarterly <- 
+            "
+            #  stationary sigmoidal loss parameter
+            k_llin <- 20 
             
-            quarter_fractions_llin[j,1] <- quarter_draws_llin[j,1]/quarter_draws_llin[j,5]
-            quarter_fractions_llin[j,2] <- quarter_draws_llin[j,2]/quarter_draws_llin[j,5]
-            quarter_fractions_llin[j,3] <- quarter_draws_llin[j,3]/quarter_draws_llin[j,5]
-            quarter_fractions_llin[j,4] <- quarter_draws_llin[j,4]/quarter_draws_llin[j,5]
-          }
-          
-          # distribute llins across quarters; 
-          # here '(round(j/4+0.3))' is a way of finding year index and '(round(j/4+0.3)-1))*4)' is a way of finding modulo 4 quarter index
-          for (j in 1:(quarter_count-1)){
-            llins_distributed_quarterly[j] <- adjusted_llins_distributed[(round(j/4+0.3))] * quarter_fractions_llin[(round(j/4+0.3)), (((j/4)-(round(j/4+0.3)-1))*4) ]
-          }
-          # let the final quarter, used only for interpolation, be equal to the quarter before it
-          llins_distributed_quarterly[quarter_count] <- llins_distributed_quarterly[quarter_count-1]
-          
-          # calculate loss to find expected nets in homes per quarter
-          for (j in 1:quarter_count){
-            for (i in 1:quarter_count){
-              # sigmoid:
-              quarterly_nets_remaining_matrix_llin[i,j] <- ifelse(j>i, 0, ifelse(time_since_distribution[i,j] >= L_llin, 0, llins_distributed_quarterly[j] * exp(k_llin - k_llin/(1-(time_since_distribution[i,j]/L_llin)^2))))
-            }
-          }
+            # Rate of loss (specifically, L is the time at which loss=100%)
+            L_llin ~ dunif(4,20.7)
             
-          "
-citn_quarterly <- 
-          " 
-          #  stationary sigmoidal loss parameter
-          k_citn <- 20 
-          
-          # Rate of loss (specifically, L is the time at which loss=100%)
-          L_citn ~ dunif(4,20.7)
-            
-          # find proportions for quarterly citn distributions
-          for(j in 1:year_count){
-              quarter_draws_citn[j,1] ~ dunif(0,1)
-              quarter_draws_citn[j,2] ~ dunif(0,1)
-              quarter_draws_citn[j,3] ~ dunif(0,1)
-              quarter_draws_citn[j,4] ~ dunif(0,1)
-              quarter_draws_citn[j,5] <- sum(quarter_draws_citn[j,1:4])
+            # find proportions for quarterly llin distributions
+            for(j in 1:year_count){
+              quarter_draws_llin[j,1] ~ dunif(0,1)
+              quarter_draws_llin[j,2] ~ dunif(0,1)
+              quarter_draws_llin[j,3] ~ dunif(0,1)
+              quarter_draws_llin[j,4] ~ dunif(0,1)
+              quarter_draws_llin[j,5] <- sum(quarter_draws_llin[j,1:4])
               
-              quarter_fractions_citn[j,1] <- quarter_draws_citn[j,1]/quarter_draws_citn[j,5]
-              quarter_fractions_citn[j,2] <- quarter_draws_citn[j,2]/quarter_draws_citn[j,5]
-              quarter_fractions_citn[j,3] <- quarter_draws_citn[j,3]/quarter_draws_citn[j,5]
-              quarter_fractions_citn[j,4] <- quarter_draws_citn[j,4]/quarter_draws_citn[j,5]
+              quarter_fractions_llin[j,1] <- quarter_draws_llin[j,1]/quarter_draws_llin[j,5]
+              quarter_fractions_llin[j,2] <- quarter_draws_llin[j,2]/quarter_draws_llin[j,5]
+              quarter_fractions_llin[j,3] <- quarter_draws_llin[j,3]/quarter_draws_llin[j,5]
+              quarter_fractions_llin[j,4] <- quarter_draws_llin[j,4]/quarter_draws_llin[j,5]
             }
             
-            # distribute citns across quarters
+            # distribute llins across quarters; 
+            # here '(round(j/4+0.3))' is a way of finding year index and '(round(j/4+0.3)-1))*4)' is a way of finding modulo 4 quarter index
             for (j in 1:(quarter_count-1)){
-              citns_distributed_quarterly[j] <- nmcp_count_citn_est[(round(j/4+0.3))] * quarter_fractions_citn[(round(j/4+0.3)), (((j/4)-(round(j/4+0.3)-1))*4) ] 
+              llins_distributed_quarterly[j] <- adjusted_llins_distributed[(round(j/4+0.3))] * quarter_fractions_llin[(round(j/4+0.3)), (((j/4)-(round(j/4+0.3)-1))*4) ]
             }
             # let the final quarter, used only for interpolation, be equal to the quarter before it
-            citns_distributed_quarterly[quarter_count] <- citns_distributed_quarterly[quarter_count-1]
+            llins_distributed_quarterly[quarter_count] <- llins_distributed_quarterly[quarter_count-1]
             
             # calculate loss to find expected nets in homes per quarter
             for (j in 1:quarter_count){
               for (i in 1:quarter_count){
-              # sigm:
-              quarterly_nets_remaining_matrix_citn[i,j] <- ifelse(j>i, 0, ifelse(time_since_distribution[i,j] >= L_citn, 0, citns_distributed_quarterly[j] * exp(k_citn - k_citn/(1-(time_since_distribution[i,j]/L_citn)^2))))
+                # sigmoid:
+                quarterly_nets_remaining_matrix_llin[i,j] <- ifelse(j>i, 0, ifelse(time_since_distribution[i,j] >= L_llin, 0, llins_distributed_quarterly[j] * exp(k_llin - k_llin/(1-(time_since_distribution[i,j]/L_llin)^2))))
               }
             }
+              
+            "
+  citn_quarterly <- 
+            " 
+            #  stationary sigmoidal loss parameter
+            k_citn <- 20 
+            
+            # Rate of loss (specifically, L is the time at which loss=100%)
+            L_citn ~ dunif(4,20.7)
+              
+            # find proportions for quarterly citn distributions
+            for(j in 1:year_count){
+                quarter_draws_citn[j,1] ~ dunif(0,1)
+                quarter_draws_citn[j,2] ~ dunif(0,1)
+                quarter_draws_citn[j,3] ~ dunif(0,1)
+                quarter_draws_citn[j,4] ~ dunif(0,1)
+                quarter_draws_citn[j,5] <- sum(quarter_draws_citn[j,1:4])
+                
+                quarter_fractions_citn[j,1] <- quarter_draws_citn[j,1]/quarter_draws_citn[j,5]
+                quarter_fractions_citn[j,2] <- quarter_draws_citn[j,2]/quarter_draws_citn[j,5]
+                quarter_fractions_citn[j,3] <- quarter_draws_citn[j,3]/quarter_draws_citn[j,5]
+                quarter_fractions_citn[j,4] <- quarter_draws_citn[j,4]/quarter_draws_citn[j,5]
+              }
+              
+              # distribute citns across quarters
+              for (j in 1:(quarter_count-1)){
+                citns_distributed_quarterly[j] <- nmcp_count_citn_est[(round(j/4+0.3))] * quarter_fractions_citn[(round(j/4+0.3)), (((j/4)-(round(j/4+0.3)-1))*4) ] 
+              }
+              # let the final quarter, used only for interpolation, be equal to the quarter before it
+              citns_distributed_quarterly[quarter_count] <- citns_distributed_quarterly[quarter_count-1]
+              
+              # calculate loss to find expected nets in homes per quarter
+              for (j in 1:quarter_count){
+                for (i in 1:quarter_count){
+                # sigm:
+                quarterly_nets_remaining_matrix_citn[i,j] <- ifelse(j>i, 0, ifelse(time_since_distribution[i,j] >= L_citn, 0, citns_distributed_quarterly[j] * exp(k_citn - k_citn/(1-(time_since_distribution[i,j]/L_citn)^2))))
+                }
+              }
+    
+          "
   
-        "
-
-accounting <- "
-      # Sum across rows to get total net crop in a given quarter
-      for(i in 1:quarter_count){
-				quarterly_nets_in_houses_llin[i]<-sum(quarterly_nets_remaining_matrix_llin[i,1:quarter_count])
-				quarterly_nets_in_houses_citn[i]<-sum(quarterly_nets_remaining_matrix_citn[i,1:quarter_count])
-      }
-			
-			# as with quarterly distributions, set the final quarter's value equal to the one that precedes it
-			for(i in 1:(quarter_count-1)){
-			  # total_percapita_nets is the percapita net count in the true population-at-risk
-				total_percapita_nets[i] <- max( (quarterly_nets_in_houses_llin[i]+quarterly_nets_in_houses_citn[i])/(PAR[(round(i/4+0.3))]), 0) 
-			}
-			total_percapita_nets[quarter_count] <- total_percapita_nets[quarter_count-1]
-			
-  "
-
-surveys <- "
-      # Enforce that the net crop estimate matches survey data
-      for(i in 1:survey_count){
-				survey_quarter_start_index[i] <- survey_quarter_start_indices[i]	 
-				survey_quarter_end_index[i] <- survey_quarter_end_indices[i]	 	
-				
-				# to estimate # of nets at time of survey, linearly interpolate between the surrounding quartrly estimates 
-				survey_llin_count_est[i] <- quarter_prop_remaining[i] * quarterly_nets_in_houses_llin[survey_quarter_start_index[i]] + quarter_prop_completed[i] * quarterly_nets_in_houses_llin[survey_quarter_end_index[i]]
-				survey_citn_count_est[i] <- quarter_prop_remaining[i] * quarterly_nets_in_houses_citn[survey_quarter_start_index[i]] + quarter_prop_completed[i] * quarterly_nets_in_houses_citn[survey_quarter_end_index[i]]
-				
-				survey_llin_count[i] ~ dnorm(survey_llin_count_est[i], survey_llin_sd[i]^-2)	T(survey_llin_lowerlim[i], survey_llin_upperlim[i])
-				survey_citn_count[i] ~ dnorm(survey_citn_count_est[i], survey_citn_sd[i]^-2) T(survey_citn_lowerlim[i], survey_citn_upperlim[i])
-			}"
-
-indicators <- "
-      # Estimates of 'proportion of households with no nets' and 'mean nets per household', Used for generating measures of national access
-      nonet_trace ~ dunif(1,5000)
-			nonet_sample <- round(nonet_trace)
-
-			mean_net_trace ~ dunif(1,5000)
-			mean_net_sample <- round(mean_net_trace)
-      
-      # priors for mean nets
-      for(i in 1:max_hhsize){
-			  alpha_mean_nets[i] <- mean_net_counts_intercept[mean_net_sample, i]
-			  beta_mean_nets[i] <- mean_net_counts_slope[mean_net_sample, i]
-			}
-      
-      for (i in 1:quarter_count){
-        for (j in 1:max_hhsize){
-          nonet_prop_est[i,j] <- alpha_nonet_prop[nonet_sample] + p1_nonet_prop[nonet_sample]*j + p2_nonet_prop[nonet_sample]*pow(j,2) + b1_nonet_prop[nonet_sample]*total_percapita_nets[i] + b2_nonet_prop[nonet_sample]*pow(total_percapita_nets[i],2) + b3_nonet_prop[nonet_sample]*pow(total_percapita_nets[i],3)
-          mean_net_count_est[i,j] <- alpha_mean_nets[j] + beta_mean_nets[j]*total_percapita_nets[i]
+  accounting <- "
+        # Sum across rows to get total net crop in a given quarter
+        for(i in 1:quarter_count){
+  				quarterly_nets_in_houses_llin[i]<-sum(quarterly_nets_remaining_matrix_llin[i,1:quarter_count])
+  				quarterly_nets_in_houses_citn[i]<-sum(quarterly_nets_remaining_matrix_citn[i,1:quarter_count])
         }
+  			
+  			# as with quarterly distributions, set the final quarter's value equal to the one that precedes it
+  			for(i in 1:(quarter_count-1)){
+  			  # total_percapita_nets is the percapita net count in the true population-at-risk
+  				total_percapita_nets[i] <- max( (quarterly_nets_in_houses_llin[i]+quarterly_nets_in_houses_citn[i])/(PAR[(round(i/4+0.3))]), 0) 
+  			}
+  			total_percapita_nets[quarter_count] <- total_percapita_nets[quarter_count-1]
+  			
+    "
+  
+  surveys <- "
+        # Enforce that the net crop estimate matches survey data
+        for(i in 1:survey_count){
+  				survey_quarter_start_index[i] <- survey_quarter_start_indices[i]	 
+  				survey_quarter_end_index[i] <- survey_quarter_end_indices[i]	 	
+  				
+  				# to estimate # of nets at time of survey, linearly interpolate between the surrounding quartrly estimates 
+  				survey_llin_count_est[i] <- quarter_prop_remaining[i] * quarterly_nets_in_houses_llin[survey_quarter_start_index[i]] + quarter_prop_completed[i] * quarterly_nets_in_houses_llin[survey_quarter_end_index[i]]
+  				survey_citn_count_est[i] <- quarter_prop_remaining[i] * quarterly_nets_in_houses_citn[survey_quarter_start_index[i]] + quarter_prop_completed[i] * quarterly_nets_in_houses_citn[survey_quarter_end_index[i]]
+  				
+  				survey_llin_count[i] ~ dnorm(survey_llin_count_est[i], survey_llin_sd[i]^-2)	T(survey_llin_lowerlim[i], survey_llin_upperlim[i])
+  				survey_citn_count[i] ~ dnorm(survey_citn_count_est[i], survey_citn_sd[i]^-2) T(survey_citn_lowerlim[i], survey_citn_upperlim[i])
+  			}"
+  
+  indicators <- "
+        # Estimates of 'proportion of households with no nets' and 'mean nets per household', Used for generating measures of national access
+        nonet_trace ~ dunif(1,5000)
+  			nonet_sample <- round(nonet_trace)
+  
+  			mean_net_trace ~ dunif(1,5000)
+  			mean_net_sample <- round(mean_net_trace)
+        
+        # priors for mean nets
+        for(i in 1:max_hhsize){
+  			  alpha_mean_nets[i] <- mean_net_counts_intercept[mean_net_sample, i]
+  			  beta_mean_nets[i] <- mean_net_counts_slope[mean_net_sample, i]
+  			}
+        
+        for (i in 1:quarter_count){
+          for (j in 1:max_hhsize){
+            nonet_prop_est[i,j] <- alpha_nonet_prop[nonet_sample] + p1_nonet_prop[nonet_sample]*j + p2_nonet_prop[nonet_sample]*pow(j,2) + b1_nonet_prop[nonet_sample]*total_percapita_nets[i] + b2_nonet_prop[nonet_sample]*pow(total_percapita_nets[i],2) + b3_nonet_prop[nonet_sample]*pow(total_percapita_nets[i],3)
+            mean_net_count_est[i,j] <- alpha_mean_nets[j] + beta_mean_nets[j]*total_percapita_nets[i]
+          }
+        }
+  
+  "
+    
+  # Specify model.
+  # For countries with no survey data, don't try to calibrate to surveys
+  if(any(is.na(main_input_list$survey_llin_sd)) | any(is.na(main_input_list$survey_citn_sd))){
+    full_model_string <- paste(model_preface, 
+                               annual_stock_and_flow, 
+                               llin_quarterly, 
+                               citn_quarterly, 
+                               accounting, 
+                               indicators, 
+                               model_suffix,
+                               sep="\n")
+  }else{
+    full_model_string <- paste(model_preface, 
+                               annual_stock_and_flow, 
+                               llin_quarterly, 
+                               citn_quarterly, 
+                               accounting, 
+                               surveys,  # this is the only difference
+                               indicators, 
+                               model_suffix,
+                               sep="\n")
+    
+  }
+    
+  # write to file
+  fileConn<-file(file.path(out_dir, paste0(this_country, "_model", outdir_suffix, ".txt")))
+  writeLines(full_model_string, fileConn)
+  close(fileConn)
+  
+  
+  ### Run model  #####----------------------------------------------------------------------------------------------------------------------------------
+  
+  tic <- Sys.time()
+  
+  jags <- jags.model(file=textConnection(full_model_string),
+                     data = main_input_list,
+                     n.chains = 1,
+                     n.adapt=n.adapt)
+  
+  update(jags,n.iter=update)
+  
+  # Extract outputs
+  names_to_extract <- c(
+                        "nmcp_nets_percapita_llin_est",
+                        "nmcp_nets_percapita_citn_est",
+                        "manufacturer_llins_est",
+                        "nmcp_count_llin_est",
+                        "nmcp_count_citn_est",
+                        "llin_distribution_noise",
+                        "distribution_uncertainty_betapar",
+                        "raw_llins_distributed",
+                        "initial_stock",
+                        "adjusted_llins_distributed",
+                        "final_stock",
+                        "k_llin",
+                        "L_llin",
+                        "llins_distributed_quarterly",
+                        "quarterly_nets_remaining_matrix_llin",
+                        "k_citn",
+                        "L_citn",
+                        "citns_distributed_quarterly",
+                        "quarterly_nets_remaining_matrix_citn",
+                        "quarterly_nets_in_houses_llin",
+                        "quarterly_nets_in_houses_citn",
+                        "total_percapita_nets",
+                        "survey_llin_count_est",
+                        "survey_citn_count_est",
+                        "survey_llin_count",
+                        "survey_citn_count",
+                        "p1_nonet_prop",
+                        "p2_nonet_prop",
+                        "b1_nonet_prop",
+                        "b2_nonet_prop",
+                        "b3_nonet_prop",
+                        "alpha_mean_nets",
+                        "beta_mean_nets",
+                        "nonet_prop_est",
+                        "mean_net_count_est"
+  )
+  
+  jdat <- coda.samples(jags,variable.names=names_to_extract,
+                       n.iter=n.iter,thin=thin) 
+  
+  # posteriors for uncertainty
+  raw_posterior_densities <- HPDinterval(jdat)[[1]]
+  
+  toc <- Sys.time()
+  
+  time_elapsed <- toc-tic
+  print(paste("Time elapsed for model fitting:", time_elapsed))
+  
+  time_df <- data.table(iso3=this_country, time=time_elapsed)
+  write.csv(time_df, file=file.path(out_dir, paste0(this_country, "_time", outdir_suffix, ".csv")), row.names = F)
+  
+  ### Find mean values  #####----------------------------------------------------------------------------------------------------------------------------------
+  print("findind means")
+  raw_estimates <-colMeans(jdat[[1]])
+  model_estimates <- extract_jags(names_to_extract, raw_estimates)
+  
+  # transformations
+  model_estimates[["nonet_prop_est"]] <- plogis(model_estimates[["nonet_prop_est"]])
+  
+  
+  ### Find National Access  #####----------------------------------------------------------------------------------------------------------------------------------
+  
+  # Only calculate draw-level access if not runnign a sensitivity analysis
+  if (is.na(sensitivity_survey_count)){
+    
+    pre_new_objects <- ls()
+    ##  Load and format household size distributions for each survey ## ------------------------------------------------------------
+    print("loading and formatting household size distributions")
+    hh_sizes<-fread(file.path(main_dir, "hhsize_from_surveys.csv"))
+    
+    # function to aggregate survey data to find the total distribution of household sizes from 1:10+ across the provided dataset
+    find_hh_distribution <- function(props, cap_hh_size=10){
+      # where 'props' is a data.table with columns ('hh_size' and 'prop')
+      denominator <- sum(props$prop)
+      hh_dist <- props[, list(hh_size_prop=sum(prop)/denominator), by="hh_size"]
+      final_bin <- sum(hh_dist[hh_size>=cap_hh_size]$hh_size_prop)
+      hh_dist <- hh_dist[hh_size<=cap_hh_size]
+      hh_dist[hh_size==cap_hh_size, hh_size_prop:=final_bin]
+      
+      if (abs(sum(hh_dist$hh_size_prop)-1) > 1e-15){
+        warning("Household size distribution improperly computed!")
       }
-
-"
+      return(hh_dist)
+    }
+    
+    # find household distribution across all surveys
+    hh_dist_all <- find_hh_distribution(hh_sizes)
+    
+    # find household distribution by country, using hh_dist_all if there is no hh survey data available
+    if (this_country %in% unique(hh_sizes$iso3)){
+      hh_distributions <- find_hh_distribution(hh_sizes[iso3==this_country])
+    }else{
+      hh_distributions <- copy(hh_dist_all)
+    }
+    
+    # format draw-level indicators
+    no_net_draws <- extract_jags_by_draw("nonet_prop_est", jdat)
+    no_net_draws[, nonet_prop_est:=plogis(nonet_prop_est)]
+    mean_net_draws <- extract_jags_by_draw("mean_net_count_est", jdat)
+    mean_net_draws[mean_net_count_est<0, mean_net_count_est:=1e-6] # not bounded by 0 in jags code; adjust it here
+    percapita_net_draws <- extract_jags_by_draw("total_percapita_nets", jdat)
+    
+    indicator_draws <- merge(no_net_draws, mean_net_draws, by=c("ITER", "row", "column"), all=T)
+    indicator_draws <- merge(indicator_draws, percapita_net_draws, by=c("ITER", "row"), all=T)
+    setnames(indicator_draws, c("row", "column", "nonet_prop_est", "mean_net_count_est", "total_percapita_nets"),
+             c("quarter_start", "hh_size", "stockflow_prob_no_nets", "stockflow_mean_nets_per_hh", "stockflow_percapita_nets"))
+    
+    # It's too labor-intensive to convert all 5000 draws to access-- save 500 random draws instead
+    set.seed(42)
+    samples <- sample(unique(indicator_draws$ITER), 500)
+    indicator_draws <- indicator_draws[ITER %in% samples]
+    
+    # Interpolate to monthly levels
+    print("Interpolating from quarters to months")
+    indicator_draws <- melt(indicator_draws, id.vars = c("ITER", "hh_size", "quarter_start"), value.name="value_start")
+    indicator_draws[, quarter_end:= quarter_start +1]
+    end_vals <- indicator_draws[quarter_start>1, list(ITER, hh_size, variable, quarter_end=quarter_start, value_end=value_start)]
+    indicator_draws <- merge(indicator_draws, end_vals, all=T)
+    if (nrow(indicator_draws[is.na(value_end) & quarter_start<max(quarter_start)])>0){
+      stop("MERGE UNSUCCESSFUL: Nulls in end values")
+    }
+    indicator_draws[, start_time:=start_year + quarter_start/4-0.25]
+    indicator_draws[, end_time:=start_year + quarter_end/4-0.25]
+    
+    # get decimal dates for the middle of each month: these are the dates for which we want interpolated values.
+    end_time <- ceiling(max(indicator_draws$end_time))
+    full_times <- seq(as.Date(paste0(start_year, "/1/15")), by = "month", length.out = (end_time-start_year-1)*12)
+    monthly_times <- decimal_date(full_times)
+    time_map <- data.table(year=year(full_times), month=month(full_times), time=monthly_times, quarter_start=findInterval(monthly_times, unique(indicator_draws$start_time)))
+    
+    indicator_draws <- merge(indicator_draws, time_map, by="quarter_start", all=T, allow.cartesian=T)
+    indicator_draws <- indicator_draws[quarter_start!=max(quarter_start)] # final quarter will have na's
+    indicator_draws[, interp_val:= value_end*(time-start_time)/0.25 + value_start*(end_time-time)/0.25]
+    
+    # clean and reshape wide
+    indicator_draws[, iso3:=this_country]
+    indicator_draws <- dcast.data.table(indicator_draws, iso3 + ITER + year + month + time + hh_size ~ variable, value.var = "interp_val")
+    
+    # calculate access
+    indicator_draws <- merge(indicator_draws, hh_distributions, by="hh_size", all.x=T)
+    
+    print("Finding year-month-country net access across household sizes")
+    # weight stock and flow values by household proportions 
+    indicator_draws[, weighted_prob_no_nets:=hh_size_prop*stockflow_prob_no_nets]
+    indicator_draws[, weighted_prob_any_net:=hh_size_prop*(1-stockflow_prob_no_nets)]
+    
+    ncores <- detectCores()
+    print(paste("--> Machine has", ncores, "cores available"))
+    registerDoParallel(ncores-2)
+    
+    tic <- Sys.time()
+    access_draws <- foreach(this_time=unique(indicator_draws$time), .combine="rbind") %:%
+      foreach(this_sample=unique(indicator_draws$ITER), .combine=rbind) %dopar% {
+        subset <- indicator_draws[ITER==this_sample & time==this_time]
+        access <- calc_access(subset, return_mean = T)
+        return(data.table(ITER=this_sample, 
+                          time=this_time,
+                          nat_access=access)
+        )
+      }
+    
+    toc <- Sys.time()
+    time_elapsed_access <- toc-tic
+    print("Time elapsed to calculate access:")
+    print(time_elapsed_access)
+    
+    final_metrics <- indicator_draws[, list(iso3, ITER, year, month, time, hh_size, stockflow_percapita_nets,
+                                            stockflow_prob_no_nets, stockflow_mean_nets_per_hh)]
+    final_metrics <- merge(final_metrics, access_draws, by=c("ITER", "time"), all=T)
+    write.csv(final_metrics, file=file.path(out_dir, paste0(this_country, "_access_draws", outdir_suffix, ".csv")), row.names = F)
+    
+    new_objects <- setdiff(ls(), pre_new_objects)
+    rm(list=new_objects)
+  }
   
-# Specify model.
-# For countries with no survey data, don't try to calibrate to surveys
-if(any(is.na(main_input_list$survey_llin_sd)) | any(is.na(main_input_list$survey_citn_sd))){
-  full_model_string <- paste(model_preface, 
-                             annual_stock_and_flow, 
-                             llin_quarterly, 
-                             citn_quarterly, 
-                             accounting, 
-                             indicators, 
-                             model_suffix,
-                             sep="\n")
-}else{
-  full_model_string <- paste(model_preface, 
-                             annual_stock_and_flow, 
-                             llin_quarterly, 
-                             citn_quarterly, 
-                             accounting, 
-                             surveys,  # this is the only difference
-                             indicators, 
-                             model_suffix,
-                             sep="\n")
   
-}
-  
-# write to file
-fileConn<-file(file.path(out_dir, paste0(this_country, "_model", outdir_suffix, ".txt")))
-writeLines(full_model_string, fileConn)
-close(fileConn)
-
-
-### Run model  #####----------------------------------------------------------------------------------------------------------------------------------
-
-tic <- Sys.time()
-
-jags <- jags.model(file=textConnection(full_model_string),
-                   data = main_input_list,
-                   n.chains = 1,
-                   n.adapt=n.adapt)
-
-update(jags,n.iter=update)
-
-# Extract outputs
-names_to_extract <- c(
-                      "nmcp_nets_percapita_llin_est",
-                      "nmcp_nets_percapita_citn_est",
-                      "manufacturer_llins_est",
-                      "nmcp_count_llin_est",
-                      "nmcp_count_citn_est",
-                      "llin_distribution_noise",
-                      "distribution_uncertainty_betapar",
-                      "raw_llins_distributed",
-                      "initial_stock",
-                      "adjusted_llins_distributed",
-                      "final_stock",
-                      "k_llin",
-                      "L_llin",
-                      "llins_distributed_quarterly",
-                      "quarterly_nets_remaining_matrix_llin",
-                      "k_citn",
-                      "L_citn",
-                      "citns_distributed_quarterly",
-                      "quarterly_nets_remaining_matrix_citn",
-                      "quarterly_nets_in_houses_llin",
-                      "quarterly_nets_in_houses_citn",
-                      "total_percapita_nets",
-                      "survey_llin_count_est",
-                      "survey_citn_count_est",
-                      "survey_llin_count",
-                      "survey_citn_count",
-                      "p1_nonet_prop",
-                      "p2_nonet_prop",
-                      "b1_nonet_prop",
-                      "b2_nonet_prop",
-                      "b3_nonet_prop",
-                      "alpha_mean_nets",
-                      "beta_mean_nets",
-                      "nonet_prop_est",
-                      "mean_net_count_est"
-)
-
-jdat <- coda.samples(jags,variable.names=names_to_extract,
-                     n.iter=n.iter,thin=thin) 
-
-# posteriors for uncertainty
-raw_posterior_densities <- HPDinterval(jdat)[[1]]
-
-toc <- Sys.time()
-
-time_elapsed <- toc-tic
-print(paste("Time elapsed for model fitting:", time_elapsed))
-
-time_df <- data.table(iso3=this_country, time=time_elapsed)
-write.csv(time_df, file=file.path(out_dir, paste0(this_country, "_time", outdir_suffix, ".csv")), row.names = F)
-
-### Find mean values  #####----------------------------------------------------------------------------------------------------------------------------------
-print("findind means")
-raw_estimates <-colMeans(jdat[[1]])
-model_estimates <- extract_jags(names_to_extract, raw_estimates)
-
-# transformations
-model_estimates[["nonet_prop_est"]] <- plogis(model_estimates[["nonet_prop_est"]])
-
-
-### Indicators  #####----------------------------------------------------------------------------------------------------------------------------------
-
-## Actually, no indicators for now-- I don't think I want to maintain the same ones anyway
-
-
-### Saving  #####----------------------------------------------------------------------------------------------------------------------------------
-print("saving all outputs")
-save(list = ls(all.names = TRUE), file = file.path(out_dir, paste0(this_country, "_all_output", outdir_suffix, ".RData")), envir = environment())
+  ### Saving  #####----------------------------------------------------------------------------------------------------------------------------------
+  print("saving all outputs")
+  save(list = ls(all.names = TRUE), file = file.path(out_dir, paste0(this_country, "_all_output", outdir_suffix, ".RData")), envir = environment())
 
 }
 
 # DSUB FOR MAIN RUN
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highmem-2 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20191205 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200115_fix_interp --command 'cd ${CODE}; Rscript 03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list_TESTING.tsv
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20191205 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who CODE=gs://map_users/amelia/itn/code/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200117_test_access_calc --command 'cd ${CODE}; Rscript stock_and_flow/03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list_TESTING.tsv
 
 # DSUB FOR SENSITIVITY ANALYSIS
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highmem-2 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20191205 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191211_full_sensitivity --command 'cd ${CODE}; Rscript 03_stock_and_flow.r ${this_country} ${survey_count} ${order_type}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_sensitivity_TESTING.tsv
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highmem-2 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20191205 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who CODE=gs://map_users/amelia/itn/code/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191211_full_sensitivity --command 'cd ${CODE}; Rscript stock_and_flow/03_stock_and_flow.r ${this_country} ${survey_count} ${order_type}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_sensitivity_TESTING.tsv
 
 
 package_load <- function(package_list){
@@ -565,15 +676,17 @@ package_load <- function(package_list){
   lapply(package_list, library, character.only=T)
 }
 
-package_load(c("data.table","raster","rjags", "zoo", "ggplot2"))
+package_load(c("data.table","raster","rjags", "zoo", "ggplot2", "doParallel", "lubridate", "VGAM"))
 
 if(Sys.getenv("main_dir")=="") {
   nmcp_manu_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who"
   main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20191205"
   out_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/testing"
-  this_country <- "SEN"
-  sensitivity_survey_count <- 2
-  sensitivity_type <-  "chron_order"
+  code_dir <- "~/repos/map-itn-cube"
+  this_country <- "BFA"
+  sensitivity_survey_count <- NA # 2
+  sensitivity_type <- NA # "chron_order"
+  setwd(code_dir)
 } else {
   main_dir <- Sys.getenv("main_dir")
   nmcp_manu_dir <- Sys.getenv("nmcp_manu_dir") 
@@ -583,7 +696,8 @@ if(Sys.getenv("main_dir")=="") {
   sensitivity_type <- commandArgs(trailingOnly=TRUE)[3]
 }
 
-source("jags_functions.r")
+source("stock_and_flow/jags_functions.r")
+source("generate_cube/01_02_data_functions.r")
 start_year <- 2000
 end_year<- 2018
 
@@ -592,7 +706,7 @@ gg_color_hue <- function(n) {
   hcl(h = hues, l = 65, c = 100)[1:n]
 }
 
-run_stock_and_flow(this_country, start_year, end_year, main_dir, out_dir, sensitivity_survey_count, sensitivity_type)
+run_stock_and_flow(this_country, start_year, end_year, main_dir, nmcp_manu_dir, out_dir, sensitivity_survey_count, sensitivity_type)
 
 
 
