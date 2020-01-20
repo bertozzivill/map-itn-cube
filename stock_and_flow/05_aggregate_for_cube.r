@@ -9,23 +9,6 @@
 ##############################################################################################################
 
 
-extract_jags_by_draw <- function(varname, jdat){
-  full_estimates <- as.data.frame(as.matrix(jdat, iters = T))
-  these_estimates <- full_estimates[(names(full_estimates)=="ITER") |(names(full_estimates)==varname) | (names(full_estimates) %like% paste0("^", varname, "\\[")) ]
-  these_estimates <- data.table(these_estimates)
-  these_estimates <- melt(these_estimates, id.vars=c("ITER"), value.name=varname)
-  if (these_estimates$variable[1] %like% ","){ # if metric is represented as a matrix
-    these_estimates[, row:=as.integer(gsub(".*\\[(.*),(.*)\\]", "\\1", variable))]
-    these_estimates[, column:=as.integer(gsub(".*\\[(.*),(.*)\\]", "\\2", variable))]
-  }else{
-    these_estimates[, row:=as.integer(gsub(".*\\[(.*)\\]", "\\1", variable))]
-  }
-  these_estimates[, variable:=NULL]
-  return(these_estimates)
-}
-
-
-
 aggregate_indicators <- function(reference_dir, list_out_dir){
   
   ### Prep  #####----------------------------------------------------------------------------------------------------------------------------------
@@ -35,39 +18,29 @@ aggregate_indicators <- function(reference_dir, list_out_dir){
   start_year <- 2000
 
   ### Country Loop  #####----------------------------------------------------------------------------------------------------------------------------------
+  print("Collecting access and percapita nets for all countries")
+  print(countries)
   
-  net_probs_and_means <- lapply(countries, function(this_country){
-    print(paste("Collecting output for", this_country))
-    
-    new_fname <- file.path(reference_dir, paste0(this_country, "_all_output.RData"))
-    load(new_fname)
-    
-    # find draw-level national access
-    no_net_draws <- extract_jags_by_draw("nonet_prop_est", jdat)
-    no_net_draws[, nonet_prop_est:=plogis(nonet_prop_est)]
-    mean_net_draws <- extract_jags_by_draw("mean_net_count_est", jdat)
-    
-    for_access_draws <- merge(no_net_draws, mean_net_draws, by=c("ITER", "row", "column"), all=T)
-    
-    # find mean national access, formatted for cube
-    prop_no_nets <- model_estimates$nonet_prop_est
-    mean_nets <- model_estimates$mean_net_count_est
-    
-    combined <- array(c(prop_no_nets, mean_nets) , dim=c(nrow(mean_nets), ncol(mean_nets), 2))
-    rownames(combined) <- seq(start_year, (start_year+nrow(mean_nets)/4-0.25), 0.25)
-    colnames(combined) <- 1:ncol(mean_nets)
-    
-    # find draw-level and mean net count percapita
-    percapita_net_draws <- extract_jags_by_draw("total_percapita_nets", jdat)
-    percapita_nets <- model_estimates$total_percapita_nets
-    
-    return(combined)
-  })
+  access_fnames <- file.path(reference_dir, paste0(countries, "_access_draws.csv"))
+  metrics_for_cube <- lapply(access_fnames, fread)
+  metrics_for_cube <- rbindlist(metrics_for_cube)
+  
+  print("aggregating and saving")
+  means_for_cube <- metrics_for_cube[, list(stockflow_percapita_nets=mean(stockflow_percapita_nets),
+                                         stockflow_prob_no_nets=mean(stockflow_prob_no_nets),
+                                         stockflow_mean_nets_per_hh=mean(stockflow_mean_nets_per_hh)),
+                                  by=list(iso3, year, month, time, hh_size)]
+  national_access <- metrics_for_cube[, list(nat_access=mean(nat_access)),
+                                  by=list(iso3, year, month, time)]
+  # national_access[, emplogit_nat_access:=emplogit(nat_access)]
+  
+  cube_out_dir <- file.path(list_out_dir, "for_cube")
+  dir.create(cube_out_dir, recursive = T, showWarnings = F)
+  
+  write.csv(metrics_for_cube, file=file.path(cube_out_dir, "01_stock_and_flow_by_draw.csv"), row.names=F)
+  write.csv(means_for_cube, file=file.path(cube_out_dir, "01_stock_and_flow_probs_means.csv"), row.names=F)
+  write.csv(national_access, file=file.path(cube_out_dir, "01_stock_and_flow_access.csv"), row.names=F)
 
-  names(net_probs_and_means) <- countries
-  print(paste("indicator list has length", length(net_probs_and_means)))
-  save(net_probs_and_means, file=file.path(list_out_dir, "net_probs_and_means.rData"))
-  
 } 
 
 # dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive reference_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200102_fix_par CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive list_out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200102_fix_par --command 'cd ${CODE}; Rscript 05_aggregate_for_cube.r'
@@ -82,7 +55,7 @@ package_load(c("data.table","rjags", "zoo", "ggplot2", "gridExtra"))
 theme_set(theme_minimal(base_size = 12))
 
 if(Sys.getenv("reference_dir")=="") {
-  reference_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20191009_stationary_sigm_loss"
+  reference_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200117_test_access_calc"
   list_out_dir <- reference_dir
 } else {
   reference_dir <- Sys.getenv("reference_dir") 
