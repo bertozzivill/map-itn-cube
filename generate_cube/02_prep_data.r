@@ -11,17 +11,17 @@
 ##      To run this script individually, see instructions at the bottom of the page. 
 ##############################################################################################################
 
-prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
+prep_data <- function(general_indir, survey_indir, indicators_indir, main_outdir, func_dir){
   
   out_fname <- file.path(main_outdir, "02_survey_data.csv")
   source(file.path(func_dir, "01_02_data_functions.r"))
   
-  stock_and_flow_outputs <- fread(file.path(main_indir, "01_stock_and_flow_probs_means.csv"))
-  iso_gaul_map<-fread(file.path(input_dir, "general/iso_gaul_map.csv"))
+  stock_and_flow_outputs <- fread(file.path(indicators_indir, "01_stock_and_flow_probs_means.csv"))
+  iso_gaul_map<-fread(file.path(general_indir, "general/iso_gaul_map.csv"))
   setnames(iso_gaul_map, c("GAUL_CODE", "COUNTRY_ID", "NAME"), c("gaul", "iso3", "country"))
   
   # load household data and survey-to-country key, keep only those in country list
-  HH <- fread(file.path(input_dir, "stock_and_flow/itn_hh_survey_data.csv"))
+  HH <- fread(file.path(survey_indir, "itn_hh_survey_data.csv"))
   
   # keep only the years and  columns we use
   
@@ -38,8 +38,6 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
                                                              n.individuals.that.slept.in.surveyed.hhs=hh_size,
                                                              n.individuals.that.slept.under.ITN=n_slept_under_itn,
                                                              n.ITN.per.hh=n_itn)]
-  
-  # TODO: data checks
   
   # check to make sure all data rows can be assessed via stock and flow.
   too_late <- HH[year>max(stock_and_flow_outputs$year)]
@@ -166,7 +164,7 @@ prep_data <- function(input_dir, func_dir, main_indir, main_outdir){
   final_data<-final_data[lat!=0 & lon!=0]
   
   # Check for invalid points, and attempt to reposition them
-  national_raster<-raster(file.path(input_dir, "general/african_cn5km_2013_no_disputes.tif")) # master country layer
+  national_raster<-raster(file.path(general_indir, "general/african_cn5km_2013_no_disputes.tif")) # master country layer
   NAvalue(national_raster)=-9999
   
   print("Attempting to reposition points")
@@ -231,8 +229,7 @@ if (Sys.getenv("run_individually")!="" | exists("run_locally")){
   
   print("RUNNING SCRIPT INDIVIDUALLY")
   
-  # dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data main_indir=gs://map_users/amelia/itn/itn_cube/results/20190729_new_covariates/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/02_prep_data.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20190729_new_covariates/ --command 'Rscript ${CODE}'
-  
+  # dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive general_indir=gs://map_users/amelia/itn/itn_cube/input_data indicators_indir=gs://map_users/amelia/itn/stock_and_flow/results/20200119_add_access_calc/for_cube survey_indir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20191205 func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/02_prep_data.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20190729_new_covariates/ --command 'Rscript ${CODE}'
   
   package_load <- function(package_list){
     # package installation/loading
@@ -243,19 +240,21 @@ if (Sys.getenv("run_individually")!="" | exists("run_locally")){
   
   package_load(c("zoo","raster","VGAM", "doParallel", "data.table", "lubridate"))
   
-  if(Sys.getenv("input_dir")=="") {
-    input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
-    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200107_fix_cluster_agg/"
-    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200107_fix_cluster_agg/"
+  if(Sys.getenv("general_indir")=="") {
+    general_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
+    survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20191205"
+    indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200119_add_access_calc/for_cube"
+    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200120_test_access_calc/"
     func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
   } else {
-    input_dir <- Sys.getenv("input_dir")
-    main_indir <- Sys.getenv("main_indir")
+    general_indir <- Sys.getenv("general_indir")
+    survey_indir <- Sys.getenv("survey_indir")
+    indicators_indir <- Sys.getenv("indicators_indir")
     main_outdir <- Sys.getenv("main_outdir")
     func_dir <- Sys.getenv("func_dir") # code directory for function scripts
   }
   
-  prep_data(input_dir, func_dir, main_indir, main_outdir)
+  prep_data(general_indir, survey_indir, indicators_indir, main_outdir, func_dir)
   
 }
 
