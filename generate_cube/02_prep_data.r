@@ -11,13 +11,13 @@
 ##      To run this script individually, see instructions at the bottom of the page. 
 ##############################################################################################################
 
-prep_data <- function(general_indir, survey_indir, indicators_indir, main_outdir, func_dir){
+prep_data <- function(main_indir, survey_indir, indicators_indir, main_outdir, func_dir){
   
   out_fname <- file.path(main_outdir, "02_survey_data.csv")
   source(file.path(func_dir, "01_02_data_functions.r"))
   
   stock_and_flow_outputs <- fread(file.path(indicators_indir, "01_stock_and_flow_probs_means.csv"))
-  iso_gaul_map<-fread(file.path(general_indir, "general/iso_gaul_map.csv"))
+  iso_gaul_map<-fread(file.path(main_indir, "general/iso_gaul_map.csv"))
   setnames(iso_gaul_map, c("GAUL_CODE", "COUNTRY_ID", "NAME"), c("gaul", "iso3", "country"))
   
   # load household data and survey-to-country key, keep only those in country list
@@ -100,7 +100,10 @@ prep_data <- function(general_indir, survey_indir, indicators_indir, main_outdir
     
     household_props <- rbindlist(household_props)
     
-    this_survey_data <- merge(this_survey_data, household_props[, list(time, year, month, capped.n.sleeping.in.hhs=hh_size, stock_and_flow_access)],
+    this_survey_data <- merge(this_survey_data, household_props[, list(time, year, month, 
+                                                                       capped.n.sleeping.in.hhs=hh_size,
+                                                                       stockflow_percapita_nets,
+                                                                       stockflow_access=stock_and_flow_access)],
                               by=c("year", "month", "capped.n.sleeping.in.hhs"), all.x=T)
     
     
@@ -110,9 +113,10 @@ prep_data <- function(general_indir, survey_indir, indicators_indir, main_outdir
                                                   lon=mean(longitude),
                                                   access_count=sum(n.with.access.to.ITN), # formerly P
                                                   cluster_pop=sum(n.individuals.that.slept.in.surveyed.hhs), # formerly N
+                                                  national_percapita_nets=mean(stockflow_percapita_nets), # uniform across hh sizes, don't need to weight
                                                   use_count=sum(n.individuals.that.slept.under.ITN), # formerly Pu
                                                   net_count=sum(n.ITN.per.hh), # formerly T
-                                                  national_access=weighted.mean(stock_and_flow_access, n.individuals.that.slept.in.surveyed.hhs) # formerly Amean
+                                                  national_access=weighted.mean(stockflow_access, n.individuals.that.slept.in.surveyed.hhs) # formerly Amean
     ),
     by=list(iso3, Cluster.hh, time, year, month)]
   
@@ -124,6 +128,7 @@ prep_data <- function(general_indir, survey_indir, indicators_indir, main_outdir
     time_map[,interval:=1:nrow(time_map)]
     
     summary_by_cluster[, count:=.N, by=cluster]
+    
     if (max(summary_by_cluster$count)>1){
       print("repositioning time")
       to_aggregate <- summary_by_cluster[count>1]
@@ -135,6 +140,7 @@ prep_data <- function(general_indir, survey_indir, indicators_indir, main_outdir
                                                     lon=mean(lon),
                                                     access_count=sum(access_count),
                                                     cluster_pop=sum(cluster_pop),
+                                                    national_percapita_nets=weighted.mean(national_percapita_nets, cluster_pop),
                                                     use_count=sum(use_count),
                                                     net_count=sum(net_count),
                                                     national_access=weighted.mean(national_access, cluster_pop),
@@ -164,7 +170,7 @@ prep_data <- function(general_indir, survey_indir, indicators_indir, main_outdir
   final_data<-final_data[lat!=0 & lon!=0]
   
   # Check for invalid points, and attempt to reposition them
-  national_raster<-raster(file.path(general_indir, "general/african_cn5km_2013_no_disputes.tif")) # master country layer
+  national_raster<-raster(file.path(main_indir, "general/african_cn5km_2013_no_disputes.tif")) # master country layer
   NAvalue(national_raster)=-9999
   
   print("Attempting to reposition points")
@@ -198,6 +204,7 @@ prep_data <- function(general_indir, survey_indir, indicators_indir, main_outdir
                             pixel_pop=sum(cluster_pop),
                             use_count=sum(use_count),
                             net_count=sum(net_count),
+                            national_percapita_nets=weighted.mean(national_percapita_nets, cluster_pop),
                             national_access=weighted.mean(national_access, cluster_pop)),
                      by=list(cellnumber, lat, lon, time, year, month)]
   
@@ -229,7 +236,7 @@ if (Sys.getenv("run_individually")!="" | exists("run_locally")){
   
   print("RUNNING SCRIPT INDIVIDUALLY")
   
-  # dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive general_indir=gs://map_users/amelia/itn/itn_cube/input_data indicators_indir=gs://map_users/amelia/itn/stock_and_flow/results/20200119_add_access_calc/for_cube survey_indir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20191205 func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/02_prep_data.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20190729_new_covariates/ --command 'Rscript ${CODE}'
+  # dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive main_indir=gs://map_users/amelia/itn/itn_cube/input_data indicators_indir=gs://map_users/amelia/itn/stock_and_flow/results/20200119_add_access_calc/for_cube survey_indir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20191205 func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/02_prep_data.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20190729_new_covariates/ --command 'Rscript ${CODE}'
   
   package_load <- function(package_list){
     # package installation/loading
@@ -240,23 +247,24 @@ if (Sys.getenv("run_individually")!="" | exists("run_locally")){
   
   package_load(c("zoo","raster","VGAM", "doParallel", "data.table", "lubridate"))
   
-  if(Sys.getenv("general_indir")=="") {
-    general_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
+  if(Sys.getenv("main_indir")=="") {
+    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
     survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20191205"
     indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200119_add_access_calc/for_cube"
     main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200120_test_access_calc/"
     func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
   } else {
-    general_indir <- Sys.getenv("general_indir")
+    main_indir <- Sys.getenv("main_indir")
     survey_indir <- Sys.getenv("survey_indir")
     indicators_indir <- Sys.getenv("indicators_indir")
     main_outdir <- Sys.getenv("main_outdir")
     func_dir <- Sys.getenv("func_dir") # code directory for function scripts
   }
   
-  prep_data(general_indir, survey_indir, indicators_indir, main_outdir, func_dir)
+  prep_data(main_indir, survey_indir, indicators_indir, main_outdir, func_dir)
   
 }
+
 
 
 
