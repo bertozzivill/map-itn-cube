@@ -30,15 +30,16 @@ aggregate_indicators <- function(reference_dir, list_out_dir){
                                          stockflow_prob_no_nets=mean(stockflow_prob_no_nets),
                                          stockflow_mean_nets_per_hh=mean(stockflow_mean_nets_per_hh)),
                                   by=list(iso3, year, month, time, hh_size)]
-  national_access <- metrics_for_cube[, list(nat_access=mean(nat_access)),
+  national_access <- metrics_for_cube[, list(nat_access=mean(nat_access),
+                                             nat_percapita_nets=mean(stockflow_percapita_nets)),
                                   by=list(iso3, year, month, time)]
   
   cube_out_dir <- file.path(list_out_dir, "for_cube")
   dir.create(cube_out_dir, recursive = T, showWarnings = F)
   
-  write.csv(metrics_for_cube, file=file.path(cube_out_dir, "01_stock_and_flow_by_draw.csv"), row.names=F)
-  write.csv(means_for_cube, file=file.path(cube_out_dir, "01_stock_and_flow_probs_means.csv"), row.names=F)
-  write.csv(national_access, file=file.path(cube_out_dir, "01_stock_and_flow_access.csv"), row.names=F)
+  write.csv(metrics_for_cube, file=file.path(cube_out_dir, "stock_and_flow_by_draw.csv"), row.names=F)
+  write.csv(means_for_cube, file=file.path(cube_out_dir, "stock_and_flow_probs_means.csv"), row.names=F)
+  write.csv(national_access, file=file.path(cube_out_dir, "stock_and_flow_access_npc.csv"), row.names=F)
 
 } 
 

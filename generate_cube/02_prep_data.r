@@ -16,7 +16,7 @@ prep_data <- function(main_indir, survey_indir, indicators_indir, main_outdir, f
   out_fname <- file.path(main_outdir, "02_survey_data.csv")
   source(file.path(func_dir, "01_02_data_functions.r"))
   
-  stock_and_flow_outputs <- fread(file.path(indicators_indir, "01_stock_and_flow_probs_means.csv"))
+  stock_and_flow_outputs <- fread(file.path(indicators_indir, "stock_and_flow_probs_means.csv"))
   iso_gaul_map<-fread(file.path(main_indir, "general/iso_gaul_map.csv"))
   setnames(iso_gaul_map, c("GAUL_CODE", "COUNTRY_ID", "NAME"), c("gaul", "iso3", "country"))
   
@@ -130,7 +130,7 @@ prep_data <- function(main_indir, survey_indir, indicators_indir, main_outdir, f
     summary_by_cluster[, count:=.N, by=cluster]
     
     if (max(summary_by_cluster$count)>1){
-      print("repositioning time")
+      print(paste("repositioning time in survey", this_survey))
       to_aggregate <- summary_by_cluster[count>1]
       summary_by_cluster <- summary_by_cluster[count==1]
 
@@ -209,6 +209,8 @@ prep_data <- function(main_indir, survey_indir, indicators_indir, main_outdir, f
                      by=list(cellnumber, lat, lon, time, year, month)]
   
   final_data[use_count>pixel_pop, use_count:=pixel_pop] # TODO: ask Harry about this discrepancy
+  final_data[, percapita_nets:=net_count/pixel_pop]
+  final_data[, percapita_net_dev:= percapita_nets-national_percapita_nets]
   
   # re-associate with surveys
   final_data <- merge(final_data, survey_map, by=c("cellnumber", "time"), all.x=T)

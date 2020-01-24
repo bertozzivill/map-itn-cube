@@ -35,8 +35,10 @@ run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, sta
   print(cov_names)
   
   cov_names <- cov_names[!cov_names %like% "Snow_And_Ice" & !cov_names %like% "Needleleaf"] # all 0's for Africa
-  selected_cov_names <- list(access_dev=cov_names,
-                           use_gap=cov_names)
+  selected_cov_names <- list(ihs_emp_access_dev=cov_names,
+                             ihs_emp_use_gap=cov_names,
+                             ihs_percapita_net_dev=cov_names)
+  
   # selected_cov_names <- list(access_dev=c("Aridity_Index_v2.Synoptic.Overall.Data.5km.mean",
   #                                         "pf_seasonality",
   #                                         "Landcover_2_Evergreen_Broadleaf_Forest",
@@ -63,7 +65,7 @@ run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, sta
   #                                       "TCW",
   #                                       "TSI",
   #                                       "Accessibility.2015.Annual.Data.5km.mean"))
-  cov_names <- unique(c(selected_cov_names[[1]], selected_cov_names[[2]]))
+  cov_names <- unique(unlist(selected_cov_names, use.names = F))
 
   # drop any covariates that are all one value
   for(cov in cov_names){
@@ -88,15 +90,25 @@ run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, sta
   
   ## Prep for model ##-------------------------------------------------------------
   
-  # calculate use gap and  access deviation for data points
+  outcome_names <- c("ihs_emp_access_dev", "ihs_emp_use_gap", "ihs_percapita_net_dev")
+  
+  # calculate use gap,  access deviation, and percapita net deviation for data points
   data[, emp_use_gap:=emplogit2(access_count, pixel_pop) - emplogit2(use_count, pixel_pop)] # emplogit difference of access-use
   data[, emp_access_dev:= emplogit2(access_count, pixel_pop) - emplogit(national_access)]
   
-  theta_acc <- optimise(ihs_loglik, lower=0.001, upper=50, x=data$emp_access_dev, maximum=TRUE)$maximum
-  data[, ihs_emp_access_dev:=ihs(emp_access_dev, theta_acc)]
+  # convert via ihs
+  all_thetas <- list()
+  for (outcome_var in outcome_names){
+    pre_transform_var <- gsub("ihs_", "", outcome_var)
+    print(paste("IHS transforming", pre_transform_var))
+    this_theta <- optimise(ihs_loglik, lower=0.001, upper=50, x=data[[pre_transform_var]], maximum=TRUE)$maximum
+    data[, ihs_var:= ihs(get(pre_transform_var), this_theta)] 
+    setnames(data, "ihs_var", outcome_var)
+    all_thetas[[outcome_var]] <- this_theta
+  }
   
-  theta_use <- optimise(ihs_loglik, lower=0.001, upper=50, x=data$emp_use_gap, maximum=TRUE)$maximum
-  data[, ihs_gap2:=ihs(emp_use_gap, theta_use)] 
+  print("all thetas:")
+  print(all_thetas)
   
   # transform data from latlong to cartesian coordinates
   xyz<-ll_to_xyz(data[, list(row_id, longitude=lon, latitude=lat)])
@@ -114,22 +126,17 @@ run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, sta
   ncores <- detectCores()
   print(paste("--> Machine has", ncores, "cores available"))
   registerDoParallel(ncores-2)
-  inla_outputs<-foreach(outcome_var=c("ihs_emp_access_dev", "ihs_gap2")) %dopar% {
+  inla_outputs<-foreach(outcome_var=outcome_names) %dopar% {
     
-    if (outcome_var %like% "access"){
-      these_cov_names <- selected_cov_names[["access_dev"]]
-    }else{
-      these_cov_names <- selected_cov_names[["use_gap"]]
-    }
+    these_cov_names <- selected_cov_names[[outcome_var]]
     
     inla_results <- run_inla(data, outcome_var, these_cov_names, start_year, end_year)
-    
-    inla_results <- c(inla_results, theta=ifelse(outcome_var=="ihs_emp_access_dev", theta_acc, theta_use))
+    inla_results <- c(inla_results, theta=all_thetas[[outcome_var]])
     
     return(inla_results)
   }
   
-  names(inla_outputs) <- c("access_dev", "use_gap")
+  names(inla_outputs) <- c("access_dev", "use_gap", "percapita_net_dev")
   
   print(paste("Saving outputs to", output_fname))
   save(inla_outputs, file=output_fname)
@@ -157,8 +164,8 @@ if (Sys.getenv("run_individually")!=""){
   
   if(Sys.getenv("input_dir")=="") {
     input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
-    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20191102_new_stockflow_data/"
-    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20191102_new_stockflow_data/"
+    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200122_test_percapita_nets/"
+    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200122_test_percapita_nets/"
     func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
   } else {
     input_dir <- Sys.getenv("input_dir")
