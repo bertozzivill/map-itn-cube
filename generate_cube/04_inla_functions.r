@@ -166,3 +166,40 @@ predict_inla <- function(model, A_matrix, covs, prediction_cells){
 }
 
 
+#### For aggregating rasters to national values
+# function to align resolutions between two rasters
+align_res <- function(rast, template.rast){
+  if (!identical(res(rast), res(template.rast))) {
+    rast  <- resample(rast, template.rast, method = 'ngb')
+  }
+  return(rast)
+}
+
+# aggregation function
+aggregate_raster <- function(input, pop, admin, template, label=""){
+  
+  e <- extent(template)
+  
+  input <- crop(input, e)
+  input <- align_res(input, template)
+  
+  pop   <- crop(pop, e)
+  pop <- align_res(pop, template)
+  
+  count.raster <- input * pop
+  
+  # calculate zonal stats
+  full.zonal <- data.table(zonal(count.raster, admin, fun='sum'))
+  pop.zonal  <- data.table(zonal(pop, admin, fun='sum'))
+  
+  agg.zonal <- merge(full.zonal[, list(uid=zone, input_val=sum)],
+                     pop.zonal[, list(uid=zone, pop=sum)],
+                     by="uid", all=T)
+  
+  if (label !=""){
+    agg.zonal[, type:=label]
+  }
+  
+  return(agg.zonal)
+}
+

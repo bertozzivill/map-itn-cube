@@ -11,26 +11,25 @@
 ## 
 ##############################################################################################################
 
-predict_rasters <- function(input_dir, func_dir, cov_dir, main_indir, main_outdir, prediction_years){
+predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, main_outdir, func_dir, prediction_years){
   
   set.seed(212)
   out_dir <- file.path(main_outdir, "05_predictions")
-  if (!dir.exists(out_dir)){
-    dir.create(out_dir)
-    dir.create(file.path(out_dir, "monthly_access"))
-    dir.create(file.path(out_dir, "monthly_use"))
-    }
+  dir.create(file.path(out_dir, "monthly_vals", "access"), recursive=T)
+  dir.create(file.path(out_dir, "monthly_vals", "use"))
+  dir.create(file.path(out_dir, "monthly_vals", "percapita_nets"))
   
   # TODO: load shapefiles and templates only when you're actually plotting (objects named World, Africa, Water, img)
   print("loading inla outputs and relevant functions")
   
-  # Load relevant outputs from previous steps 
-  stock_and_flow_access <- fread(file.path(indicators_indir, "01_stock_and_flow_access.csv"))
-  stock_and_flow_access[, emplogit_nat_access:=emplogit(nat_access)]
-  load(file.path(main_indir, "04_inla_dev_gap.Rdata"))
-  
   # load function script
   source(file.path(func_dir, "04_inla_functions.r")) # for ll_to_xyz and predict_inla
+  
+  # Load relevant outputs from previous steps 
+  stock_and_flow <- fread(file.path(indicators_indir, "stock_and_flow_access_npc.csv"))
+  stock_and_flow[, emp_nat_access:=emplogit(nat_access)]
+  load(file.path(main_indir, "04_inla_dev_gap.Rdata"))
+
   
   # load name maps and stock and flow outputs
   iso_gaul_map<-fread(file.path(input_dir, "general/iso_gaul_map.csv"))
@@ -59,49 +58,15 @@ predict_rasters <- function(input_dir, func_dir, cov_dir, main_indir, main_outdi
   
   INLA:::inla.dynload.workaround() 
   
-  # note: the mesh objects from access dev or use gap should be the same-- we just pick the access dev ones here.
+  # note: the mesh objects for any output should be the same-- we just pick the access dev ones here.
   spatial_mesh <-  copy(inla_outputs[["access_dev"]][["spatial_mesh"]])
   temporal_mesh <- copy(inla_outputs[["access_dev"]][["temporal_mesh"]])
-  
-  ## Find early years to 'squash' TODO: don't  ## ---------------------------------------------------------
-  # print("Finding years to squash")
-  # stock_and_flow_use <- fread(file.path(input_dir, "stock_and_flow/quarterly_use.csv"))
-  # stock_and_flow_use <- stock_and_flow_use[2:nrow(stock_and_flow_use)]
-  # 
-  # # find time span of dataset
-  # time_points <- length(names(stock_and_flow_use))-2 # (subtract 1 for the "country" label, and 1 for the year 2000, our starting point)
-  # end_year <- 2000 + time_points*0.25
-  # names(stock_and_flow_use) <- c("country", seq(2000, end_year, 0.25)) 
-  # 
-  # stock_and_flow_use <- melt(stock_and_flow_use, id.vars = "country", variable.name="time", value.name="use")
-  # stock_and_flow_use[, year:=floor(as.numeric(as.character(time)))]
-  # 
-  # annual_use <- stock_and_flow_use[year<=max(prediction_years), list(use=mean(use)), by=list(country, year)]
-  # annual_use[, to_squash:=as.integer(use<0.02)]
-  # squash_map <- dcast.data.table(annual_use, country~year, value.var="to_squash")
-  # 
-  # restrict_indicator <- function(prior_val, current_val){
-  #   return(ifelse(prior_val==0, 0, current_val))
-  # }
-  # 
-  # for (year in prediction_years[2:length(prediction_years)]){
-  #   squash_map[[as.character(year)]] <- restrict_indicator(squash_map[[as.character(year-1)]], squash_map[[as.character(year)]])
-  # }
-  # 
-  # squash_map <- melt(squash_map, id.vars = "country", value.name="to_squash", variable.name="year")
-  # squash_map[, year:=as.integer(as.character(year))]
-  # squash_map <- merge(squash_map, iso_gaul_map, by="country", all.x=T)
-  # 
-  # # find the country-years for which to 'squash' use to zero
-  # squash_map[, country_count:= sum(to_squash), by=list(year)] 
-  # years_to_squash <- unique(squash_map[country_count>0]$year)
-  
   
   ## Predict and make rasters by year  ## ---------------------------------------------------------
   ncores <- detectCores()
   print(paste("--> Machine has", ncores, "cores available"))
   registerDoParallel(ncores-2)
-  prediction_outcomes <- foreach(this_year=prediction_years) %dopar% {
+  prediction_outcomes <- foreach(this_year=prediction_years,.combine=rbind) %dopar% {
     
     print(paste("predicting for year", this_year))
     
@@ -112,7 +77,7 @@ predict_rasters <- function(input_dir, func_dir, cov_dir, main_indir, main_outdi
                                 group.mesh=temporal_mesh)
     
     
-    ## Load year-specific covaraites  ## ---------------------------------------------------------
+    ## Load year-specific covariates  ## ---------------------------------------------------------
     
     print(paste(this_year, "Loading dynamic covariates"))
 
@@ -123,115 +88,107 @@ predict_rasters <- function(input_dir, func_dir, cov_dir, main_indir, main_outdi
     thisyear_covs <- merge(thisyear_covs, dynamic_covs, by=c("cellnumber", "year"), all=T)
     rm(dynamic_covs); gc()
     
-    ## Predict access  ## ---------------------------------------------------------
-    print(paste(this_year, "predicting access deviation"))
-    acc_dev_predictions <- predict_inla(model=inla_outputs[["access_dev"]], A_matrix, thisyear_covs, prediction_cells)
-    acc_dev_predictions[, year:=this_year]
     
-    print(paste(this_year, "calculating access"))
-    setnames(acc_dev_predictions, "final_prediction", "access_deviation")
-    acc_dev_predictions <- merge(acc_dev_predictions, stock_and_flow_access, by=c("iso3", "year", "month"), all.x=T)
-    acc_dev_predictions[, emplogit_access:= emplogit_nat_access + access_deviation]
+    ## Predict output variables  ## ---------------------------------------------------------
     
-    acc_dev_predictions_transformed <- acc_dev_predictions[, list(iso3, year, month, cellnumber, 
-                                                                  emplogit_access=emplogit_access,
-                                                                  access=plogis(emplogit_access),
-                                                                  access_deviation=plogis(access_deviation),
-                                                                  nat_access=plogis(emplogit_nat_access))]
+    all_predictions <- rbindlist(lapply(names(inla_outputs), function(output_var){ # should be "access_dev", "use_gap", "percapita_net_dev
+      print(paste(this_year, "predicting", output_var))
+      these_predictions <- predict_inla(model=inla_outputs[[output_var]], A_matrix, thisyear_covs, prediction_cells)
+      these_predictions[, year:=this_year]
+      these_predictions[, metric:= ifelse(output_var=="percapita_net_dev", output_var, paste0("emp_", output_var))]
+      return(these_predictions)
+    })
+    )
+
+    ## Transform and merge
+    print("Transforming and merging predictions")
+    ## NOTE: unusually, this code will generate null values that are preserved as-is in the dataset. These nulls refer to pixels 
+    ## with no malaria transmission, and they will be converted to zeros at a later point in the script. 
+    all_predictions <- dcast.data.table(all_predictions, cellnumber + iso3 +  year + month ~ metric, value.var = "final_prediction")
+    all_predictions <- merge(all_predictions, stock_and_flow, by=c("iso3", "year", "month"), all.x=T)
     
-    summary_access <- acc_dev_predictions_transformed[, list(nat_access=mean(nat_access, na.rm=F),
-                                                             access_deviation=mean(access_deviation, na.rm=F),
-                                                             access=mean(access, na.rm=F)),
-                                                      by=list(iso3, year, cellnumber)]
-    summary_access <- summary_access[order(cellnumber)]
+    ## Metric-specific transformations
+    transformed_predictions <- all_predictions[, list(iso3, year, month, cellnumber,
+                                                      nat_access,
+                                                      access = plogis(emp_nat_access + emp_access_dev),
+                                                      use = plogis(emp_nat_access + emp_access_dev - emp_use_gap),
+                                                      nat_percapita_nets,
+                                                      percapita_nets = nat_percapita_nets + percapita_net_dev,
+                                                      percapita_net_dev
+                                                      )]
+    transformed_predictions[, access_dev:= access-nat_access]
+    transformed_predictions[, use_gap:=access-use]
+    write.csv(transformed_predictions, file.path(out_dir, paste0("all_predictions_wide_", this_year, ".csv")), row.names=F)
+
+    # mean over months
+    print("Finding annual means and converting to raster")
+    annual_predictions <- transformed_predictions[, list(nat_access=mean(nat_access, na.rm=F),
+                                                         access = mean(access, na.rm=F),
+                                                         access_dev = mean(access_dev, na.rm=F),
+                                                         use = mean(use, na.rm=F),
+                                                         use_gap = mean(use_gap, na.rm=F),
+                                                         nat_percapita_nets= mean(nat_percapita_nets, na.rm=F),
+                                                         percapita_nets = mean(percapita_nets, na.rm=F),
+                                                         percapita_net_dev = mean(percapita_net_dev, na.rm=F)),
+                                                  by=list(iso3, year, cellnumber)
+                                                  ]
     
-    # save monthly access rasters
-    print("saving monthly access")
-    for (this_month in 1:12){
-      this_access_map <-  copy(national_raster)
-      this_access <- acc_dev_predictions_transformed[month==this_month]
-      this_access_map[this_access$cellnumber] <- this_access$access
-      this_access_map[!is.na(national_raster) & is.na(this_access_map)] <- 0
-      writeRaster(this_access_map, file.path(out_dir, "monthly_access", paste0("ITN_",this_year,  ".", this_month, ".ACC.tif")),NAflag=-9999,overwrite=TRUE)
-    }
+    annual_predictions <- annual_predictions[order(cellnumber)]
     
-    access_map <- copy(national_raster)
-    access_map[summary_access$cellnumber] <- summary_access$access
-    access_map[!is.na(national_raster) & is.na(access_map)] <- 0
+    ## Convert to rasters annually 
+    annual_metrics <- names(annual_predictions)
+    annual_metrics <- annual_metrics[!annual_metrics %in% c("iso3", "year", "cellnumber")]
     
-    deviation_map <- copy(national_raster)
-    deviation_map[summary_access$cellnumber] <- summary_access$access_deviation
-    deviation_map[!is.na(national_raster) & is.na(deviation_map)] <- 0
+    annual_rasters <- lapply(annual_metrics, function(this_metric){
+      this_raster <- copy(national_raster)
+      this_raster[annual_predictions$cellnumber] <- annual_predictions[[this_metric]]
+      this_raster[!is.na(national_raster) & is.na(this_raster)] <- 0
+      this_out_fname <- file.path(out_dir, paste0("ITN_", this_year, "_", this_metric, ".tif"))
+      writeRaster(this_raster, this_out_fname, NAflag=-9999, overwrite=T)
+    })
     
-    nat_mean_map <- copy(national_raster)
-    nat_mean_map[summary_access$cellnumber] <- summary_access$nat_access
-    nat_mean_map[!is.na(national_raster) & is.na(nat_mean_map)] <- 0
+    ##  Convert to rasters monthly for access, use, and npc
+    monthly_metrics <- c("access", "use", "percapita_nets")
     
-    # write files
-    print(paste(this_year, "writing access tifs"))
-    writeRaster(access_map, file.path(out_dir, paste0("ITN_",this_year,".ACC.tif")),NAflag=-9999,overwrite=TRUE)
-    writeRaster(deviation_map, file.path(out_dir, paste0("ITN_",this_year,".DEV.tif")),NAflag=-9999,overwrite=TRUE)
-    writeRaster(nat_mean_map, file.path(out_dir, paste0("ITN_", this_year,".MEAN.tif")),NAflag=-9999,overwrite=TRUE)
-    
-    rm(acc_dev_predictions_transformed, summary_access, access_map, deviation_map, nat_mean_map)
-    
-    
-    ## Predict use  ## ---------------------------------------------------------
-    print(paste(this_year, "predicting use gap"))
-    use_gap_predictions <- predict_inla(model=inla_outputs[["use_gap"]], A_matrix, thisyear_covs, prediction_cells)
-    use_gap_predictions[, year:=this_year]
-    
-    print(paste(this_year, "calculating use"))
-    setnames(use_gap_predictions, "final_prediction", "use_gap")
-    
-    use_gap_predictions <- merge(use_gap_predictions, acc_dev_predictions, by=c("iso3", "year", "month", "cellnumber"), all=T)
-    use_gap_predictions[, emplogit_use:= emplogit_access - use_gap]
-    
-    use_gap_predictions_transformed <- use_gap_predictions[, list(iso3, year, month, cellnumber, 
-                                                                  use=plogis(emplogit_use),
-                                                                  use_gap=plogis(use_gap))]
-    
-    summary_use <- use_gap_predictions_transformed[, list(use=mean(use, na.rm=F),
-                                                          use_gap=mean(use_gap, na.rm=F)),
-                                                   by=list(iso3, year, cellnumber)]
-    summary_use <- summary_use[order(cellnumber)]
-    
-    use_map <- copy(national_raster)
-    use_map[summary_use$cellnumber] <- summary_use$use
-    use_map[!is.na(national_raster) & is.na(use_map)] <- 0
-    
-    use_gap_map <- copy(national_raster)
-    use_gap_map[summary_use$cellnumber] <- summary_use$use_gap
-    use_gap_map[!is.na(national_raster) & is.na(use_gap_map)] <- 0
-    
-    # write files
-    print(paste(this_year, "writing use tifs"))
-    writeRaster(use_map, file.path(out_dir, paste0("ITN_",this_year,".USE.tif")),NAflag=-9999,overwrite=TRUE)
-    writeRaster(use_gap_map, file.path(out_dir, paste0("ITN_",this_year,".GAP.tif")),NAflag=-9999,overwrite=TRUE)
-    
-    # save monthly rasters of use
-    print("saving monthly use")
-    for (this_month in 1:12){
-      this_use_map <-  copy(national_raster)
-      this_use <- use_gap_predictions_transformed[month==this_month]
-      this_use_map[this_use$cellnumber] <- this_use$use
-      this_use_map[!is.na(national_raster) & is.na(this_use_map)] <- 0
-      writeRaster(this_use_map, file.path(out_dir, "monthly_use", paste0("ITN_",this_year,  ".", this_month, ".ACC.tif")),NAflag=-9999,overwrite=TRUE)
-    }
-    
-    # if (this_year %in% years_to_squash){
-    #   print(paste(this_year, "squashing some countries to zero"))
-    #   new_use <- copy(use_map)
-    #   gauls_to_squash <- squash_map[year==this_year & to_squash==1]$gaul
-    #   new_use[national_raster %in% gauls_to_squash] <- 0
-    #   
-    #   writeRaster(new_use, file.path(out_dir, paste0("ITN_",this_year,".RAKED_USE.tif")),NAflag=-9999,overwrite=TRUE)
-    # }
-    
-    return(paste(this_year, "Success"))
+    print("finding monthly rasters and national time series")
+    all_monthly_results <- lapply(monthly_metrics, function(this_metric){
+      these_monthly_results <- lapply(1:12, function(this_month){
+        print(this_month)
+        this_raster <- copy(national_raster)
+        this_data <- transformed_predictions[month==this_month]
+        this_data <- this_data[order(cellnumber)]
+        this_raster[this_data$cellnumber] <- this_data[[this_metric]]
+        this_raster[!is.na(national_raster) & is.na(this_raster)] <- 0
+        this_out_fname <- file.path(out_dir, "monthly_vals", this_metric, paste0("ITN_", this_year, "_", str_pad(this_month, 2, "left", pad="0"), "_", this_metric, ".tif"))
+        writeRaster(this_raster, this_out_fname, NAflag=-9999, overwrite=T)
+        
+        # aggregate nationally
+        pop_raster <- copy(national_raster)
+        pop_data <- annual_covs[year==2018, list(year, cellnumber, Population)]
+        pop_data <- pop_data[order(cellnumber)]
+        pop_raster[pop_data$cellnumber] <- pop_data$Population
+        pop_raster[!is.na(national_raster) & is.na(pop_raster)] <- 0
+        
+        monthly_table <- aggregate_raster(this_raster, pop_raster, national_raster, this_raster, label=this_metric)
+        monthly_table <- merge(monthly_table[, list(type, gaul=uid, 
+                                                   year=this_year, 
+                                                   month=this_month,
+                                                   value=input_val/pop)],
+                               iso_gaul_map[, list(gaul, iso3)],
+                               by="gaul", all.x=T)
+        monthly_table <- monthly_table[, list(type, iso3, year, month, value)]
+        monthly_table <- monthly_table[order(iso3)]
+        return(monthly_table)
+      })
+      return(rbindlist(these_monthly_results))
+    })
+    all_monthly_results <- rbindlist(all_monthly_results)
+  
+    print(paste(this_year, "Success!"))
+    return(all_monthly_results)
     
   }
-  
+  write.csv(prediction_outcomes, file.path(out_dir, "monthly_vals", "all_monthly_vals.csv"), row.names=F)
 }
 
 ## TO RUN THIS SCRIPT INDIVIDUALLY, READ HERE
@@ -240,7 +197,7 @@ predict_rasters <- function(input_dir, func_dir, cov_dir, main_indir, main_outdi
 
 if (Sys.getenv("run_individually")!=""){
   
-  # dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-highmem-64 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20190729 main_indir=gs://map_users/amelia/itn/itn_cube/results/20190729_new_covariates/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ indicators_indir=gs://map_users/amelia/itn/stock_and_flow/results/20200119_add_access_calc/for_cube --input run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/05_predict_rasters.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20190729_new_covariates/ --command 'Rscript ${CODE}'
+  # dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-highmem-64 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20191214 main_indir=gs://map_users/amelia/itn/itn_cube/results/20200122_test_percapita_nets/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ indicators_indir=gs://map_users/amelia/itn/stock_and_flow/results/20200119_add_access_calc/for_cube --input run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/05_predict_rasters.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20200122_test_percapita_nets/ --command 'Rscript ${CODE}'
   
   package_load <- function(package_list){
     # package installation/loading
@@ -253,9 +210,10 @@ if (Sys.getenv("run_individually")!=""){
 
   if(Sys.getenv("input_dir")=="") {
     input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
-    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190614_rearrange_scripts/"
+    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200122_test_percapita_nets/"
     indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200119_add_access_calc/for_cube"
-    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190614_rearrange_scripts/"
+    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200122_test_percapita_nets/"
+    cov_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/20191214"
     func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
   } else {
     input_dir <- Sys.getenv("input_dir")
@@ -266,7 +224,7 @@ if (Sys.getenv("run_individually")!=""){
     func_dir <- Sys.getenv("func_dir") # code directory for function scripts
   }
 
-  predict_rasters(input_dir, func_dir, cov_dir, main_indir, main_outdir, prediction_years=2000:2018)
+  predict_rasters(input_dir, indicators_indir, main_indir, cov_dir, main_outdir, func_dir, prediction_years=2017:2018)
   
 }
 
