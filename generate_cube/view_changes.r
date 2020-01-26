@@ -8,7 +8,7 @@
 ## 
 ##############################################################################################################
 
-# dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive old_dir=gs://map_users/amelia/itn/itn_cube/results/20191216_new_covselect_exclude_needleleaf/ new_dir=gs://map_users/amelia/itn/itn_cube/results/20200107_fix_cluster_agg/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input CODE=gs://map_users/amelia/itn/code/generate_cube/view_changes.r --output out_path=gs://map_users/amelia/itn/itn_cube/results/20200107_fix_cluster_agg/compare_changes.pdf --command 'Rscript ${CODE}'
+# dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive old_dir=gs://map_users/amelia/itn/itn_cube/results/20200107_fix_cluster_agg/ new_dir=gs://map_users/amelia/itn/itn_cube/results/20200122_test_percapita_nets/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input CODE=gs://map_users/amelia/itn/code/generate_cube/view_changes.r --output out_path=gs://map_users/amelia/itn/itn_cube/results/20200122_test_percapita_nets/compare_changes.pdf --command 'Rscript ${CODE}'
 
 rm(list=ls())
 
@@ -48,143 +48,143 @@ append_dts <- function(old, new){
 pdf(out_path, width=11, height=7)
 
 ## 01: check stock and flow
-print("comparing old and new stock and flow files")
-new_stockflow_means <- fread(file.path(new_dir, "01_stock_and_flow_probs_means.csv"))
-old_stockflow_means <- fread(file.path(old_dir, "01_stock_and_flow_probs_means.csv"))
+# print("comparing old and new stock and flow files")
+# new_stockflow_means <- fread(file.path(new_dir, "01_stock_and_flow_probs_means.csv"))
+# old_stockflow_means <- fread(file.path(old_dir, "01_stock_and_flow_probs_means.csv"))
+# 
+# if (!"time" %in% names(old_stockflow_means)){
+#   setnames(old_stockflow_means, "year", "time")
+#   new_stockflow_means[, c("year", "month") := NULL]
+# }
+# 
+# all_means <- append_dts(old_stockflow_means, new_stockflow_means)
+# all_means[, hh_size:=factor(hh_size)]
+# all_means[, prob_any_net:=1-stockflow_prob_no_nets]
+# 
+# means_plot <- ggplot(all_means, aes(x=time, y=stockflow_mean_nets_per_hh, color=hh_size)) +
+#               geom_line(aes(linetype=type)) +
+#               facet_wrap(~iso3) +
+#               labs(title="Stock and Flow: Mean Nets Per HH",
+#                    y="Mean Nets")
+# print(means_plot)
+# 
+# probs_plot <- ggplot(all_means, aes(x=time, y=prob_any_net, color=hh_size)) +
+#               geom_line(aes(linetype=type)) +
+#               facet_wrap(~iso3) +
+#               labs(title="Stock and Flow: Prob(Any Nets)",
+#                    y="Prob(Any Nets)")
+# print(probs_plot)
+# 
+# new_stockflow_access <- fread(file.path(new_dir, "01_stock_and_flow_access.csv") )
+# old_stockflow_access <- fread(file.path(old_dir, "01_stock_and_flow_access.csv"))
+# 
+# if (!"time" %in% names(old_stockflow_access)){
+#   time_map <- unique(new_stockflow_access[, list(time, year, month)])
+#   old_stockflow_access <- merge(old_stockflow_access, time_map, by=c("year", "month")) # will sometimes drop last year of old stock and flow, that's fine
+# }
+# 
+# all_stockflow_access <- append_dts(old_stockflow_access, new_stockflow_access)
+# 
+# stockflow_access_plot <- ggplot(all_stockflow_access, aes(x=time, y=nat_access, color=type)) +
+#                           geom_line() +
+#                           facet_wrap(~iso3) +
+#                           labs(title="Stock and Flow Access",
+#                                y="National Access")
+# 
+# print(stockflow_access_plot)
 
-if (!"time" %in% names(old_stockflow_means)){
-  setnames(old_stockflow_means, "year", "time")
-  new_stockflow_means[, c("year", "month") := NULL]
-}
-
-all_means <- append_dts(old_stockflow_means, new_stockflow_means)
-all_means[, hh_size:=factor(hh_size)]
-all_means[, prob_any_net:=1-stockflow_prob_no_nets]
-
-means_plot <- ggplot(all_means, aes(x=time, y=stockflow_mean_nets_per_hh, color=hh_size)) +
-              geom_line(aes(linetype=type)) +
-              facet_wrap(~iso3) +
-              labs(title="Stock and Flow: Mean Nets Per HH",
-                   y="Mean Nets")
-print(means_plot)
-
-probs_plot <- ggplot(all_means, aes(x=time, y=prob_any_net, color=hh_size)) +
-              geom_line(aes(linetype=type)) +
-              facet_wrap(~iso3) +
-              labs(title="Stock and Flow: Prob(Any Nets)",
-                   y="Prob(Any Nets)")
-print(probs_plot)
-
-new_stockflow_access <- fread(file.path(new_dir, "01_stock_and_flow_access.csv") )
-old_stockflow_access <- fread(file.path(old_dir, "01_stock_and_flow_access.csv"))
-
-if (!"time" %in% names(old_stockflow_access)){
-  time_map <- unique(new_stockflow_access[, list(time, year, month)])
-  old_stockflow_access <- merge(old_stockflow_access, time_map, by=c("year", "month")) # will sometimes drop last year of old stock and flow, that's fine
-}
-
-all_stockflow_access <- append_dts(old_stockflow_access, new_stockflow_access)
-
-stockflow_access_plot <- ggplot(all_stockflow_access, aes(x=time, y=nat_access, color=type)) +
-                          geom_line() +
-                          facet_wrap(~iso3) +
-                          labs(title="Stock and Flow Access",
-                               y="National Access")
-
-print(stockflow_access_plot)
-
-## 02: check survey data
-print("comparing old and new data files")
-new_data <- fread(file.path(new_dir, "02_survey_data.csv"))
-old_data <- fread(file.path(old_dir, "02_survey_data.csv"))
-
-if ("gap_1" %in% names(old_data)){
-  old_data[, c("gap_1", "gap_2", "gap_3"):=NULL]
-}
-
-if (!"iso3" %in% names(old_data)){
-  iso_key <- unique(new_data[, list(cellnumber, iso3)])
-  old_data <- merge(old_data, iso_key, by="cellnumber", all.x=T)
-}
-
-if ("cluster_pop" %in% names(old_data)){
-  setnames(old_data, c("cluster_pop", "Survey", "flooryear", "year"), c("pixel_pop", "survey", "year", "time"))
-  old_data[, yearqtr:=NULL]
-  new_data[, month:=NULL]
-}
-
-all_data <- append_dts(old_data, new_data)
-
-all_data[, access:=access_count/pixel_pop]
-all_data[, access_dev:=national_access-access]
-all_data[, use:=use_count/pixel_pop]
-all_data[, use_gap:=access-use]
-
-toplot_data <- melt(all_data, id.vars=c("type", "year", "iso3", "survey", "cellnumber"), measure.vars = c("national_access", "access", "access_dev", "use", "use_gap"))
-
-nat_plot <- ggplot(toplot_data, aes(x=iso3, y=value)) +
-  geom_boxplot(aes(color=type, fill=type), alpha=0.25) +
-  facet_grid(variable ~ ., scales="free") +
-  theme(legend.position="bottom",
-        legend.title = element_blank(),
-        axis.text.x = element_text(angle=45, hjust=1)) +
-  labs(title="Data value by Country",
-       y="",
-       x="")
-print(nat_plot)
-
-year_plot <- ggplot(toplot_data, aes(x=factor(year), y=value)) +
-              geom_boxplot(aes(color=type, fill=type), alpha=0.25) +
-              facet_grid(variable ~., scales="free") +
-              theme(legend.position="bottom",
-                    legend.title = element_blank(),
-                    axis.text.x = element_text(angle=45, hjust=1)) +
-              labs(title="Data value by Year",
-                   y="",
-                   x="")
-print(year_plot)
-
-surv_plot <- ggplot(toplot_data, aes(x=survey, y=value)) +
-              geom_boxplot(aes(color=type, fill=type), alpha=0.25) +
-              facet_grid(variable ~., scales="free") +
-              theme(legend.position="bottom",
-                    legend.title = element_blank(),
-                    axis.text.x = element_text(angle=45, hjust=1)) +
-              labs(title="Data value by Survey",
-                   y="",
-                   x="")
-print(surv_plot)
+# ## 02: check survey data
+# print("comparing old and new data files")
+# new_data <- fread(file.path(new_dir, "02_survey_data.csv"))
+# old_data <- fread(file.path(old_dir, "02_survey_data.csv"))
+# 
+# if ("gap_1" %in% names(old_data)){
+#   old_data[, c("gap_1", "gap_2", "gap_3"):=NULL]
+# }
+# 
+# if (!"iso3" %in% names(old_data)){
+#   iso_key <- unique(new_data[, list(cellnumber, iso3)])
+#   old_data <- merge(old_data, iso_key, by="cellnumber", all.x=T)
+# }
+# 
+# if ("cluster_pop" %in% names(old_data)){
+#   setnames(old_data, c("cluster_pop", "Survey", "flooryear", "year"), c("pixel_pop", "survey", "year", "time"))
+#   old_data[, yearqtr:=NULL]
+#   new_data[, month:=NULL]
+# }
+# 
+# all_data <- append_dts(old_data, new_data)
+# 
+# all_data[, access:=access_count/pixel_pop]
+# all_data[, access_dev:=national_access-access]
+# all_data[, use:=use_count/pixel_pop]
+# all_data[, use_gap:=access-use]
+# 
+# toplot_data <- melt(all_data, id.vars=c("type", "year", "iso3", "survey", "cellnumber"), measure.vars = c("national_access", "access", "access_dev", "use", "use_gap"))
+# 
+# nat_plot <- ggplot(toplot_data, aes(x=iso3, y=value)) +
+#   geom_boxplot(aes(color=type, fill=type), alpha=0.25) +
+#   facet_grid(variable ~ ., scales="free") +
+#   theme(legend.position="bottom",
+#         legend.title = element_blank(),
+#         axis.text.x = element_text(angle=45, hjust=1)) +
+#   labs(title="Data value by Country",
+#        y="",
+#        x="")
+# print(nat_plot)
+# 
+# year_plot <- ggplot(toplot_data, aes(x=factor(year), y=value)) +
+#               geom_boxplot(aes(color=type, fill=type), alpha=0.25) +
+#               facet_grid(variable ~., scales="free") +
+#               theme(legend.position="bottom",
+#                     legend.title = element_blank(),
+#                     axis.text.x = element_text(angle=45, hjust=1)) +
+#               labs(title="Data value by Year",
+#                    y="",
+#                    x="")
+# print(year_plot)
+# 
+# surv_plot <- ggplot(toplot_data, aes(x=survey, y=value)) +
+#               geom_boxplot(aes(color=type, fill=type), alpha=0.25) +
+#               facet_grid(variable ~., scales="free") +
+#               theme(legend.position="bottom",
+#                     legend.title = element_blank(),
+#                     axis.text.x = element_text(angle=45, hjust=1)) +
+#               labs(title="Data value by Survey",
+#                    y="",
+#                    x="")
+# print(surv_plot)
 
 
-## 03: check covariates
-print("comparing old and new data covariate files")
-new_covs <- fread(file.path(new_dir, "03_data_covariates.csv"))
-old_covs <- fread(file.path(old_dir, "03_data_covariates.csv"))
-
-# adjust names
-if ("Landcover_0_Water" %in% names(old_covs)){
-  setnames(old_covs, "Landcover_0_Water", "Landcover_17_Water")
-}
-
-# name_key <- fread(file.path(func_dir, "oldnew_covariate_names.csv"))
-# setnames(old_covs, name_key$old_name, name_key$common_name)
-# setnames(new_covs, name_key$new_name, name_key$common_name)
-
-all_covs <- append_dts(old_covs, new_covs)
-cov_names <- names(new_covs)
-cov_names <- cov_names[!cov_names %in% c(names(new_data), "row_id", "type")]
-toplot_covs <- melt(all_covs, id.vars=c("type", "year", "iso3", "survey", "cellnumber"), measure.vars = cov_names)
-
-cov_plot <- ggplot(toplot_covs, aes(x=variable, y=value)) +
-              geom_boxplot(aes(color=type, fill=type), alpha=0.25) +
-              facet_wrap( ~ variable, scales="free") +
-              theme(legend.position="bottom",
-                    legend.title = element_blank(),
-                    axis.text.x = element_blank()) +
-              labs(title="Covariate Comparison",
-                   y="",
-                   x="")
-print(cov_plot)
+# ## 03: check covariates
+# print("comparing old and new data covariate files")
+# new_covs <- fread(file.path(new_dir, "03_data_covariates.csv"))
+# old_covs <- fread(file.path(old_dir, "03_data_covariates.csv"))
+# 
+# # adjust names
+# if ("Landcover_0_Water" %in% names(old_covs)){
+#   setnames(old_covs, "Landcover_0_Water", "Landcover_17_Water")
+# }
+# 
+# # name_key <- fread(file.path(func_dir, "oldnew_covariate_names.csv"))
+# # setnames(old_covs, name_key$old_name, name_key$common_name)
+# # setnames(new_covs, name_key$new_name, name_key$common_name)
+# 
+# all_covs <- append_dts(old_covs, new_covs)
+# cov_names <- names(new_covs)
+# cov_names <- cov_names[!cov_names %in% c(names(new_data), "row_id", "type")]
+# toplot_covs <- melt(all_covs, id.vars=c("type", "year", "iso3", "survey", "cellnumber"), measure.vars = cov_names)
+# 
+# cov_plot <- ggplot(toplot_covs, aes(x=variable, y=value)) +
+#               geom_boxplot(aes(color=type, fill=type), alpha=0.25) +
+#               facet_wrap( ~ variable, scales="free") +
+#               theme(legend.position="bottom",
+#                     legend.title = element_blank(),
+#                     axis.text.x = element_blank()) +
+#               labs(title="Covariate Comparison",
+#                    y="",
+#                    x="")
+# print(cov_plot)
 
 
 ## 04: inla models
@@ -194,7 +194,7 @@ new_models <- copy(inla_outputs)
 load(file.path(old_dir, "04_inla_dev_gap.Rdata"))
 old_models <- copy(inla_outputs)
 
-for (this_name in names(new_models)){
+for (this_name in names(old_models)){
   print(paste("Evaluating inla type", this_name))
   new_model <- new_models[[this_name]][["model_output"]]
   old_model <- old_models[[this_name]][["model_output"]]
@@ -280,9 +280,16 @@ compare_tifs <- function(old_tif, new_tif, name="", cutoff=0.001){
   return(stackplot)
 }
 
-for (var_name in c("\\.MEAN", "\\.ACC", "\\.USE")){
+old_var_names <- c("\\.MEAN", "\\.ACC", "\\.USE")
+new_var_names <- c("ITN_[0-9]{4}_nat_access\\.", "ITN_[0-9]{4}_access\\.", "ITN_[0-9]{4}_use\\.")
+
+for (idx in 1:length(old_var_names)){
+  var_name <- old_var_names[[idx]]
+  new_var_name <- new_var_names[[idx]]
   print(paste("predicting for", var_name))
-  new_stack <- stack(file.path(new_raster_dir, new_files[grepl(var_name, new_files)]))
+  print(new_files[grepl(new_var_name, new_files)])
+  print(old_files[grepl(var_name, old_files)])
+  new_stack <- stack(file.path(new_raster_dir, new_files[grepl(new_var_name, new_files)]))
   old_stack <- stack(file.path(old_raster_dir, old_files[grepl(var_name, old_files)]))
   stack_diff <- new_stack - old_stack
   names(stack_diff) <- paste0(names(new_stack), ".DIFF")

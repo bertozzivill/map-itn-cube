@@ -15,9 +15,11 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, ma
   
   set.seed(212)
   out_dir <- file.path(main_outdir, "05_predictions")
-  dir.create(file.path(out_dir, "monthly_vals", "access"), recursive=T)
-  dir.create(file.path(out_dir, "monthly_vals", "use"))
-  dir.create(file.path(out_dir, "monthly_vals", "percapita_nets"))
+  monthly_out_dir <- file.path(main_outdir, "05_predictions_monthly")
+  dir.create(file.path(out_dir), recursive=T)
+  dir.create(file.path(monthly_out_dir,  "access"), recursive=T)
+  dir.create(file.path(monthly_out_dir,  "use"))
+  dir.create(file.path(monthly_out_dir,  "percapita_nets"))
   
   # TODO: load shapefiles and templates only when you're actually plotting (objects named World, Africa, Water, img)
   print("loading inla outputs and relevant functions")
@@ -118,7 +120,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, ma
                                                       )]
     transformed_predictions[, access_dev:= access-nat_access]
     transformed_predictions[, use_gap:=access-use]
-    write.csv(transformed_predictions, file.path(out_dir, paste0("all_predictions_wide_", this_year, ".csv")), row.names=F)
+    # write.csv(transformed_predictions, file.path(out_dir, paste0("all_predictions_wide_", this_year, ".csv")), row.names=F)
 
     # mean over months
     print("Finding annual means and converting to raster")
@@ -159,7 +161,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, ma
         this_data <- this_data[order(cellnumber)]
         this_raster[this_data$cellnumber] <- this_data[[this_metric]]
         this_raster[!is.na(national_raster) & is.na(this_raster)] <- 0
-        this_out_fname <- file.path(out_dir, "monthly_vals", this_metric, paste0("ITN_", this_year, "_", str_pad(this_month, 2, "left", pad="0"), "_", this_metric, ".tif"))
+        this_out_fname <- file.path(monthly_out_dir, this_metric, paste0("ITN_", this_year, "_", str_pad(this_month, 2, "left", pad="0"), "_", this_metric, ".tif"))
         writeRaster(this_raster, this_out_fname, NAflag=-9999, overwrite=T)
         
         # aggregate nationally
@@ -188,7 +190,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, ma
     return(all_monthly_results)
     
   }
-  write.csv(prediction_outcomes, file.path(out_dir, "monthly_vals", "all_monthly_vals.csv"), row.names=F)
+  write.csv(prediction_outcomes, file.path(out_dir, "national_time_series.csv"), row.names=F)
 }
 
 ## TO RUN THIS SCRIPT INDIVIDUALLY, READ HERE
@@ -224,7 +226,7 @@ if (Sys.getenv("run_individually")!=""){
     func_dir <- Sys.getenv("func_dir") # code directory for function scripts
   }
 
-  predict_rasters(input_dir, indicators_indir, main_indir, cov_dir, main_outdir, func_dir, prediction_years=2017:2018)
+  predict_rasters(input_dir, indicators_indir, main_indir, cov_dir, main_outdir, func_dir, prediction_years=2000:2018)
   
 }
 

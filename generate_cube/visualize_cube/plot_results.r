@@ -14,11 +14,44 @@ library(maptools)
 library(PNWColors)
 
 rm(list=ls())
-orig_dir <- "/Volumes/map_data/mastergrids/Model_Data/Pf_2015_AfricaModels/Intervention_data/ITN/"
-main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20191102_new_stockflow_data/05_predictions"
-shape_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/shapefiles/"
+
+main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200122_test_percapita_nets/05_predictions"
+indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200119_add_access_calc/for_cube"
+shape_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/shapefiles/"
 setwd(main_dir)
-out_dir <- "/Users/bertozzivill/Dropbox (IDM)/Malaria Team Folder/projects/map_itn_cube/astmh_2019/"
+out_dir <- main_dir
+
+# compare INLA-estimated national access and nets percapita to stock and flow outputs
+stock_and_flow <- fread(file.path(indicators_indir, "stock_and_flow_access_npc.csv"))
+stock_and_flow <- melt(stock_and_flow, id.vars = c("iso3", "year", "month", "time"), variable.name="type")
+stock_and_flow[, type:=gsub("nat_", "", type)]
+stock_and_flow[, model:="Stock and Flow"]
+
+time_map <- unique(stock_and_flow[, list(year, month, time)])
+
+national_estimates <- fread(file.path(main_dir, "national_time_series.csv"))
+national_use <- national_estimates[type=="use"]
+national_estimates <- national_estimates[iso3 %in% unique(stock_and_flow$iso3)]
+national_estimates <- merge(national_estimates, time_map, all.x=T)
+national_estimates[, model:="INLA"]
+
+access_use_plot <- ggplot(national_estimates[type!="percapita_nets"], aes(x=time, y=value, color=type))+ 
+                          geom_line() + 
+                          facet_wrap(~iso3) + 
+                          theme_minimal() 
+
+all_national_estimates <- rbind(stock_and_flow, national_estimates, use.names=T)
+
+compare_access_plot <- ggplot(all_national_estimates[type=="access"], aes(x=time, y=value, color=model)) + 
+                                geom_line() + 
+                                facet_wrap(~iso3) + 
+                                theme_minimal() 
+
+compare_npc_plot <- ggplot(all_national_estimates[type=="percapita_nets"], aes(x=time, y=value, color=model)) + 
+                            geom_line() + 
+                            facet_wrap(~iso3) + 
+                            theme_minimal() 
+
 
 # todo: map of survey cluster points
 # survey_data <- fread("../02_survey_data.csv")
@@ -28,18 +61,20 @@ Africa <- gSimplify(Africa, tol=0.1, topologyPreserve=TRUE)
 
 years <- 2000:2018
 
-# orig_use_stack <- stack(paste0(orig_dir, years, ".ITN.use.yearavg.adj.stable.tif"))
-use_stack <- stack(paste0("ITN_", years, ".USE.tif"))
-access_stack <- stack(paste0("ITN_", years, ".ACC.tif"))
-# new_use_stack <- mask(use_stack, orig_use_stack)
-use_gap_stack <- access_stack - use_stack
-names(use_gap_stack) <- paste("GAP", years)
+use_stack <- stack(paste0("ITN_", years, "_use.tif"))
+access_stack <- stack(paste0("ITN_", years, "_access.tif"))
+use_gap_stack <- stack(paste0("ITN_", years, "_use_gap.tif"))
+nets_percapita_stack <- stack(paste0("ITN_", years, "_percapita_nets.tif"))
 
 access_plot <- levelplot(access_stack,
                        par.settings=rasterTheme(region= wpal("seaside", noblack = T)), at= seq(0, 1, 0.025),
                        xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F) 
 
 use_plot <- levelplot(use_stack,
+                      par.settings=rasterTheme(region= wpal("seaside", noblack = T)), at= seq(0, 1, 0.025),
+                      xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F) 
+
+npc_plot <- levelplot(nets_percapita_stack,
                       par.settings=rasterTheme(region= wpal("seaside", noblack = T)), at= seq(0, 1, 0.025),
                       xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F) 
 
