@@ -115,7 +115,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, ma
                                                       access = plogis(emp_nat_access + emp_access_dev),
                                                       use = plogis(emp_nat_access + emp_access_dev - emp_use_gap),
                                                       nat_percapita_nets,
-                                                      percapita_nets = max(0, nat_percapita_nets + percapita_net_dev)
+                                                      percapita_nets = pmax(0, nat_percapita_nets + percapita_net_dev)
                                                       )]
     transformed_predictions[, access_dev:= access-nat_access]
     transformed_predictions[, use_gap:=access-use]
