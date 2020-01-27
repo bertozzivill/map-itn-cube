@@ -16,7 +16,7 @@ library(lubridate)
 
 rm(list=ls())
 
-out_subdir <- "20200110"
+out_subdir <- "20200127"
 
 main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/household_surveys"
 out_dir <- file.path("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep", out_subdir)
@@ -413,6 +413,11 @@ all_data[, hh_sample_wt:=hh_sample_wt/1e6] # as per dhs specs, apparently (ask s
 # get date as middle day of collection month
 all_data[, date:=decimal_date(ymd(paste(year, month, "15", sep="-")))]
 
+# calculate survey-level access to compare to model outputs
+all_data[, n_with_access:= pmin(n_itn*2, n_defacto_pop)]
+all_data[, access:=n_with_access/n_defacto_pop]
+all_data[is.na(access) & n_defacto_pop==0, access:=0]
+
 print("Summarizing surveys")
 survey_summary <- lapply(unique(all_data$SurveyId), function(this_svy){
   
@@ -422,7 +427,7 @@ survey_summary <- lapply(unique(all_data$SurveyId), function(this_svy){
   # set up survey design
   svy_strat<-svydesign(ids=~clusterid, data=this_svy_data, weight=~hh_sample_wt) 
   
-  meanvals <- c("n_defacto_pop", "n_itn", "n_llin", "n_conv_itn")
+  meanvals <- c("n_defacto_pop", "n_itn", "n_llin", "n_conv_itn", "access")
   svy_means <- lapply(meanvals, function(this_val){
     uniques <- unique(this_svy_data[[this_val]])
     if (length(uniques)==1 & is.na(uniques[1])){

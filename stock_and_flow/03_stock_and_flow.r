@@ -394,7 +394,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
   			# as with quarterly distributions, set the final quarter's value equal to the one that precedes it
   			for(i in 1:(quarter_count-1)){
   			  # total_percapita_nets is the percapita net count in the true population-at-risk
-  				total_percapita_nets[i] <- max( (quarterly_nets_in_houses_llin[i]+quarterly_nets_in_houses_citn[i])/(PAR[(round(i/4+0.3))]), 0) 
+  				total_percapita_nets[i] <- max( (quarterly_nets_in_houses_llin[i]+quarterly_nets_in_houses_citn[i])/(population[(round(i/4+0.3))]), 0) 
   			}
   			total_percapita_nets[quarter_count] <- total_percapita_nets[quarter_count-1]
   			
@@ -406,7 +406,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
   				survey_quarter_start_index[i] <- survey_quarter_start_indices[i]	 
   				survey_quarter_end_index[i] <- survey_quarter_end_indices[i]	 	
   				
-  				# to estimate # of nets at time of survey, linearly interpolate between the surrounding quartrly estimates 
+  				# to estimate # of nets at time of survey, linearly interpolate between the surrounding quarterly estimates 
   				survey_llin_count_est[i] <- quarter_prop_remaining[i] * quarterly_nets_in_houses_llin[survey_quarter_start_index[i]] + quarter_prop_completed[i] * quarterly_nets_in_houses_llin[survey_quarter_end_index[i]]
   				survey_citn_count_est[i] <- quarter_prop_remaining[i] * quarterly_nets_in_houses_citn[survey_quarter_start_index[i]] + quarter_prop_completed[i] * quarterly_nets_in_houses_citn[survey_quarter_end_index[i]]
   				
@@ -542,7 +542,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
   
   ### Find National Access  #####----------------------------------------------------------------------------------------------------------------------------------
   
-  # Only calculate draw-level access if not runnign a sensitivity analysis
+  # Only calculate draw-level access if not running a sensitivity analysis
   if (is.na(sensitivity_survey_count)){
     
     pre_new_objects <- ls()
@@ -663,7 +663,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
 }
 
 # DSUB FOR MAIN RUN
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20191205 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who CODE=gs://map_users/amelia/itn/code/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200119_add_access_calc --command 'cd ${CODE}; Rscript stock_and_flow/03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list.tsv
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20200127 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who CODE=gs://map_users/amelia/itn/code/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200127_no_par --command 'cd ${CODE}; Rscript stock_and_flow/03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list.tsv
 
 # DSUB FOR SENSITIVITY ANALYSIS
 # dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highmem-2 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20191205 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who CODE=gs://map_users/amelia/itn/code/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191211_full_sensitivity --command 'cd ${CODE}; Rscript stock_and_flow/03_stock_and_flow.r ${this_country} ${survey_count} ${order_type}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_sensitivity_TESTING.tsv
