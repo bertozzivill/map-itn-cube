@@ -40,10 +40,11 @@ access_use_plot <- ggplot(national_estimates[type!="percapita_nets"], aes(x=time
                           facet_wrap(~iso3) + 
                           theme_minimal() 
 
+
 all_national_estimates <- rbind(stock_and_flow, national_estimates, use.names=T)
 
 compare_access_plot <- ggplot(all_national_estimates[type=="access"], aes(x=time, y=value, color=model)) + 
-                                geom_line() + 
+                                geom_line(size=1) + 
                                 facet_wrap(~iso3) + 
                                 theme_minimal() 
 

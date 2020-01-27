@@ -27,7 +27,7 @@ package_load(c("zoo","raster","VGAM", "doParallel", "data.table", "lubridate", "
                "rgdal", "INLA", "RColorBrewer", "cvTools", "boot", "stringr", "dismo", "gbm", "pryr"))
 
 # current dsub:
-# dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-highmem-64 --disk-size 400 --boot-disk-size 50 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20191214 indicators_indir=gs://map_users/amelia/itn/stock_and_flow/results/20200119_add_access_calc/for_cube survey_indir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20191205 func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input CODE=gs://map_users/amelia/itn/code/generate_cube/00_generate_cube_master.r --output-recursive main_dir=gs://map_users/amelia/itn/itn_cube/results/20200122_test_percapita_nets --command 'Rscript ${CODE}'
+# dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-highmem-64 --disk-size 400 --boot-disk-size 50 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20191214 indicators_indir=gs://map_users/amelia/itn/stock_and_flow/results/20200119_add_access_calc/for_cube survey_indir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20191205 func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input CODE=gs://map_users/amelia/itn/code/generate_cube/00_generate_cube_master.r --output-recursive main_dir=gs://map_users/amelia/itn/itn_cube/results/20200126_no_dynamic_access --command 'Rscript ${CODE}'
 
 ##  Environment Prep  ------------------------------------------------------------
 input_dir <- Sys.getenv("input_dir")
@@ -77,13 +77,12 @@ time_passed(tic, toc)
 
 
 ## Predict Outputs ## ------------------------------------------------------------
-# print("STEP 5: Predicting output rasters")
-# tic <- Sys.time()
-# source(file.path(func_dir, "05_predict_rasters.r"))
-# predict_rasters(input_dir, func_dir, cov_dir, main_indir=main_dir, main_outdir=main_dir, prediction_years=start_year:end_year)
-# toc <- Sys.time()
-# time_passed(tic, toc)
-
+print("STEP 5: Predicting output rasters")
+tic <- Sys.time()
+source(file.path(func_dir, "05_predict_rasters.r"))
+predict_rasters(input_dir, indicators_indir, main_indir=main_dir, cov_dir=cov_dir, main_outdir=main_dir, func_dir=func_dir, prediction_years=start_year:end_year)
+toc <- Sys.time()
+time_passed(tic, toc)
 
 big_toc <- Sys.time()
 time_passed(big_tic, big_toc)

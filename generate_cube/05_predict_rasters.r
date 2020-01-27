@@ -115,11 +115,11 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, ma
                                                       access = plogis(emp_nat_access + emp_access_dev),
                                                       use = plogis(emp_nat_access + emp_access_dev - emp_use_gap),
                                                       nat_percapita_nets,
-                                                      percapita_nets = nat_percapita_nets + percapita_net_dev,
-                                                      percapita_net_dev
+                                                      percapita_nets = max(0, nat_percapita_nets + percapita_net_dev)
                                                       )]
     transformed_predictions[, access_dev:= access-nat_access]
     transformed_predictions[, use_gap:=access-use]
+    transformed_predictions[, percapita_net_dev:=percapita_nets - nat_percapita_nets]
     # write.csv(transformed_predictions, file.path(out_dir, paste0("all_predictions_wide_", this_year, ".csv")), row.names=F)
 
     # mean over months
@@ -162,7 +162,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, ma
         this_raster[this_data$cellnumber] <- this_data[[this_metric]]
         this_raster[!is.na(national_raster) & is.na(this_raster)] <- 0
         this_out_fname <- file.path(monthly_out_dir, this_metric, paste0("ITN_", this_year, "_", str_pad(this_month, 2, "left", pad="0"), "_", this_metric, ".tif"))
-        writeRaster(this_raster, this_out_fname, NAflag=-9999, overwrite=T)
+        # writeRaster(this_raster, this_out_fname, NAflag=-9999, overwrite=T)
         
         # aggregate nationally
         pop_raster <- copy(national_raster)
@@ -199,7 +199,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, ma
 
 if (Sys.getenv("run_individually")!=""){
   
-  # dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-highmem-64 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20191214 main_indir=gs://map_users/amelia/itn/itn_cube/results/20200122_test_percapita_nets/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ indicators_indir=gs://map_users/amelia/itn/stock_and_flow/results/20200119_add_access_calc/for_cube --input run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/05_predict_rasters.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20200122_test_percapita_nets/ --command 'Rscript ${CODE}'
+  # dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-highmem-64 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20191214 main_indir=gs://map_users/amelia/itn/itn_cube/results/20200126_no_dynamic_access/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ indicators_indir=gs://map_users/amelia/itn/stock_and_flow/results/20200119_add_access_calc/for_cube --input run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/05_predict_rasters.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20200126_no_dynamic_access/ --command 'Rscript ${CODE}'
   
   package_load <- function(package_list){
     # package installation/loading
