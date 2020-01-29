@@ -35,9 +35,9 @@ run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, sta
   print(cov_names)
   
   cov_names <- cov_names[!cov_names %like% "Snow_And_Ice" & !cov_names %like% "Needleleaf"] # all 0's for Africa
-  selected_cov_names <- list(ihs_emp_access_dev=cov_names[!cov_names %in% c("EVI", "LST_day", "LST_night", "TCW", "TSI")],
+  selected_cov_names <- list(ihs_emp_access_dev=cov_names,
                              ihs_emp_use_gap=cov_names,
-                             ihs_percapita_net_dev=cov_names[!cov_names %in% c("EVI", "LST_day", "LST_night", "TCW", "TSI")])
+                             ihs_percapita_net_dev=cov_names)
   
   # selected_cov_names <- list(access_dev=c("Aridity_Index_v2.Synoptic.Overall.Data.5km.mean",
   #                                         "pf_seasonality",

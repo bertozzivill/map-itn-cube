@@ -150,7 +150,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, ma
     })
     
     ##  Convert to rasters monthly for access, use, and npc
-    monthly_metrics <- c("access", "use", "percapita_nets")
+    monthly_metrics <- annual_metrics  # c("access", "use", "percapita_nets")
     
     print("finding monthly rasters and national time series")
     all_monthly_results <- lapply(monthly_metrics, function(this_metric){
@@ -199,7 +199,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, ma
 
 if (Sys.getenv("run_individually")!=""){
   
-  # dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-highmem-64 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20191214 main_indir=gs://map_users/amelia/itn/itn_cube/results/20200126_no_dynamic_access/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ indicators_indir=gs://map_users/amelia/itn/stock_and_flow/results/20200119_add_access_calc/for_cube --input run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/05_predict_rasters.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20200126_no_dynamic_access/ --command 'Rscript ${CODE}'
+  # dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-highmem-64 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20191214 main_indir=gs://map_users/amelia/itn/itn_cube/results/20200128_no_sf_par/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ indicators_indir=gs://map_users/amelia/itn/stock_and_flow/results/20200122_test_percapita_nets/for_cube --input run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/05_predict_rasters.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20200122_test_percapita_nets/ --command 'Rscript ${CODE}'
   
   package_load <- function(package_list){
     # package installation/loading

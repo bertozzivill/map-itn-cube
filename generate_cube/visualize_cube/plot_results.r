@@ -15,12 +15,32 @@ library(PNWColors)
 
 rm(list=ls())
 
-main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200126_no_dynamic_access/05_predictions"
-indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200119_add_access_calc/for_cube"
+main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200128_no_sf_par/05_predictions"
+indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200127_no_par/for_cube"
+older_inds <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200119_add_access_calc/for_cube"
 survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200127"
 shape_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/shapefiles/"
 setwd(main_dir)
 out_dir <- main_dir
+
+# compare INLA-estimated national access and nets percapita to stock and flow outputs
+full_pop <- fread(file.path(indicators_indir, "stock_and_flow_access_npc.csv"))
+full_pop <- melt(full_pop, id.vars = c("iso3", "year", "month", "time"), variable.name="type")
+full_pop[, type:=gsub("nat_", "", type)]
+full_pop[, model:="Full Pop Denom"]
+
+par_pop <- fread(file.path(older_inds, "stock_and_flow_access_npc.csv"))
+par_pop <- melt(par_pop, id.vars = c("iso3", "year", "month", "time"), variable.name="type")
+par_pop[, type:=gsub("nat_", "", type)]
+par_pop[, model:="PAR Pop Denom"]
+
+compare_sf <- rbind(full_pop, par_pop)
+compare_sf_plots <- ggplot(compare_sf[type=="access"], aes(x=time, y=value, color=model)) + 
+                    geom_line() + 
+                    facet_wrap(~iso3) + 
+                    labs(x="Time", 
+                         y="ITN Access")
+
 
 # compare INLA-estimated national access and nets percapita to stock and flow outputs
 stock_and_flow <- fread(file.path(indicators_indir, "stock_and_flow_access_npc.csv"))
@@ -31,21 +51,23 @@ stock_and_flow[, model:="Stock and Flow"]
 time_map <- unique(stock_and_flow[, list(year, month, time)])
 
 national_estimates <- fread(file.path(main_dir, "national_time_series.csv"))
-national_use <- national_estimates[type=="use"]
 national_estimates <- national_estimates[iso3 %in% unique(stock_and_flow$iso3)]
 national_estimates <- merge(national_estimates, time_map, all.x=T)
 national_estimates[, model:="INLA"]
 
-access_use_plot <- ggplot(national_estimates[type!="percapita_nets"], aes(x=time, y=value, color=type))+ 
+dev_plots <- ggplot(national_estimates[type %in% c("access_dev", "use_gap", "percapita_net_dev")], aes(x=time, y=value, color=type))+ 
                           geom_line(size=1) + 
-                          facet_wrap(~iso3) + 
+                          facet_wrap(~iso3, scales="free_y") + 
                           theme_minimal() +
                           theme(legend.title = element_blank()) + 
-                          labs(title="Access and Use From INLA Model",
+                          labs(title="Outputs From INLA Model",
                                x="Time",
                                y="")
 
-use_gap <- dcast(national_estimates, model+ iso3 + year + month + time~ type)
+estimates_wide <- dcast(national_estimates, model+ iso3 + year + month + time~ type)
+
+
+
 use_gap[, use_gap:=access-use]
 
 use_gap_plot <- ggplot(use_gap, aes(x=time, y=use_gap))+ 
@@ -72,9 +94,9 @@ compare_access_plot <- ggplot(all_national_estimates[type=="access"]) +
                                        x="Time",
                                        y="Access")
 
-estimates_wide <- dcast.data.table(all_national_estimates, type+ iso3 + year + month + time~ model)
-setnames(estimates_wide, "Stock and Flow", "Stock_Flow")
-xy_plot <- ggplot(estimates_wide[type=="access"], aes(x=Stock_Flow, y=INLA)) + 
+estimates_by_model <- dcast.data.table(all_national_estimates, type+ iso3 + year + month + time~ model)
+setnames(estimates_by_model, "Stock and Flow", "Stock_Flow")
+xy_plot <- ggplot(estimates_by_model[type=="access"], aes(x=Stock_Flow, y=INLA)) + 
                   geom_abline() + 
                    geom_point(aes(color=factor(year))) +
                   facet_wrap(~iso3, scales="free") + 
@@ -93,6 +115,10 @@ compare_npc_plot <- ggplot(all_national_estimates[type=="percapita_nets"]) +
                         labs(title="Nets per Capita: INLA Model vs Stock and Flow",
                              x="Time",
                              y="Nets per Capita")
+
+
+
+
 
 # todo: map of survey cluster points
 # survey_data <- fread("../02_survey_data.csv")
