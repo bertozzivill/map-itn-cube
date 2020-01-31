@@ -12,7 +12,7 @@ library(data.table)
 library(ggplot2)
 library(gridExtra)
 
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image gcr.io/map-special-0001/map_rocker_jars:4-3-0 --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive sensitivity_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191211_full_sensitivity reference_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191209_clean_code CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive plot_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191211_full_sensitivity --command 'cd ${CODE}; Rscript 06_analyze_sensitivity.r'
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive sensitivity_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191211_full_sensitivity reference_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191209_clean_code CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive plot_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191211_full_sensitivity --command 'cd ${CODE}; Rscript 06_analyze_sensitivity.r'
 
 if(Sys.getenv("sensitivity_dir")=="") {
   func_dir <- "~/repos/map-itn-cube/stock_and_flow/"
