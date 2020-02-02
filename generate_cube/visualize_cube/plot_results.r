@@ -15,31 +15,12 @@ library(PNWColors)
 
 rm(list=ls())
 
-main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200128_no_sf_par/05_predictions"
+main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200128_return_dynamic_covs/05_predictions"
 indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200127_no_par/for_cube"
-older_inds <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200119_add_access_calc/for_cube"
 survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200127"
 shape_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/shapefiles/"
 setwd(main_dir)
 out_dir <- main_dir
-
-# compare INLA-estimated national access and nets percapita to stock and flow outputs
-full_pop <- fread(file.path(indicators_indir, "stock_and_flow_access_npc.csv"))
-full_pop <- melt(full_pop, id.vars = c("iso3", "year", "month", "time"), variable.name="type")
-full_pop[, type:=gsub("nat_", "", type)]
-full_pop[, model:="Full Pop Denom"]
-
-par_pop <- fread(file.path(older_inds, "stock_and_flow_access_npc.csv"))
-par_pop <- melt(par_pop, id.vars = c("iso3", "year", "month", "time"), variable.name="type")
-par_pop[, type:=gsub("nat_", "", type)]
-par_pop[, model:="PAR Pop Denom"]
-
-compare_sf <- rbind(full_pop, par_pop)
-compare_sf_plots <- ggplot(compare_sf[type=="access"], aes(x=time, y=value, color=model)) + 
-                    geom_line() + 
-                    facet_wrap(~iso3) + 
-                    labs(x="Time", 
-                         y="ITN Access")
 
 
 # compare INLA-estimated national access and nets percapita to stock and flow outputs
@@ -55,6 +36,16 @@ national_estimates <- national_estimates[iso3 %in% unique(stock_and_flow$iso3)]
 national_estimates <- merge(national_estimates, time_map, all.x=T)
 national_estimates[, model:="INLA"]
 
+use_time_series <- ggplot(national_estimates[type=="use"], aes(x=time, y=value, color=type))+ 
+                            geom_line(size=1) + 
+                            facet_wrap(~iso3, scales="free_y") + 
+                            theme_minimal() +
+                            theme(legend.title = element_blank()) + 
+                            labs(title="Use From INLA Model",
+                                 x="Time",
+                                 y="Net Use")
+
+
 dev_plots <- ggplot(national_estimates[type %in% c("access_dev", "use_gap", "percapita_net_dev")], aes(x=time, y=value, color=type))+ 
                           geom_line(size=1) + 
                           facet_wrap(~iso3, scales="free_y") + 
@@ -66,27 +57,29 @@ dev_plots <- ggplot(national_estimates[type %in% c("access_dev", "use_gap", "per
 
 estimates_wide <- dcast(national_estimates, model+ iso3 + year + month + time~ type)
 
+# estimates_wide[, cheating_use:= nat_access-use_gap]
+# ggplot(estimates_wide, aes(x=time, y=cheating_use))+ 
+#                             geom_line(size=1) + 
+#                             geom_line(aes(y=nat_access), color="red") + 
+#                             facet_wrap(~iso3, scales="free_y") + 
+#                             theme_minimal() +
+#                             theme(legend.title = element_blank()) + 
+#                             labs(title="Use From INLA Model",
+#                                  x="Time",
+#                                  y="Net Use")
 
-
-use_gap[, use_gap:=access-use]
-
-use_gap_plot <- ggplot(use_gap, aes(x=time, y=use_gap))+ 
-                          geom_line(size=1) + 
-                          facet_wrap(~iso3) + 
-                          theme_minimal() +
-                          theme(legend.title = element_blank()) + 
-                          labs(title="Use Gap From INLA Model",
-                               x="Time",
-                               y="")
 
 all_national_estimates <- rbind(stock_and_flow, national_estimates, use.names=T)
 
 # load survey-level access values to plot against model estimates
 survey_data <- fread(file.path(survey_indir, "itn_aggregated_survey_data.csv"))
+hh_survey_data <- fread(file.path(survey_indir, "itn_hh_survey_data.csv"))
+survey_data[, included_in_cube:=ifelse( surveyid %in% unique(hh_survey_data$SurveyId), "Included in Cube", "Not Included in Cube")]
 
 compare_access_plot <- ggplot(all_national_estimates[type=="access"]) + 
                                 geom_line(size=1, aes(x=time, y=value, color=model)) + 
-                                geom_pointrange(data=survey_data, size=0.5, aes(x=date, y=access_mean, ymin=access_mean - 3*access_se, ymax=access_mean + 3*access_se)) + 
+                                geom_pointrange(data=survey_data, size=0.5, aes(x=date, y=access_mean, ymin=access_mean - 3*access_se, ymax=access_mean + 3*access_se,
+                                                                                shape=included_in_cube)) + 
                                 facet_wrap(~iso3) + 
                                 theme_minimal() +
                                 theme(legend.title = element_blank()) + 
@@ -106,9 +99,14 @@ xy_plot <- ggplot(estimates_by_model[type=="access"], aes(x=Stock_Flow, y=INLA))
                        y="INLA")
          
 
+survey_data_npc <- fread(file.path(survey_indir, "prepped_survey_data.csv"))
+survey_data_npc[, included_in_cube:=ifelse( surveyid %in% unique(hh_survey_data$SurveyId), "Included in Cube", "Not Included in Cube")]
+
+
 compare_npc_plot <- ggplot(all_national_estimates[type=="percapita_nets"]) + 
                         geom_line(size=1, aes(x=time, y=value, color=model)) + 
-                        geom_point(data=survey_data, size=2, aes(x=date, y=n_itn_mean/n_defacto_pop_mean)) + 
+                        geom_point(data=survey_data_npc, size=2, aes(x=date, y=(n_citn_mean + n_llin_mean)/hh_size_mean,
+                                                                     shape=included_in_cube)) + 
                         facet_wrap(~iso3) + 
                         theme_minimal() +
                         theme(legend.title = element_blank()) + 
@@ -129,6 +127,8 @@ Africa <- gSimplify(Africa, tol=0.1, topologyPreserve=TRUE)
 years <- 2000:2018
 max_pixels <- 2e5
 
+old_use_stack <- stack(file.path("/Volumes/map_data/GBD2019/Processing/Stages/07c_ITN_Coverage_Africa/Checkpoint_Outputs/20190807", paste0("ITN_", years, ".USE.tif")))
+
 use_stack <- stack(paste0("ITN_", years, "_use.tif"))
 access_stack <- stack(paste0("ITN_", years, "_access.tif"))
 use_gap_stack <- stack(paste0("ITN_", years, "_use_gap.tif"))
@@ -136,11 +136,12 @@ nets_percapita_stack <- stack(paste0("ITN_", years, "_percapita_nets.tif"))
 
 access_plot <- levelplot(access_stack,
                        par.settings=rasterTheme(region= wpal("seaside", noblack = T)), at= seq(0, 1, 0.025),
-                       xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F) 
+                       xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F)
 
-use_plot <- levelplot(use_stack,
+use_plot <- levelplot(old_use_stack,
                       par.settings=rasterTheme(region= wpal("seaside", noblack = T)), at= seq(0, 1, 0.025),
-                      xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F) 
+                      xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, maxpixels=max_pixels)  +
+                      latticeExtra::layer(sp.polygons(Africa))
 
 npc_plot <- levelplot(nets_percapita_stack,
                       par.settings=rasterTheme(region= wpal("seaside", noblack = T)), at= seq(0, 0.75, 0.025),

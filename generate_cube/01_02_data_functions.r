@@ -89,7 +89,7 @@ reposition_points<-function(nat_raster, points, radius=4){
   # radius: cell count "radius" around which to search for a point to reposition
   
   matrix_side_len <- radius*2 + 1
-  rm<-extract(nat_raster, points[, list(lon,lat)])	# get all point values
+  rm<-raster::extract(nat_raster, points[, list(lon,lat)])	# get all point values
   index<-which(is.na(rm))
   
   # loop through the points that need to be repositioned

@@ -31,7 +31,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, ma
   stock_and_flow <- fread(file.path(indicators_indir, "stock_and_flow_access_npc.csv"))
   stock_and_flow[, emp_nat_access:=emplogit(nat_access)]
   load(file.path(main_indir, "04_inla_dev_gap.Rdata"))
-
+  survey_data <- fread(file.path(main_indir, "02_survey_data.csv")) # for subsetting predicted cells
   
   # load name maps and stock and flow outputs
   iso_gaul_map<-fread(file.path(input_dir, "general/iso_gaul_map.csv"))
@@ -120,7 +120,10 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, ma
     transformed_predictions[, access_dev:= access-nat_access]
     transformed_predictions[, use_gap:=access-use]
     transformed_predictions[, percapita_net_dev:=percapita_nets - nat_percapita_nets]
-    # write.csv(transformed_predictions, file.path(out_dir, paste0("all_predictions_wide_", this_year, ".csv")), row.names=F)
+    
+    # subset to just the pixels for which there is data in that year, save
+    for_data_comparison <- transformed_predictions[cellnumber %in% unique(survey_data$cellnumber)]
+    write.csv(for_data_comparison, file.path(out_dir, paste0("all_predictions_wide_", this_year, ".csv")), row.names=F)
 
     # mean over months
     print("Finding annual means and converting to raster")
@@ -199,7 +202,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, ma
 
 if (Sys.getenv("run_individually")!=""){
   
-  # dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-highmem-64 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20191214 main_indir=gs://map_users/amelia/itn/itn_cube/results/20200128_no_sf_par/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ indicators_indir=gs://map_users/amelia/itn/stock_and_flow/results/20200122_test_percapita_nets/for_cube --input run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/05_predict_rasters.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20200122_test_percapita_nets/ --command 'Rscript ${CODE}'
+  # dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-highmem-64 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20191214 main_indir=gs://map_users/amelia/itn/itn_cube/results/20200128_return_dynamic_covs/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ indicators_indir=gs://map_users/amelia/itn/stock_and_flow/results/20200127_no_par/for_cube --input run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/05_predict_rasters.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20200128_return_dynamic_covs/ --command 'Rscript ${CODE}'
   
   package_load <- function(package_list){
     # package installation/loading
