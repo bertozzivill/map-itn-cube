@@ -36,6 +36,9 @@ national_estimates <- national_estimates[iso3 %in% unique(stock_and_flow$iso3)]
 national_estimates <- merge(national_estimates, time_map, all.x=T)
 national_estimates[, model:="INLA"]
 
+# todo: map of survey cluster points
+survey_data_cluster <- fread("../02_survey_data.csv")
+
 use_time_series <- ggplot(national_estimates[type=="use"], aes(x=time, y=value, color=type))+ 
                             geom_line(size=1) + 
                             facet_wrap(~iso3, scales="free_y") + 
@@ -46,14 +49,30 @@ use_time_series <- ggplot(national_estimates[type=="use"], aes(x=time, y=value, 
                                  y="Net Use")
 
 
-dev_plots <- ggplot(national_estimates[type %in% c("access_dev", "use_gap", "percapita_net_dev")], aes(x=time, y=value, color=type))+ 
+dev_plots <- ggplot(national_estimates[type %in% c("percapita_net_dev")], aes(x=time, y=value, color=type))+ 
+                          geom_hline(yintercept=0) + 
                           geom_line(size=1) + 
-                          facet_wrap(~iso3, scales="free_y") + 
+                          facet_wrap(~iso3) +
                           theme_minimal() +
                           theme(legend.title = element_blank()) + 
+                          scale_x_continuous(minor_breaks = years) + 
                           labs(title="Outputs From INLA Model",
                                x="Time",
                                y="")
+
+test <- survey_data_cluster[iso3=="MWI"]
+ggplot(national_estimates[type %in% c("percapita_net_dev") & iso3=="MWI"], aes(x=time, y=value))+ 
+  geom_hline(yintercept=0) + 
+  geom_line(size=1) + 
+  geom_jitter(data = test, aes(x=time, y=percapita_net_dev), alpha=0.5) + 
+  facet_wrap(~iso3) +
+  theme_minimal() +
+  theme(legend.title = element_blank()) + 
+  scale_x_continuous(minor_breaks = 2000:2018) + 
+  labs(title="Outputs From INLA Model",
+       x="Time",
+       y="")
+
 
 estimates_wide <- dcast(national_estimates, model+ iso3 + year + month + time~ type)
 
@@ -115,37 +134,57 @@ compare_npc_plot <- ggplot(all_national_estimates[type=="percapita_nets"]) +
                              y="Nets per Capita")
 
 
-
-
-
-# todo: map of survey cluster points
-# survey_data <- fread("../02_survey_data.csv")
-
 Africa<-readOGR(file.path(shape_dir, "Africa.shp"))
 Africa <- gSimplify(Africa, tol=0.1, topologyPreserve=TRUE)
 
 years <- 2000:2018
 max_pixels <- 2e5
 
-old_use_stack <- stack(file.path("/Volumes/map_data/GBD2019/Processing/Stages/07c_ITN_Coverage_Africa/Checkpoint_Outputs/20190807", paste0("ITN_", years, ".USE.tif")))
-
 use_stack <- stack(paste0("ITN_", years, "_use.tif"))
 access_stack <- stack(paste0("ITN_", years, "_access.tif"))
 use_gap_stack <- stack(paste0("ITN_", years, "_use_gap.tif"))
 nets_percapita_stack <- stack(paste0("ITN_", years, "_percapita_nets.tif"))
+names(nets_percapita_stack) <- paste0("NPC.", years)
+
+survey_points <- lapply(years, function(this_year){
+  print(this_year)
+  if(nrow(survey_data_cluster[year==this_year])>0){
+    return(xyFromCell(access_stack, survey_data_cluster[year==this_year]$cellnumber, spatial=T))
+  }else{
+    return(NULL)
+  }
+  })
+
+
+pdf("~/Desktop/access_points.pdf", width=10, height=10)
+
+for (idx in 4:length(years)){
+  this_year <- years[idx]
+  access_plot <- levelplot(access_stack[[idx]],
+                           par.settings=rasterTheme(region= wpal("seaside", noblack = T)), at= seq(0, 1, 0.025),
+                           xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, main=paste(this_year, "Access"), maxpixels=max_pixels) +
+    latticeExtra::layer(sp.polygons(Africa)) + 
+    latticeExtra::layer(sp.points(survey_points[[idx]]), theme = simpleTheme(col = "black",
+                                                                           cex=2))
+  print(access_plot)
+}
+
+graphics.off()
 
 access_plot <- levelplot(access_stack,
                        par.settings=rasterTheme(region= wpal("seaside", noblack = T)), at= seq(0, 1, 0.025),
-                       xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F)
+                       xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, main="Access", maxpixels=max_pixels) +
+  latticeExtra::layer(sp.polygons(Africa)) 
 
-use_plot <- levelplot(old_use_stack,
+use_plot <- levelplot(use_stack,
                       par.settings=rasterTheme(region= wpal("seaside", noblack = T)), at= seq(0, 1, 0.025),
                       xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, maxpixels=max_pixels)  +
                       latticeExtra::layer(sp.polygons(Africa))
 
 npc_plot <- levelplot(nets_percapita_stack,
                       par.settings=rasterTheme(region= wpal("seaside", noblack = T)), at= seq(0, 0.75, 0.025),
-                      xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, maxpixels=max_pixels) 
+                      xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, maxpixels=max_pixels, main="Nets Percapita") +
+  latticeExtra::layer(sp.polygons(Africa))
 
 # divpal <- c(pnw_palette("Lake", 60)[10:60],  rev(pnw_palette("Shuksan", 50))[1:10], rev(pnw_palette("Sunset", 50)[10:50]))
 divpal <- c(pnw_palette("Lake", 60)[10:59],  rev(pnw_palette("Shuksan", 35))[3:17], rev(pnw_palette("Starfish", 75))[1:35])

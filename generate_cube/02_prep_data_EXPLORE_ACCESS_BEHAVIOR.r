@@ -115,8 +115,8 @@ prep_data <- function(main_indir, survey_indir, indicators_indir, main_outdir, f
                                                   lat=mean(latitude),
                                                   lon=mean(longitude),
                                                   survey_weight=unique(sample.w),
-                                                  access_count=sum(n.with.access.to.ITN), # formerly P
-                                                  cluster_pop=sum(n.individuals.that.slept.in.surveyed.hhs), # formerly N
+                                                  access_count=sum(n.with.access.to.ITN), 
+                                                  cluster_pop=sum(n.individuals.that.slept.in.surveyed.hhs), 
                                                   national_percapita_nets=mean(stockflow_percapita_nets), # uniform across hh sizes, don't need to weight
                                                   use_count=sum(n.individuals.that.slept.under.ITN), # formerly Pu
                                                   net_count=sum(n.ITN.per.hh), # formerly T
@@ -221,20 +221,59 @@ prep_data <- function(main_indir, survey_indir, indicators_indir, main_outdir, f
   pop_weights <- for_testing[, list(
     pop_weights=weighted.mean(value, cluster_pop)
   ),
-  by=list(metric, cellnumber, time, year, month)]
+  by=list(metric, survey, iso3)]
   
   svy_weights <- for_testing[, list(
     survey_weights=weighted.mean(value, survey_weight)
   ),
+  by=list(metric, survey, iso3)]
+  
+  compare_survey <- merge(pop_weights, svy_weights)
+  
+  ggplot(compare_survey[metric %in% c("use", "access", "percapita_nets")], aes(x=pop_weights, y=survey_weights, color=metric)) + 
+    geom_point(size=2) + 
+    geom_abline() + 
+    facet_wrap(~iso3) + 
+    labs(x="Population-Weighted Data",
+         y="Survey-Weighted Data",
+         title="Data Aggregated by Survey")
+  
+  mean_survtimes <- survey_map[, list(time=mean(time)), by="survey"]
+  test_pop <- merge(svy_weights, mean_survtimes)
+  
+  stockflow_full_wts <- fread(file.path(indicators_indir, "stock_and_flow_access_npc.csv"))
+  
+ ggplot(test_pop[metric %like% "access"], aes(x=time, y=survey_weights, color=metric)) +
+   geom_point(size=3) + 
+   geom_line() + 
+   # geom_line(data=stockflow_full_wts, aes(y=nat_access), color="black") + 
+   facet_wrap(~iso3) +
+   labs(y="Access")
+  
+ ggplot(test_pop[metric %like% "percapita"], aes(x=time, y=survey_weights, color=metric)) +
+   geom_point(size=3) + 
+   geom_line() + 
+   # geom_line(data=stockflow_full_wts, aes(y=nat_access), color="black") + 
+   facet_wrap(~iso3)
+ 
+  # pixel-level comparison
+  pop_weights_pixel <- for_testing[, list(
+    pop_weights=weighted.mean(value, cluster_pop)
+  ),
   by=list(metric, cellnumber, time, year, month)]
   
-  compare <- merge(pop_weights, svy_weights)
-  compare <- merge(compare, survey_map, by=c("cellnumber", "time"), all.x=T)
+  svy_weights_pixel <- for_testing[, list(
+    survey_weights=weighted.mean(value, survey_weight)
+  ),
+  by=list(metric, cellnumber, time, year, month)]
+  
+  compare_pixel <- merge(pop_weights_pixel, svy_weights_pixel)
+  compare_pixel <- merge(compare_pixel, survey_map, by=c("cellnumber", "time"), all.x=T)
   
   # re-associate  with iso3s
-  compare[, gaul:=national_raster[cellnumber]]
-  compare <- merge(compare, iso_gaul_map[, list(gaul, iso3)], by="gaul", all.x=T)
-  compare[, gaul:=NULL]
+  compare_pixel[, gaul:=national_raster[cellnumber]]
+  compare_pixel <- merge(compare_pixel, iso_gaul_map[, list(gaul, iso3)], by="gaul", all.x=T)
+  compare_pixel[, gaul:=NULL]
   
   # also compare to predicted access metrics
   predicted_vals <- rbindlist(lapply(file.path(main_outdir, "05_predictions", paste0("all_predictions_wide_", 2000:2018, ".csv")), fread))
@@ -245,10 +284,13 @@ prep_data <- function(main_indir, survey_indir, indicators_indir, main_outdir, f
                       variable.name="weighting_type", 
                       value.name="data")
   
-  ggplot(compare_all[metric=="percapita_nets"], aes(x=data, y=model_prediction, color=weighting_type)) + 
+  ggplot(compare_all[metric=="use"], aes(x=data, y=model_prediction, color=weighting_type)) + 
     geom_point(alpha=0.5) + 
     geom_abline() + 
-    facet_wrap(~iso3)
+    facet_wrap(~iso3) + 
+    labs(x="Data",
+         y="Model",
+         title="Use")
   
   # aggregate to pixel level
   final_data <- final_data[, list(access_count=sum(access_count),
