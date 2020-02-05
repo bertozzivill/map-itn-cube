@@ -15,7 +15,7 @@ library(PNWColors)
 
 rm(list=ls())
 
-main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200128_return_dynamic_covs/05_predictions"
+main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200204_no_ar1_effect/05_predictions"
 indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200127_no_par/for_cube"
 survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200127"
 shape_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/shapefiles/"
@@ -50,7 +50,7 @@ use_time_series <- ggplot(national_estimates[type=="use"], aes(x=time, y=value, 
                                  y="Net Use")
 
 
-dev_plots <- ggplot(national_estimates[type %in% c("percapita_net_dev", "access_dev")], aes(x=time, y=value, color=type))+ 
+dev_plots <- ggplot(national_estimates[type %in% c("percapita_net_dev", "use_gap", "access_dev")], aes(x=time, y=value, color=type))+ 
                           geom_hline(yintercept=0) + 
                           geom_line(size=1) + 
                           facet_wrap(~iso3, scales="free_y") +
@@ -61,18 +61,18 @@ dev_plots <- ggplot(national_estimates[type %in% c("percapita_net_dev", "access_
                                x="Time",
                                y="")
 
-test <- survey_data_cluster[iso3=="MWI"]
-ggplot(national_estimates[type %in% c("percapita_net_dev") & iso3=="MWI"], aes(x=time, y=value))+ 
-  geom_hline(yintercept=0) + 
-  geom_line(size=1) + 
-  geom_jitter(data = test, aes(x=time, y=percapita_net_dev), alpha=0.5) + 
-  facet_wrap(~iso3) +
-  theme_minimal() +
-  theme(legend.title = element_blank()) + 
-  scale_x_continuous(minor_breaks = 2000:2018) + 
-  labs(title="Outputs From INLA Model",
-       x="Time",
-       y="")
+# test <- survey_data_cluster[iso3=="MWI"]
+# ggplot(national_estimates[type %in% c("percapita_net_dev") & iso3=="MWI"], aes(x=time, y=value))+ 
+#   geom_hline(yintercept=0) + 
+#   geom_line(size=1) + 
+#   geom_jitter(data = test, aes(x=time, y=percapita_net_dev), alpha=0.5) + 
+#   facet_wrap(~iso3) +
+#   theme_minimal() +
+#   theme(legend.title = element_blank()) + 
+#   scale_x_continuous(minor_breaks = 2000:2018) + 
+#   labs(title="Outputs From INLA Model",
+#        x="Time",
+#        y="")
 
 
 estimates_wide <- dcast(national_estimates, model+ iso3 + year + month + time~ type)
@@ -157,20 +157,20 @@ survey_points <- lapply(years, function(this_year){
   })
 
 
-pdf("~/Desktop/access_points.pdf", width=10, height=10)
-
-for (idx in 4:length(years)){
-  this_year <- years[idx]
-  access_plot <- levelplot(access_stack[[idx]],
-                           par.settings=rasterTheme(region= wpal("seaside", noblack = T)), at= seq(0, 1, 0.025),
-                           xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, main=paste(this_year, "Access"), maxpixels=max_pixels) +
-    latticeExtra::layer(sp.polygons(Africa)) + 
-    latticeExtra::layer(sp.points(survey_points[[idx]]), theme = simpleTheme(col = "black",
-                                                                           cex=2))
-  print(access_plot)
-}
-
-graphics.off()
+# pdf("~/Desktop/access_points.pdf", width=10, height=10)
+# 
+# for (idx in 4:length(years)){
+#   this_year <- years[idx]
+#   access_plot <- levelplot(access_stack[[idx]],
+#                            par.settings=rasterTheme(region= wpal("seaside", noblack = T)), at= seq(0, 1, 0.025),
+#                            xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, main=paste(this_year, "Access"), maxpixels=max_pixels) +
+#     latticeExtra::layer(sp.polygons(Africa)) + 
+#     latticeExtra::layer(sp.points(survey_points[[idx]]), theme = simpleTheme(col = "black",
+#                                                                            cex=2))
+#   print(access_plot)
+# }
+# 
+# graphics.off()
 
 access_plot <- levelplot(access_stack,
                        par.settings=rasterTheme(region= wpal("seaside", noblack = T)), at= seq(0, 1, 0.025),

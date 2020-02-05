@@ -12,7 +12,7 @@
 
 run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, start_year, end_year){
   
-  set.seed(212)
+  # set.seed(212)
   
   # load relevant functions
   source(file.path(func_dir, "04_inla_functions.r"))

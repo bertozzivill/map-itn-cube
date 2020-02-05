@@ -13,7 +13,7 @@
 
 predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, main_outdir, func_dir, prediction_years){
   
-  set.seed(212)
+  # set.seed(212)
   out_dir <- file.path(main_outdir, "05_predictions")
   monthly_out_dir <- file.path(main_outdir, "05_predictions_monthly")
   dir.create(file.path(out_dir), recursive=T)
@@ -62,7 +62,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, ma
   
   # note: the mesh objects for any output should be the same-- we just pick the access dev ones here.
   spatial_mesh <-  copy(inla_outputs[["access_dev"]][["spatial_mesh"]])
-  temporal_mesh <- copy(inla_outputs[["access_dev"]][["temporal_mesh"]])
+  # temporal_mesh <- copy(inla_outputs[["access_dev"]][["temporal_mesh"]])
   
   ## Predict and make rasters by year  ## ---------------------------------------------------------
   ncores <- detectCores()
@@ -75,8 +75,9 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, ma
     ## Year-specific inla matrix  ## --------------------------------------------------------- 
     A_matrix <-inla.spde.make.A(spatial_mesh, 
                                 loc=as.matrix(prediction_xyz[, list(x,y,z)]), 
-                                group=rep(min(this_year, max(temporal_mesh$interval)), length(prediction_indices)),
-                                group.mesh=temporal_mesh)
+                                # group=rep(min(this_year, max(temporal_mesh$interval)), length(prediction_indices)),
+                                # group.mesh=temporal_mesh
+                                )
     
     
     ## Load year-specific covariates  ## ---------------------------------------------------------
