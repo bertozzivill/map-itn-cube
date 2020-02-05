@@ -22,6 +22,7 @@ shape_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/shapefil
 setwd(main_dir)
 out_dir <- main_dir
 
+years <- 2000:2018
 
 # compare INLA-estimated national access and nets percapita to stock and flow outputs
 stock_and_flow <- fread(file.path(indicators_indir, "stock_and_flow_access_npc.csv"))
@@ -49,10 +50,10 @@ use_time_series <- ggplot(national_estimates[type=="use"], aes(x=time, y=value, 
                                  y="Net Use")
 
 
-dev_plots <- ggplot(national_estimates[type %in% c("percapita_net_dev")], aes(x=time, y=value, color=type))+ 
+dev_plots <- ggplot(national_estimates[type %in% c("percapita_net_dev", "access_dev")], aes(x=time, y=value, color=type))+ 
                           geom_hline(yintercept=0) + 
                           geom_line(size=1) + 
-                          facet_wrap(~iso3) +
+                          facet_wrap(~iso3, scales="free_y") +
                           theme_minimal() +
                           theme(legend.title = element_blank()) + 
                           scale_x_continuous(minor_breaks = years) + 
