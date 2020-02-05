@@ -85,34 +85,36 @@ run_inla <- function(data, outcome_var, cov_vars, start_year, end_year){
   spde_matern =inla.spde2.matern(spatial_mesh,alpha=2) 
   
   # generate temporal mesh
-  temporal_mesh=inla.mesh.1d(seq(start_year,end_year,by=2),interval=c(start_year,end_year),degree=2) 
+  # temporal_mesh=inla.mesh.1d(seq(start_year,end_year,by=2),interval=c(start_year,end_year),degree=2) 
   
   # prep data for model fitting
   cov_list<-data[, cov_vars, with=F]
   cov_list$time <- data$capped_time
   cov_list$iso3 <- data$iso3 
+  cov_list[, Intercept:=1]
   cov_list <-as.list(cov_list)
   
   # generate observation matrix
   A_est =
     inla.spde.make.A(spatial_mesh, 
                      loc=as.matrix(data[, list(x,y,z)]), 
-                     group=data$capped_time,
-                     group.mesh=temporal_mesh)
-  field_indices = inla.spde.make.index("field", n.spde=spatial_mesh$n,n.group=temporal_mesh$m)
+                     # group=data$capped_time,
+                     # group.mesh=temporal_mesh
+                     )
+  # field_indices = inla.spde.make.index("field", n.spde=spatial_mesh$n, n.group=temporal_mesh$m)
   
   # Generate "stack"
   stack_est = inla.stack(data=list(response=data[[outcome_var]]),
                          A=list(A_est,1),
                          effects=
-                           list(c(field_indices,
-                                  list(Intercept=1)),
+                           list(field=1:spde_matern$n.spde,
                                 c(cov_list)),
                          tag="est", remove.unused=TRUE)
   stack_est<-inla.stack(stack_est)
   
   model_formula<- as.formula(paste(
-    "response ~ -1 + Intercept  + f(field, model=spde_matern, group=field.group, control.group=list(model='ar1')) + ",
+    # "response ~ -1 + Intercept  + f(field, model=spde_matern, group=field.group, control.group=list(model='ar1')) + ",
+    "response ~ -1 + Intercept  + f(field, model=spde_matern) + ",
     "f(iso3, model='iid') +", # add random effect
     paste(cov_vars, collapse="+"),
     sep=""))
@@ -133,7 +135,8 @@ run_inla <- function(data, outcome_var, cov_vars, start_year, end_year){
   
   print(summary(inla_model))
   
-  return(list(model_output=inla_model, spatial_mesh=spatial_mesh, temporal_mesh=temporal_mesh))
+  return(list(model_output=inla_model, spatial_mesh=spatial_mesh # , temporal_mesh=temporal_mesh
+              ))
   
 }
 
