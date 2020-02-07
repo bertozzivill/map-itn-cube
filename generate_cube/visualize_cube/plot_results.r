@@ -15,9 +15,9 @@ library(PNWColors)
 
 rm(list=ls())
 
-main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200204_no_ar1_effect/05_predictions"
-indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200127_no_par/for_cube"
-survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200127"
+main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200207_retry_eth/05_predictions"
+indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200205_update_eth/for_cube"
+survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200206"
 shape_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/shapefiles/"
 setwd(main_dir)
 out_dir <- main_dir
@@ -89,15 +89,13 @@ estimates_wide <- dcast(national_estimates, model+ iso3 + year + month + time~ t
 #                                  y="Net Use")
 
 
-all_national_estimates <- rbind(stock_and_flow, national_estimates, use.names=T)
-
 # load survey-level access values to plot against model estimates
 survey_data <- fread(file.path(survey_indir, "itn_aggregated_survey_data.csv"))
 hh_survey_data <- fread(file.path(survey_indir, "itn_hh_survey_data.csv"))
 survey_data[, included_in_cube:=ifelse( surveyid %in% unique(hh_survey_data$SurveyId), "Included in Cube", "Not Included in Cube")]
 
-compare_access_plot <- ggplot(all_national_estimates[type=="access"]) + 
-                                geom_line(size=1, aes(x=time, y=value, color=model)) + 
+compare_access_plot <- ggplot(national_estimates[type %in% c("access", "nat_access")]) + 
+                                geom_line(size=1, aes(x=time, y=value, color=type)) + 
                                 geom_pointrange(data=survey_data, size=0.5, aes(x=date, y=access_mean, ymin=access_mean - 3*access_se, ymax=access_mean + 3*access_se,
                                                                                 shape=included_in_cube)) + 
                                 facet_wrap(~iso3) + 
@@ -106,25 +104,25 @@ compare_access_plot <- ggplot(all_national_estimates[type=="access"]) +
                                   labs(title="Access: INLA Model vs Stock and Flow",
                                        x="Time",
                                        y="Access")
-
-estimates_by_model <- dcast.data.table(all_national_estimates, type+ iso3 + year + month + time~ model)
-setnames(estimates_by_model, "Stock and Flow", "Stock_Flow")
-xy_plot <- ggplot(estimates_by_model[type=="access"], aes(x=Stock_Flow, y=INLA)) + 
-                  geom_abline() + 
-                   geom_point(aes(color=factor(year))) +
-                  facet_wrap(~iso3, scales="free") + 
-                  theme(legend.title = element_blank()) + 
-                  labs(title="Comparison of Access in INLA vs Stock and Flow",
-                       x="Stock and Flow",
-                       y="INLA")
-         
+# 
+# estimates_by_model <- dcast.data.table(all_national_estimates, type+ iso3 + year + month + time~ model)
+# setnames(estimates_by_model, "Stock and Flow", "Stock_Flow")
+# xy_plot <- ggplot(estimates_by_model[type=="access"], aes(x=Stock_Flow, y=INLA)) + 
+#                   geom_abline() + 
+#                    geom_point(aes(color=factor(year))) +
+#                   facet_wrap(~iso3, scales="free") + 
+#                   theme(legend.title = element_blank()) + 
+#                   labs(title="Comparison of Access in INLA vs Stock and Flow",
+#                        x="Stock and Flow",
+#                        y="INLA")
+#          
 
 survey_data_npc <- fread(file.path(survey_indir, "prepped_survey_data.csv"))
 survey_data_npc[, included_in_cube:=ifelse( surveyid %in% unique(hh_survey_data$SurveyId), "Included in Cube", "Not Included in Cube")]
 
 
-compare_npc_plot <- ggplot(all_national_estimates[type=="percapita_nets"]) + 
-                        geom_line(size=1, aes(x=time, y=value, color=model)) + 
+compare_npc_plot <- ggplot(national_estimates[type %in% c("percapita_nets", "nat_percapita_nets")]) + 
+                        geom_line(size=1, aes(x=time, y=value, color=type)) + 
                         geom_point(data=survey_data_npc, size=2, aes(x=date, y=(n_citn_mean + n_llin_mean)/hh_size_mean,
                                                                      shape=included_in_cube)) + 
                         facet_wrap(~iso3) + 

@@ -21,14 +21,14 @@ rm(list=ls())
 options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = TRUE)
 
-set.seed(084)
+# set.seed(084)
 
 
 emplogit <- function (y, eps = 1e-3){
   log((eps + y)/(1 - y + eps))
 } 
 
-main_subdir <- "20200127"
+main_subdir <- "20200206"
 main_dir <- file.path("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep", main_subdir)
 
 ### Read in all data #####----------------------------------------------------------------------------------------------------------------------------------
