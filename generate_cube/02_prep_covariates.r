@@ -1,5 +1,5 @@
 ###############################################################################################################
-## 03_prep_covariates.r
+## 02_prep_covariates.r
 ## Amelia Bertozzi-Villa
 ## April 2019
 ## 
@@ -15,7 +15,7 @@
 prep_covariates <- function(cov_dir, main_indir, main_outdir){
   
   # Load data from create_database.r,  ------------------------------------------------------------
-  data<-fread(file.path(main_indir, "02_survey_data.csv"))
+  data<-fread(file.path(main_indir, "01_survey_data.csv"))
   data[, row_id:=as.integer(row.names(data))]
 
   ### Static covariates  ----------------------------------------------------------------------------#######################  
@@ -50,7 +50,7 @@ prep_covariates <- function(cov_dir, main_indir, main_outdir){
   print("dynamic covariates successfully extracted")
   
   print("saving to file")
-  write.csv(data, file.path(main_outdir, "03_data_covariates.csv"), row.names = F)
+  write.csv(data, file.path(main_outdir, "02_data_covariates.csv"), row.names = F)
 }
 
 ## TO RUN THIS SCRIPT INDIVIDUALLY, READ HERE
@@ -60,7 +60,7 @@ prep_covariates <- function(cov_dir, main_indir, main_outdir){
 if (Sys.getenv("run_individually")!=""){
   
   print("RUNNING SCRIPT INDIVIDUALLY")
-  # dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-64 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20190729 main_indir=gs://map_users/amelia/itn/itn_cube/results/20190729_new_covariates/ --input run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/03_prep_covariates.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20190729_new_covariates/ --command 'Rscript ${CODE}'
+  # dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-64 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20190729 main_indir=gs://map_users/amelia/itn/itn_cube/results/20190729_new_covariates/ --input run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/02_prep_covariates.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20190729_new_covariates/ --command 'Rscript ${CODE}'
   
   
   package_load <- function(package_list){

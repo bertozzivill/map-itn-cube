@@ -1,7 +1,7 @@
 ###############################################################################################################
-## 05_predict_itn.r
+## 04_predict_rasters.r
 ## Amelia Bertozzi-Villa
-## May 2019
+## February 2020
 ## 
 ## Using the inla objects from Step 4 and the covariates extracted from Step 3, predict monthly 
 ## ITN rasters, transform them back to level space, and aggregate up to annual values
@@ -14,8 +14,8 @@
 predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, main_outdir, func_dir, prediction_years){
   
   # set.seed(212)
-  out_dir <- file.path(main_outdir, "05_predictions")
-  monthly_out_dir <- file.path(main_outdir, "05_predictions_monthly")
+  out_dir <- file.path(main_outdir, "04_predictions")
+  monthly_out_dir <- file.path(main_outdir, "04_predictions_monthly")
   dir.create(file.path(out_dir), recursive=T)
   dir.create(file.path(monthly_out_dir,  "access"), recursive=T)
   dir.create(file.path(monthly_out_dir,  "use"))
@@ -25,13 +25,13 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, ma
   print("loading inla outputs and relevant functions")
   
   # load function script
-  source(file.path(func_dir, "04_inla_functions.r")) # for ll_to_xyz and predict_inla
+  source(file.path(func_dir, "03_inla_functions.r")) # for ll_to_xyz and predict_inla
   
   # Load relevant outputs from previous steps 
   stock_and_flow <- fread(file.path(indicators_indir, "stock_and_flow_access_npc.csv"))
   stock_and_flow[, emp_nat_access:=emplogit(nat_access)]
-  load(file.path(main_indir, "04_inla_dev_gap.Rdata"))
-  survey_data <- fread(file.path(main_indir, "02_survey_data.csv")) # for subsetting predicted cells
+  load(file.path(main_indir, "03_inla_outputs.Rdata"))
+  survey_data <- fread(file.path(main_indir, "01_survey_data.csv")) # for subsetting predicted cells
   
   # load name maps and stock and flow outputs
   iso_gaul_map<-fread(file.path(input_dir, "general/iso_gaul_map.csv"))
