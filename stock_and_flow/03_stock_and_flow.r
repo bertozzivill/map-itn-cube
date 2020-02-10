@@ -51,6 +51,10 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
   
   # subset data to country level
   this_survey_data <- survey_data[iso3 %in% this_country,]
+  # TEMP FOR ETHIOPIA
+  if (this_country =="ETH"){
+    this_survey_data <- this_survey_data[!surveyid %like% "reportonly"]
+  }
   this_manufacturer_llins <- manufacturer_llins[ISO3==this_country]
   this_nmcp <- nmcp_data[ISO3==this_country]
   this_pop <- population_full[iso3==this_country & year<=end_year]
@@ -663,7 +667,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
 }
 
 # DSUB FOR MAIN RUN
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20200206 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who CODE=gs://map_users/amelia/itn/code/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200206_retry_eth --command 'cd ${CODE}; Rscript stock_and_flow/03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list_TESTING.tsv
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20200206 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who CODE=gs://map_users/amelia/itn/code/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200210_eth_noreport --command 'cd ${CODE}; Rscript stock_and_flow/03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list_TESTING.tsv
 
 # DSUB FOR SENSITIVITY ANALYSIS
 # dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highmem-2 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20191205 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who CODE=gs://map_users/amelia/itn/code/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191211_full_sensitivity --command 'cd ${CODE}; Rscript stock_and_flow/03_stock_and_flow.r ${this_country} ${survey_count} ${order_type}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_sensitivity_TESTING.tsv
@@ -697,7 +701,7 @@ if(Sys.getenv("main_dir")=="") {
 }
 
 source("stock_and_flow/jags_functions.r")
-source("generate_cube/01_02_data_functions.r")
+source("generate_cube/01_data_functions.r")
 start_year <- 2000
 end_year<- 2018
 

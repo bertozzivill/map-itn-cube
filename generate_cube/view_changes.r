@@ -8,7 +8,7 @@
 ## 
 ##############################################################################################################
 
-# dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive old_dir=gs://map_users/amelia/itn/itn_cube/results/20200128_return_dynamic_covs/ new_dir=gs://map_users/amelia/itn/itn_cube/results/20200204_no_ar1_effect/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input CODE=gs://map_users/amelia/itn/code/generate_cube/view_changes.r --output out_path=gs://map_users/amelia/itn/itn_cube/results/20200204_no_ar1_effect/compare_changes.pdf --command 'Rscript ${CODE}'
+# dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --boot-disk-size 50 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive old_dir=gs://map_users/amelia/itn/itn_cube/results/20200206_update_eth/ new_dir=gs://map_users/amelia/itn/itn_cube/results/20200210_compare_eth/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input CODE=gs://map_users/amelia/itn/code/generate_cube/view_changes.r --output out_path=gs://map_users/amelia/itn/itn_cube/results/20200210_compare_eth/compare_changes.pdf --command 'Rscript ${CODE}'
 
 rm(list=ls())
 
@@ -189,7 +189,7 @@ pdf(out_path, width=11, height=7)
 
 ## 04: inla models
 print("comparing old and new inla files")
-load(file.path(new_dir, "04_inla_dev_gap.Rdata"))
+load(file.path(new_dir, "03_inla_outputs.Rdata"))
 new_models <- copy(inla_outputs)
 load(file.path(old_dir, "04_inla_dev_gap.Rdata"))
 old_models <- copy(inla_outputs)
@@ -259,7 +259,7 @@ for (this_name in names(old_models)){
 # 05: .tifs
 print("comparing old and new raster files")
 old_raster_dir <- file.path(old_dir, "05_predictions")
-new_raster_dir <- file.path(new_dir, "05_predictions")
+new_raster_dir <- file.path(new_dir, "04_predictions")
 new_files <- list.files(new_raster_dir)
 old_files <- list.files(old_raster_dir)
 
