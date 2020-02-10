@@ -1,7 +1,7 @@
 ###############################################################################################################
-## 02_prep_data.r
+## 01_prep_data.r
 ## Amelia Bertozzi-Villa
-## April 2019
+## February 2020
 ## 
 ## Prepare net-based survey metrics for the ITN cube model.
 ## This script calculatescluster-level metrics from survey data, and merges on national-level access
@@ -13,8 +13,8 @@
 
 prep_data <- function(main_indir, survey_indir, indicators_indir, main_outdir, func_dir){
   
-  out_fname <- file.path(main_outdir, "02_survey_data.csv")
-  source(file.path(func_dir, "01_02_data_functions.r"))
+  out_fname <- file.path(main_outdir, "01_survey_data.csv")
+  source(file.path(func_dir, "01_data_functions.r"))
   
   stock_and_flow_outputs <- fread(file.path(indicators_indir, "stock_and_flow_probs_means.csv"))
   iso_gaul_map<-fread(file.path(main_indir, "general/iso_gaul_map.csv"))
@@ -188,7 +188,6 @@ prep_data <- function(main_indir, survey_indir, indicators_indir, main_outdir, f
   final_data$cellnumber<-cellnumbers 
   centroid_latlongs<-xyFromCell(national_raster, cellnumbers)
   
-
   # update lat/long values
   final_data[, lon:=centroid_latlongs[,1]]
   final_data[, lat:=centroid_latlongs[,2]]
@@ -219,8 +218,14 @@ prep_data <- function(main_indir, survey_indir, indicators_indir, main_outdir, f
   final_data[, gaul:=national_raster[cellnumber]]
   final_data <- merge(final_data, iso_gaul_map[, list(gaul, iso3)], by="gaul", all.x=T)
   final_data[, gaul:=NULL]
+  
+  # add markers for where the data came from
+  indicator_subdir <- gsub(".*/results/(.*)/for_cube", "\\1", indicators_indir, )
+  survey_subdir <- gsub(".*/01_input_data_prep/(.*)", "\\1", survey_indir)
+  final_data[, stockflow_dir:=indicator_subdir]
+  final_data[, survey_dir:=survey_subdir]
 
-  setcolorder(final_data, c("survey", "iso3", "cellnumber", "lat", "lon", "time", "year", "month", "access_count", "use_count", "net_count", "pixel_pop", "national_access"))
+  setcolorder(final_data, c("stockflow_dir", "survey_dir", "survey", "iso3", "cellnumber", "lat", "lon", "time", "year", "month", "access_count", "use_count", "net_count", "pixel_pop", "national_access"))
   
   print(paste("--> Writing to", out_fname))
   write.csv(final_data, out_fname, row.names=FALSE)
@@ -238,7 +243,7 @@ if (Sys.getenv("run_individually")!="" | exists("run_locally")){
   
   print("RUNNING SCRIPT INDIVIDUALLY")
   
-  # dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive main_indir=gs://map_users/amelia/itn/itn_cube/input_data indicators_indir=gs://map_users/amelia/itn/stock_and_flow/results/20200119_add_access_calc/for_cube survey_indir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20191205 func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/02_prep_data.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20190729_new_covariates/ --command 'Rscript ${CODE}'
+  # dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive main_indir=gs://map_users/amelia/itn/itn_cube/input_data indicators_indir=gs://map_users/amelia/itn/stock_and_flow/results/20200119_add_access_calc/for_cube survey_indir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20191205 func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/01_prep_data.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20190729_new_covariates/ --command 'Rscript ${CODE}'
   
   package_load <- function(package_list){
     # package installation/loading

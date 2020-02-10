@@ -1,9 +1,9 @@
 ###############################################################################################################
-## 04_dev_and_gap.r
+## 03_regress.r
 ## Amelia Bertozzi-Villa
-## June 2019
+## February 2020
 ## 
-## Transform data and run inla models for 1. Access Deviation and 2. Use Gap.
+## Transform data and run inla models for 1. Access Deviation, 2. Use Gap, and 3. Nets-Per-Capita Deviation.
 
 ## NB: This code is designed to be run as part of a larger pipeline (see 00_generate_cube_master.r).
 ##      To run this script individually, see instructions at the bottom of the page. 
@@ -15,11 +15,11 @@ run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, sta
   # set.seed(212)
   
   # load relevant functions
-  source(file.path(func_dir, "04_inla_functions.r"))
-  output_fname <- file.path(main_outdir, "04_inla_dev_gap.Rdata")
+  source(file.path(func_dir, "03_inla_functions.r"))
+  output_fname <- file.path(main_outdir, "03_inla_outputs.Rdata")
   
   ## Load data 
-  data <- fread(file.path(main_indir, "03_data_covariates.csv"))
+  data <- fread(file.path(main_indir, "02_data_covariates.csv"))
   data <- data[order(row_id)]
   
   ## Check for collinearity ## ---------------------------------------------------------
@@ -150,7 +150,7 @@ run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, sta
 
 if (Sys.getenv("run_individually")!=""){
   
-  # dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-64 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data main_indir=gs://map_users/amelia/itn/itn_cube/results/20190729_new_covariates/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/04_dev_and_gap.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20190729_new_covariates/ --command 'Rscript ${CODE}'
+  # dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-64 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data main_indir=gs://map_users/amelia/itn/itn_cube/results/20190729_new_covariates/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/03_regressions.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20190729_new_covariates/ --command 'Rscript ${CODE}'
   
   
   package_load <- function(package_list){

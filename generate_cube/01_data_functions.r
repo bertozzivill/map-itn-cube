@@ -1,9 +1,9 @@
 ###############################################################################################################
-## 01_02_data_functions.r
+## 01_data_functions.r
 ## Amelia Bertozzi-Villa
-## April 2019
+## February 2020
 ## 
-## Functions to accompany 01_prep_stockandflow.r and 02_prep_data.r
+## Functions to accompany 01_prep_data.r
 
 ## -emplogit: 1-input empirical logit
 ## -emplogit2: 2-input empirical logit 
