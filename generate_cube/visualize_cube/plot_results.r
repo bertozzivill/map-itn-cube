@@ -15,8 +15,8 @@ library(PNWColors)
 
 rm(list=ls())
 
-main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200207_retry_eth/05_predictions"
-indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200205_update_eth/for_cube"
+main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200210_eth_noreport/04_predictions"
+indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200210_eth_noreport/for_cube"
 survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200206"
 shape_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/shapefiles/"
 setwd(main_dir)
@@ -49,8 +49,8 @@ use_time_series <- ggplot(national_estimates[type=="use"], aes(x=time, y=value, 
                                  x="Time",
                                  y="Net Use")
 
-
-dev_plots <- ggplot(national_estimates[type %in% c("percapita_net_dev", "use_gap", "access_dev")], aes(x=time, y=value, color=type))+ 
+dev_metrics <- c("use_gap") # percapita_net_dev, access_dev
+dev_plots <- ggplot(national_estimates[type %in% dev_metrics], aes(x=time, y=value, color=type))+ 
                           geom_hline(yintercept=0) + 
                           geom_line(size=1) + 
                           facet_wrap(~iso3, scales="free_y") +
@@ -76,6 +76,17 @@ dev_plots <- ggplot(national_estimates[type %in% c("percapita_net_dev", "use_gap
 
 
 estimates_wide <- dcast(national_estimates, model+ iso3 + year + month + time~ type)
+estimates_wide[, use_ratio:=use/access]
+ggplot(estimates_wide[time>2013], aes(x=time, y=use_ratio))+ 
+  geom_hline(yintercept=0.8, color="red") + 
+  geom_line(size=1) + 
+  facet_wrap(~iso3) +
+  theme_minimal() +
+  theme(legend.title = element_blank()) + 
+  scale_x_continuous(minor_breaks = years) + 
+  labs(title="Use:Access Ratio From INLA Model",
+       x="Time",
+       y="")
 
 # estimates_wide[, cheating_use:= nat_access-use_gap]
 # ggplot(estimates_wide, aes(x=time, y=cheating_use))+ 

@@ -51,10 +51,10 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
   
   # subset data to country level
   this_survey_data <- survey_data[iso3 %in% this_country,]
-  # TEMP FOR ETHIOPIA
-  if (this_country =="ETH"){
-    this_survey_data <- this_survey_data[!surveyid %like% "reportonly"]
-  }
+  # # TEMP FOR ETHIOPIA
+  # if (this_country =="ETH"){
+  #   this_survey_data <- this_survey_data[!surveyid %like% "reportonly"]
+  # }
   this_manufacturer_llins <- manufacturer_llins[ISO3==this_country]
   this_nmcp <- nmcp_data[ISO3==this_country]
   this_pop <- population_full[iso3==this_country & year<=end_year]
