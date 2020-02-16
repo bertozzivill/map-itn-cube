@@ -117,6 +117,7 @@ years <- 2000:2018
   
   # plot
   max_pixels <- 2e5
+  names(categorical) <- years
   levelplot(categorical, att="type",
             col.regions=c("#d3d3d3", colors),
             xlab=NULL, ylab=NULL, scales=list(draw=F),
