@@ -15,12 +15,14 @@ library(PNWColors)
 
 rm(list=ls())
 
-main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200210_eth_noreport/04_predictions"
-indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200210_eth_noreport/for_cube"
-survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200206"
+main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200204_no_ar1_effect/05_predictions"
+indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200127_no_par/for_cube"
+survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200127"
 shape_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/shapefiles/"
 setwd(main_dir)
 out_dir <- main_dir
+plot_dir <- "~/Dropbox (IDM)/Malaria Team Folder/projects/map_intervention_impact/writing_and_presentations/tza_2020/plots/raw"
+
 
 years <- 2000:2018
 
@@ -77,16 +79,21 @@ dev_plots <- ggplot(national_estimates[type %in% dev_metrics], aes(x=time, y=val
 
 estimates_wide <- dcast(national_estimates, model+ iso3 + year + month + time~ type)
 estimates_wide[, use_ratio:=use/access]
-ggplot(estimates_wide[time>2013], aes(x=time, y=use_ratio))+ 
-  geom_hline(yintercept=0.8, color="red") + 
-  geom_line(size=1) + 
+use_rate_plot <- ggplot(estimates_wide[time>2013], aes(x=time, y=use_ratio, group=iso3))+ 
+  geom_hline(yintercept=0.8, color="#00BFC4") + 
+  geom_line() + 
   facet_wrap(~iso3) +
   theme_minimal() +
-  theme(legend.title = element_blank()) + 
+  theme(legend.title = element_blank(),
+        axis.text.x = element_text(hjust=1, angle=45)) + 
   scale_x_continuous(minor_breaks = years) + 
-  labs(title="Use:Access Ratio From INLA Model",
+  labs(title="",
        x="Time",
-       y="")
+       y="Use Rate")
+
+pdf(file.path(plot_dir, "use_rate.pdf"), width=11, height=7)
+  print(use_rate_plot)
+graphics.off()
 
 # estimates_wide[, cheating_use:= nat_access-use_gap]
 # ggplot(estimates_wide, aes(x=time, y=cheating_use))+ 
@@ -146,9 +153,12 @@ compare_npc_plot <- ggplot(national_estimates[type %in% c("percapita_nets", "nat
 
 Africa<-readOGR(file.path(shape_dir, "Africa.shp"))
 Africa <- gSimplify(Africa, tol=0.1, topologyPreserve=TRUE)
+# africa_ids <-sapply(slot(Africa, "polygons"), function(x) slot(x, "ID"))
+# africa.df <- data.frame( ID=1:length(Africa), row.names = africa_ids)
+# spdf <- SpatialPolygonsDataFrame(Africa, africa.df)
 
 years <- 2000:2018
-max_pixels <- 2e5
+max_pixels <- 2e6
 
 use_stack <- stack(paste0("ITN_", years, "_use.tif"))
 access_stack <- stack(paste0("ITN_", years, "_access.tif"))
@@ -165,7 +175,6 @@ survey_points <- lapply(years, function(this_year){
   }
   })
 
-
 # pdf("~/Desktop/access_points.pdf", width=10, height=10)
 # 
 # for (idx in 4:length(years)){
@@ -181,20 +190,48 @@ survey_points <- lapply(years, function(this_year){
 # 
 # graphics.off()
 
-access_plot <- levelplot(access_stack,
+
+match.cols<-function(val){
+  n=1000
+  colfunc <- colorRampPalette(wpal("seaside", noblack = T))
+  col<-data.frame(val=seq(min(val),max(val),length.out=n),col=colfunc(n))
+  out<-rep(NA,length(col))
+  for(i in 1:length(val)){
+    out[i]<-as.character(col[which.min(abs(col$val-val[i])),'col'])
+  }
+  return(out)
+}
+point_colors <- match.cols(survey_data_cluster[year==2015]$percapita_nets)
+
+survey_points <- xyFromCell(access_stack, survey_data_cluster[year==2015]$cellnumber,  spatial=T)
+
+# export this to pdf manually
+plot(Africa)
+plot(survey_points,  add=T, col=match.cols(survey_data_cluster[year==2015]$percapita_nets), pch=16, cex=0.75)
+
+
+access_plot <- levelplot(access_stack[[19]],
                        par.settings=rasterTheme(region= wpal("seaside", noblack = T)), at= seq(0, 1, 0.025),
                        xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, main="Access", maxpixels=max_pixels) +
   latticeExtra::layer(sp.polygons(Africa)) 
+
+pdf(file.path(plot_dir, "access_2018.pdf"))
+  print(access_plot)
+graphics.off()
 
 use_plot <- levelplot(use_stack,
                       par.settings=rasterTheme(region= wpal("seaside", noblack = T)), at= seq(0, 1, 0.025),
                       xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, maxpixels=max_pixels)  +
                       latticeExtra::layer(sp.polygons(Africa))
 
-npc_plot <- levelplot(nets_percapita_stack,
+npc_plot <- levelplot(nets_percapita_stack[[16]],
                       par.settings=rasterTheme(region= wpal("seaside", noblack = T)), at= seq(0, 0.75, 0.025),
                       xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, maxpixels=max_pixels, main="Nets Percapita") +
   latticeExtra::layer(sp.polygons(Africa))
+
+pdf(file.path(plot_dir, "npc_2015.pdf"))
+  print(npc_plot)
+graphics.off()
 
 # divpal <- c(pnw_palette("Lake", 60)[10:60],  rev(pnw_palette("Shuksan", 50))[1:10], rev(pnw_palette("Sunset", 50)[10:50]))
 divpal <- c(pnw_palette("Lake", 60)[10:59],  rev(pnw_palette("Shuksan", 35))[3:17], rev(pnw_palette("Starfish", 75))[1:35])

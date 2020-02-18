@@ -20,19 +20,34 @@ library(gridExtra)
 library(MapSuite)
 
 rm(list=ls())
+max_pixels <- 2e6
+
+gg_color_hue <- function(n) {
+  hues = seq(15, 375, length = n + 1)
+  hcl(h = hues, l = 65, c = 100)[1:n]
+}
 
 in_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200204_no_ar1_effect/05_predictions"
+plot_dir <- "~/Dropbox (IDM)/Malaria Team Folder/projects/map_intervention_impact/writing_and_presentations/tza_2020/plots/raw"
+shape_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/shapefiles/"
 # zed_root <- '/Volumes/map_data/'
 # compare_dir <- file.path(zed_root, 'cubes/5km/ITN/')
 # out_dir <- "/Users/bertozzivill/Dropbox (IDM)/Malaria Team Folder/projects/map_itn_cube"
 
-colors <- c("#00a08a", "#d71b5a", "#f2a200", "#902e57", "#5392c2", "#f98400")
+colors <- c("#f2a200", "#902e57", "#00a08a", "#d71b5a",  "#5392c2", "#f98400")
+
+
+colors_sequential <- c("#902e57", "#d71b5a", "#f2a200", "#f98400", "#00a08a", "#5392c2")
+
 
 if (!dir.exists(in_dir)){
   stop("input directory not found! Did you remember to mount your drives?")
 }
 
 years <- 2000:2018
+
+Africa<-readOGR(file.path(shape_dir, "Africa.shp"))
+Africa <- gSimplify(Africa, tol=0.1, topologyPreserve=TRUE)
 
 # 
 # mask_path <- file.path(out_dir, "mask_layer.tif")
@@ -75,6 +90,15 @@ years <- 2000:2018
   use_thresh <- 0.8
   use_rate <- use_perc/access_perc
   
+  use_rate_map <- levelplot(use_rate[[19]],
+            par.settings=rasterTheme(region= wpal("seaside", noblack = T)), at= seq(0, 1, 0.025),
+            xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, maxpixels=max_pixels) +
+    latticeExtra::layer(sp.polygons(Africa)) 
+  
+  pdf(file.path(plot_dir, "use_rate_2018.pdf"))
+    plot(use_rate_map)
+  graphics.off()
+  
   cat_labels <- data.table(ID=0:6,
                            type=c("Not Modeled",
                                   paste0("Access <", access_thresh_1, "%, Use Rate >=", use_thresh), 
@@ -116,12 +140,17 @@ years <- 2000:2018
   
   
   # plot
-  max_pixels <- 2e5
   names(categorical) <- years
-  levelplot(categorical, att="type",
-            col.regions=c("#d3d3d3", colors),
-            xlab=NULL, ylab=NULL, scales=list(draw=F),
-            main="", margin=F, maxpixels=max_pixels)
+  
+  rel_gain_plot <- levelplot(categorical[[19]], att="type",
+                          col.regions=c("#d3d3d3", colors),
+                          xlab=NULL, ylab=NULL, scales=list(draw=F),
+                          main="", margin=F, maxpixels=max_pixels) +
+                  latticeExtra::layer(sp.polygons(Africa)) 
+  
+  pdf(file.path(plot_dir, "rel_gain_2018.pdf"))
+    print(rel_gain_plot)
+  graphics.off()
   
   
   # Now look just at the places in category 4
