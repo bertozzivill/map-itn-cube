@@ -23,6 +23,11 @@ setwd(main_dir)
 out_dir <- main_dir
 plot_dir <- "~/Dropbox (IDM)/Malaria Team Folder/projects/map_intervention_impact/writing_and_presentations/tza_2020/plots/raw"
 
+comparison_dirs <- c(orig= "20200204_no_ar1_effect",
+                     # adjustment_1="20200206_update_eth",
+                     adjusted="20200207_retry_eth",
+                     single_survey="20200210_eth_noreport"
+                     )
 
 years <- 2000:2018
 
@@ -33,6 +38,28 @@ stock_and_flow[, type:=gsub("nat_", "", type)]
 stock_and_flow[, model:="Stock and Flow"]
 
 time_map <- unique(stock_and_flow[, list(year, month, time)])
+
+eth_compare <- rbindlist(lapply(names(comparison_dirs), function(label){
+  model_name <- comparison_dirs[[label]]
+  version <- fread(file.path("/Volumes/GoogleDrive/My Drive/itn_cube/results/", model_name, "05_predictions", "national_time_series.csv"))
+  version <- version[iso3 %in% unique(stock_and_flow$iso3)]
+  version <- merge(version, time_map, all.x=T)
+  version[, model:=label]
+  return(version)
+}))
+
+eth_compare[, model:=factor(model, levels=c("orig", "adjusted", "single_survey"),
+                            labels=c("No population adjustment",
+                                     "With population adjustment",
+                                     "Exclude MIS surveys"))]
+
+
+ggplot(eth_compare[iso3=="ETH" & type %in% c("access_dev")], aes(x=time, y=value)) + 
+  geom_line(aes(color=model)) + 
+  theme(legend.title=element_blank()) + 
+  labs(x="Time",
+       y="Access Deviation",
+       title="Model Comparison of Access Deviation in Ethiopia")
 
 national_estimates <- fread(file.path(main_dir, "national_time_series.csv"))
 national_estimates <- national_estimates[iso3 %in% unique(stock_and_flow$iso3)]
@@ -51,7 +78,10 @@ use_time_series <- ggplot(national_estimates[type=="use"], aes(x=time, y=value, 
                                  x="Time",
                                  y="Net Use")
 
-dev_metrics <- c("use_gap") # percapita_net_dev, access_dev
+dev_metrics <- c(
+                  # "use_gap", "percapita_net_dev", 
+                  "access_dev"
+                 ) 
 dev_plots <- ggplot(national_estimates[type %in% dev_metrics], aes(x=time, y=value, color=type))+ 
                           geom_hline(yintercept=0) + 
                           geom_line(size=1) + 
