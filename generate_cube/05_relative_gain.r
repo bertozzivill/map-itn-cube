@@ -94,11 +94,49 @@ Africa <- gSimplify(Africa, tol=0.1, topologyPreserve=TRUE)
             par.settings=rasterTheme(region= wpal("seaside", noblack = T)), at= seq(0, 1, 0.025),
             xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, maxpixels=max_pixels) +
     latticeExtra::layer(sp.polygons(Africa)) 
+
+  # use gain: how many % points would you need to increase use to bring it to the level of access?
+  use_gain <- access_perc-use_perc
   
-  pdf(file.path(plot_dir, "use_rate_2018.pdf"))
-    plot(use_rate_map)
-  graphics.off()
+  # access gain: what would use look like if you maximized access everywhere? 
+  access_gain <- use_rate*100 - use_perc
   
+  use_gain <- raster::mask(use_gain, access_gain)
+  
+  
+  true_use <- levelplot(use_perc[[19]],
+                        par.settings=rasterTheme(region= wpal("seaside", noblack = T)), at= seq(0, 100, 2.5),
+                        xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, main="True Use"# , 
+                        # maxpixels=max_pixels
+  )
+  
+  
+  maxima <- stack(access_perc[[19]], use_rate[[19]]*100)
+  names(maxima) <- c("Maximum with Use", "Maximum with Access")
+  maxima_plot <- levelplot(maxima,
+                            par.settings=rasterTheme(region= wpal("seaside", noblack = T)), at= seq(0, 100, 2.5),
+                            xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F# , 
+                            # maxpixels=max_pixels
+  )
+  
+  new_comparison <- stack(use_gain[[19]], access_gain[[19]])
+  names(new_comparison) <- c("Increase Use", "Increase Access")
+  relative_gain_continuous <- levelplot(new_comparison,
+                              par.settings=rasterTheme(region= wpal("cool_stormy", noblack = T)), at= seq(0, 100, 2.5),
+                              xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F# , 
+                              # maxpixels=max_pixels
+                              )
+  
+  
+  lay <- rbind(c(NA, NA, 2, 2, 2),
+               c(1,  1,  2, 2, 2),
+               c(1,  1,  3, 3, 3),
+               c(NA, NA, 3, 3, 3)
+               )
+  grid.arrange(true_use, maxima_plot, relative_gain_continuous, layout_matrix = lay)
+  
+  # Categorical breakdown
+  # todo: make this less manual
   cat_labels <- data.table(ID=0:6,
                            type=c("Not Modeled",
                                   paste0("Access <", access_thresh_1, "%, Use Rate >=", use_thresh), 
@@ -153,25 +191,6 @@ Africa <- gSimplify(Africa, tol=0.1, topologyPreserve=TRUE)
   graphics.off()
   
   
-  # Now look just at the places in category 4
-  disaggregate_4 <- copy(categorical)
-  disaggregate_4[disaggregate_4<4] <- 0
-  
-  # how much would you gain by 
-  use_test <- copy(disaggregate_4)
-  use_test[use_test==4] <- use_rate[use_test==4]
-  
-  access_test <- copy(disaggregate_4)
-  access_test[access_test==4] <- access_perc[access_test==4]
-  
-  # use gain: how many % points would you need to increase use to bring it to the level of access?
-  use_gain <- access_perc-use_perc
-  
-  # access gain: what would use look like if you brought access to 80% everywhere? 
-  use_with_max_access <- use_rate * access_thresh
-  # access_diff[access_perc >= access_thresh] <- use_rate[access_perc >= access_thresh]*100
-  # 
-  # access_gain <- access_diff-use_perc
   
   
 # }
