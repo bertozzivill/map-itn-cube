@@ -21,13 +21,13 @@ n.iter=50000
 thin=10
 
 source("jags_functions.r")
-main_subdir <- "20200206"
+main_subdir <- "20200311"
 main_dir <- file.path("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep", main_subdir)
 input_dir <- file.path(main_dir, "../../00_survey_nmcp_manufacturer")
 
 # From Bonnie/Sam: pre-aggregated data from older surveys/reports, defer to eLife paper to explain them
 mics3_data <- fread(file.path(input_dir,"non_household_surveys/mics3_aggregated_08_august_2017.csv"),stringsAsFactors=FALSE)
-no_report_surveydata <-fread(file.path(input_dir,"non_household_surveys/other_aggregated_06_february_2020.csv"),stringsAsFactors=FALSE)
+report_only_surveydata <-fread(file.path(input_dir,"non_household_surveys/other_aggregated_06_february_2020.csv"),stringsAsFactors=FALSE)
 
 # From 01_prep_hh_survey_data: aggregated survey data. keep only needed columns;
 survey_data <- fread(file.path(main_dir, "itn_aggregated_survey_data.csv"),stringsAsFactors=FALSE)
@@ -95,10 +95,10 @@ mics3_estimates <-data.table(surveyid=mics3_data$names,
                              n_llin_mean=mics3_model_estimates[metric=="mean"]$llin_per_hh,
                              n_llin_se=mics3_model_estimates[metric=="sd"]$llin_per_hh)
 
-### preprocess No Report Surveys #####----------------------------------------------------------------------------------------------------------------------------------
+### preprocess "Report Only" Surveys #####----------------------------------------------------------------------------------------------------------------------------------
 
 # Justification for se calculation in eLife paper
-no_report_estimates <- no_report_surveydata[, list(surveyid=paste(names, round(time)),
+no_report_estimates <- report_only_surveydata[, list(surveyid=paste(names, round(time)),
                                                    country=Country,
                                                    iso3=ISO3,
                                                    date=time,
@@ -114,13 +114,13 @@ no_report_estimates[no_report_estimates==0]<-1e-12
 
 all_to_append <- rbind(mics3_estimates, no_report_estimates)
 
-summary_table <- fread(file.path(main_dir, "summary_table_raw.csv"))
+summary_table <- fread(file.path(main_dir, "summary_tables", "summary_table_raw.csv"))
 
 summary_to_append <- all_to_append[, list(survey_id=surveyid,
                                           country,
                                           iso3,
                                           svy_years="TODO",
-                                          source=c(rep("MICS3", nrow(mics3_data)), no_report_surveydata$Type.of.survey),
+                                          source=c(rep("MICS3", nrow(mics3_data)), report_only_surveydata$Type.of.survey),
                                           cluster_count=0,
                                           individuals=NA,
                                           included_in_cube="No"
@@ -132,7 +132,7 @@ summary_table[, demographics:=""]
 summary_table[, representativeness:= ""]
 summary_table[, notes:=ifelse(source=="TODO: OTHER", "manually modified source", "")]
 summary_table <- summary_table[order(notes, source, country, svy_years)]
-write.csv(summary_table, file.path(main_dir, "summary_table_intermediate.csv"), row.names=F)
+write.csv(summary_table, file.path(main_dir, "summary_tables", "summary_table_intermediate.csv"), row.names=F)
 
 
 ### Combine and process all surveys #####----------------------------------------------------------------------------------------------------------------------------------
@@ -147,7 +147,7 @@ survey_data[, chron_order:=seq_along(date), by="iso3"]
 survey_data[, rev_chron_order:=rev(seq_along(date)), by="iso3"]
 survey_data[, random_order:=sample(chron_order), by="iso3"]
 
-write.csv(survey_data, file.path(main_dir, "prepped_survey_data.csv"), row.names=F)
+write.csv(survey_data, file.path(main_dir, "itn_aggregated_survey_data_plus_reportonly.csv"), row.names=F)
 
 ### Generate a submission tsv for sensitivity analysis (save this to your repo) #####----------------------------------------------------------------------------------------------------------------------------------
 

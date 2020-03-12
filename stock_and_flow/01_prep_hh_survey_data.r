@@ -16,7 +16,7 @@ library(lubridate)
 
 rm(list=ls())
 
-out_subdir <- "20200206"
+out_subdir <- "20200311"
 
 main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/household_surveys"
 out_dir <- file.path("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep", out_subdir)
@@ -24,6 +24,7 @@ dhs_dir <- "/Volumes/GoogleDrive/Shared drives/dhs-outputs/Standard_MAP_DHS_Outp
 code_dir <-"/Users/bertozzivill/repos/map-itn-cube/stock_and_flow"
 
 dir.create(out_dir, showWarnings = F, recursive = T)
+dir.create(file.path(out_dir, "summary_tables"))
 
 # big table of national name/region/code maps
 country_codes <-fread(file.path(main_dir, 'National_Config_Data.csv'))
@@ -404,7 +405,7 @@ if(length(summary_cube_diff)>0){
   stop("INCORRECT SUMMARIZATION OF CUBE DATA")
 }
 
-write.csv(summary_table, file.path(out_dir, "summary_table_raw.csv"), row.names=F)
+write.csv(summary_table, file.path(out_dir, "summary_tables", "summary_table_raw.csv"), row.names=F)
 
 ## SUMMARIZE DATA FOR STOCK AND FLOW  ----------------------------------------------------------------------------------------------------------------------
 
