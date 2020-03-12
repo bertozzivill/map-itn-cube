@@ -23,6 +23,13 @@ setwd(main_dir)
 out_dir <- main_dir
 plot_dir <- "~/Dropbox (IDM)/Malaria Team Folder/projects/map_intervention_impact/writing_and_presentations/tza_2020/plots/raw"
 
+
+# load survey-level access values to plot against model estimates
+survey_data <- fread(file.path(survey_indir, "itn_aggregated_survey_data.csv"))
+hh_survey_data <- fread(file.path(survey_indir, "itn_hh_survey_data.csv"))
+survey_data[, included_in_cube:=ifelse( surveyid %in% unique(hh_survey_data$SurveyId), "Included in Cube", "Not Included in Cube")]
+
+
 comparison_dirs <- c(orig= "20200204_no_ar1_effect",
                      # adjustment_1="20200206_update_eth",
                      adjusted="20200207_retry_eth",
@@ -79,13 +86,26 @@ use_time_series <- ggplot(national_estimates[type=="use"], aes(x=time, y=value, 
                                  y="Net Use")
 
 dev_metrics <- c(
-                  # "use_gap", "percapita_net_dev", 
-                  "access_dev"
+                  "use_gap"# , "percapita_net_dev", 
+                  # "access_dev"
                  ) 
-dev_plots <- ggplot(national_estimates[type %in% dev_metrics], aes(x=time, y=value, color=type))+ 
+
+
+survey_count <- survey_data[, list(count=.N), by="iso3"]
+mean_use <- national_estimates[type %in% dev_metrics, list(mean_use_gap=mean(value)), by="iso3"]
+mean_use <- merge(mean_use, survey_count)
+
+ggplot(mean_use, aes(x=mean_use_gap, y=count)) + 
+  geom_text(size=4, alpha=0.8, aes(label=iso3)) + 
+  geom_smooth(method="lm") +
+  labs(x="Mean Use Gap",
+       y="Survey Count")
+
+dev_plots <- ggplot(national_estimates[type %in% dev_metrics], aes(x=time, y=value))+ 
                           geom_hline(yintercept=0) + 
-                          geom_line(size=1) + 
-                          facet_wrap(~iso3, scales="free_y") +
+                          geom_line(size=1, aes(color=type)) + 
+                          facet_wrap(~iso3) +
+                          geom_text(data=survey_count, x=2002, y=0.25, aes(label=count)) + 
                           theme_minimal() +
                           theme(legend.title = element_blank()) + 
                           scale_x_continuous(minor_breaks = years) + 
@@ -136,11 +156,6 @@ graphics.off()
 #                                  x="Time",
 #                                  y="Net Use")
 
-
-# load survey-level access values to plot against model estimates
-survey_data <- fread(file.path(survey_indir, "itn_aggregated_survey_data.csv"))
-hh_survey_data <- fread(file.path(survey_indir, "itn_hh_survey_data.csv"))
-survey_data[, included_in_cube:=ifelse( surveyid %in% unique(hh_survey_data$SurveyId), "Included in Cube", "Not Included in Cube")]
 
 compare_access_plot <- ggplot(national_estimates[type %in% c("access", "nat_access")]) + 
                                 geom_line(size=1, aes(x=time, y=value, color=type)) + 

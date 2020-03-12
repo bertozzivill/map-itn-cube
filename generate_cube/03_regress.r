@@ -123,6 +123,12 @@ run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, sta
   
   ## Run model ##-------------------------------------------------------------
   
+  # for testing
+  outcome_var <- outcome_names[[1]]
+  cov_vars <- selected_cov_names[[outcome_var]]
+  
+  
+
   ncores <- detectCores()
   print(paste("--> Machine has", ncores, "cores available"))
   registerDoParallel(ncores-2)
@@ -160,12 +166,12 @@ if (Sys.getenv("run_individually")!=""){
     lapply(package_list, library, character.only=T)
   }
   
-  package_load(c("zoo","raster", "doParallel", "data.table", "rgdal", "INLA", "RColorBrewer", "cvTools", "boot", "stringr", "dismo", "gbm"))
+  package_load(c("zoo","raster", "doParallel", "data.table", "rgdal", "INLA", "RColorBrewer", "cvTools", "boot", "stringr", "dismo", "gbm", "rgeos"))
   
   if(Sys.getenv("input_dir")=="") {
     input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
-    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200122_test_percapita_nets/"
-    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200122_test_percapita_nets/"
+    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200210_eth_noreport/"
+    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200210_eth_noreport/"
     func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
   } else {
     input_dir <- Sys.getenv("input_dir")
@@ -174,7 +180,10 @@ if (Sys.getenv("run_individually")!=""){
     func_dir <- Sys.getenv("func_dir") # code directory for function scripts
   }
   
-  run_dev_gap_models(input_dir, func_dir, main_indir, main_outdir, start_year=2000, end_year=2015)
+  start_year=2000
+  end_year=2018
+  
+  run_dev_gap_models(input_dir, func_dir, main_indir, main_outdir, start_year=start_year, end_year=end)
   
 }
 

@@ -73,12 +73,31 @@ run_inla <- function(data, outcome_var, cov_vars, start_year, end_year){
   # initialize inla
   INLA:::inla.dynload.workaround() 
   
-  # generate spatial mesh using unique xyz values 
   
+  # the commented section here is for testing out a barrier mesh method
+  # shape_dir <- "~/Desktop/Africa"
+  # Africa<-readOGR(file.path(shape_dir, "Africa.shp"))
+  # Africa <- gSimplify(Africa, tol=0.1, topologyPreserve=TRUE)
+  # lps <- coordinates(Africa)
+  # ID <- cut(lps[,1], quantile(lps[,1]), include.lowest=TRUE)
+  # reg4 <- unionSpatialPolygons(Africa, ID)
+  # 
+  # ids <- sapply(slot(Africa, "polygons"), function(x) slot(x, "ID"))
+  # 
+  # 
+  
+  # test_mesh <- inla.mesh.2d(loc= unique(data[, list(x,y, z)]),
+  #                           # boundary = Africa,
+  #                           cutoff=0.006,
+  #                           min.angle=c(25,25),
+  #                           max.edge=c(0.06,500))
+  
+  
+  # generate spatial mesh using unique xyz values 
   spatial_mesh = inla.mesh.2d(loc= unique(data[, list(x,y,z)]),
                               cutoff=0.006,
                               min.angle=c(25,25),
-                              max.edge=c(0.06,500) )
+                              max.edge=c(0.06,500))
   print(paste("New mesh constructed:", spatial_mesh$n, "vertices"))
   
   # generate spde matern model from mesh
@@ -124,7 +143,7 @@ run_inla <- function(data, outcome_var, cov_vars, start_year, end_year){
                       data=inla.stack.data(stack_est),
                       family=c("gaussian"),
                       control.predictor=list(A=inla.stack.A(stack_est), compute=TRUE,quantiles=NULL),
-                      control.compute=list(cpo=TRUE,waic=TRUE, config=F), # set config to TRUE when ready to run uncertainty
+                      control.compute=list(cpo=TRUE,waic=TRUE, config=T), # set config to TRUE when ready to run uncertainty
                       keep=FALSE, verbose=TRUE,
                       control.inla= list(strategy = "gaussian",
                                          int.strategy="ccd",
