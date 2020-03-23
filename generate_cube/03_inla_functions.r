@@ -225,3 +225,52 @@ aggregate_raster <- function(input, pop, admin, template, label=""){
   return(agg.zonal)
 }
 
+
+## from Sam, for the prediction of many draws from the posterior. needs cleaning.
+
+#conditional sampling rountine
+conditional.samples.variance<-function(mod.pred,A.est,data,dmat,nsamp){
+  cn<-raster(paste('/home/drive/cubes/Admin/african_cn5km_2013_no_disputes.tif',sep="")) #load raster
+  NAvalue(cn)=-9999
+  pred_val<-getValues(cn)#get values again
+  w<-is.na(pred_val) #find NAs again
+  index<-1:length(w) 
+  index<-index[!w]
+  samples=inla.posterior.sample(nsamp,mod.pred) 
+  library(doParallel)
+  registerDoParallel(cores=60)
+  samps<-foreach(i=1:nsamp) %dopar% {
+    reali<-samples[[i]] # get sample
+    ################## get IID country specific effects ########## 
+    iid<-cbind(mod.pred$summary.random$iid$ID,reali$latent[grep('^iid.*',rownames(reali$latent)),]) # iid values
+    iidcn<-cnn
+    iidcn[!is.na(cnn)]=0
+    for(i in 1:nrow(iid)){
+      id<-iid[i,1]
+      iidcn[cnn==id]=iid[i,2]
+    } 
+    iid<-iidcn[index] # country specific random effects
+    iid.data<-iidcn[data$cellnumber]  # country specific random effects for the data
+    ################## get covariate coefficients ########## 
+    # act latent variable 
+    V25<-reali$latent[grep('^V25.*',rownames(reali$latent)),] #act parameter
+    V25IDs=mod.pred$summary.random$V25
+    V25=mean(V25)/colMeans(V25IDs)[1]
+    #all other coefficients
+    coeff<-reali$latent[rownames(reali$latent)%in%paste0('V',1:24,':1'),] # covariate coefficients
+    coeff[23]=-coeff[23]
+    coeff[24]=-coeff[24]
+    coeff<-c(coeff,-V25) 
+    coeff<-coeff[c(paste0('V',1:24,':1'),'ID')] #order coefficients correctly
+    ################## get latent field ########## 
+    z<-as.numeric(drop(as.vector(reali$latent[grep('^field.*',rownames(reali$latent)),])))
+    ################## put outputs together and return ########## 
+    rand.samp<-list(field=z,coeff=coeff,iid=iid) 
+    return(rand.samp)
+  }
+  return(samps)
+}
+
+
+
+
