@@ -16,7 +16,7 @@ library(lubridate)
 
 rm(list=ls())
 
-out_subdir <- "20200311"
+out_subdir <- "20200324"
 
 main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/household_surveys"
 out_dir <- file.path("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep", out_subdir)
@@ -419,6 +419,15 @@ all_data[, n_with_access:= pmin(n_itn*2, n_defacto_pop)]
 all_data[, access:=n_with_access/n_defacto_pop]
 all_data[is.na(access) & n_defacto_pop==0, access:=0]
 
+# calculate survey-level use and use gap to compare to INLA models
+all_data[, n_slept_under_itn:= pmin(n_slept_under_itn, n_defacto_pop)] # sometimes the data logs more people sleeping under a net than slept in the house
+all_data[, use:= n_slept_under_itn/n_defacto_pop]
+all_data[is.na(use) & n_defacto_pop==0, use:=0]
+all_data[use>1, use:=1]
+
+all_data[, use_gap:= (n_with_access-n_slept_under_itn)/n_defacto_pop]
+all_data[is.na(use_gap) & n_defacto_pop==0, use_gap:=0]
+
 print("Summarizing surveys")
 survey_summary <- lapply(unique(all_data$SurveyId), function(this_svy){
   
@@ -428,7 +437,7 @@ survey_summary <- lapply(unique(all_data$SurveyId), function(this_svy){
   # set up survey design
   svy_strat<-svydesign(ids=~clusterid, data=this_svy_data, weight=~hh_sample_wt) 
   
-  meanvals <- c("n_defacto_pop", "n_itn", "n_llin", "n_conv_itn", "access")
+  meanvals <- c("n_defacto_pop", "n_itn", "n_llin", "n_conv_itn", "access", "use")
   svy_means <- lapply(meanvals, function(this_val){
     uniques <- unique(this_svy_data[[this_val]])
     if (length(uniques)==1 & is.na(uniques[1])){

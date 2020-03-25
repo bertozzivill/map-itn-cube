@@ -203,7 +203,7 @@ Africa <- gSimplify(Africa, tol=0.1, topologyPreserve=TRUE)
 # spdf <- SpatialPolygonsDataFrame(Africa, africa.df)
 
 years <- 2000:2018
-max_pixels <- 2e6
+max_pixels <- 2e5
 
 use_stack <- stack(paste0("ITN_", years, "_use.tif"))
 access_stack <- stack(paste0("ITN_", years, "_access.tif"))
@@ -212,28 +212,68 @@ nets_percapita_stack <- stack(paste0("ITN_", years, "_percapita_nets.tif"))
 names(nets_percapita_stack) <- paste0("NPC.", years)
 
 survey_data_cluster <- fread("../01_survey_data.csv")
+survey_data_cluster[, use_gap:=(access_count-use_count)/pixel_pop]
+
+
+match.cols<-function(val, pal=wpal("seaside", noblack=T), min=NA, max=NA){
+  n=1000
+  colfunc <- colorRampPalette(pal)
+  min <- ifelse(is.na(min), min(val), min)
+  max <- ifelse(is.na(max), max(val), max)
+  col<-data.frame(val=seq(min, max,length.out=n),col=colfunc(n))
+  out<-rep(NA,length(col))
+  for(i in 1:length(val)){
+    out[i]<-as.character(col[which.min(abs(col$val-val[i])),'col'])
+  }
+  return(out)
+}
+
+CreateSpatialPoints <- function(long,
+                                  lat,
+                                  values=-9999,
+                                  proj="+proj=longlat +datum=WGS84"
+                                ) {
+                                  data.sp <- data.frame(long=long, lat=lat, values=values)
+                                  coordinates(data.sp) <- ~long+lat
+                                  proj4string(data.sp) <- CRS(proj)
+                                  return(data.sp)
+}
 
 survey_points <- lapply(years, function(this_year){
   print(this_year)
   if(nrow(survey_data_cluster[year==this_year])>0){
-    return(xyFromCell(use_gap_stack, survey_data_cluster[year==this_year]$cellnumber, spatial=T))
+    spdf <- CreateSpatialPoints( 
+                                long=survey_data_cluster[year==this_year]$lon,
+                                lat=survey_data_cluster[year==this_year]$lat,
+                                proj=crs(use_gap_stack, asText=T)
+                              )
+    return(spdf)
   }else{
     return(NULL)
   }
-  })
+})
 
 
-pdf("~/Desktop/use_gap_points.pdf", width=10, height=10)
+pdf("~/Desktop/use_gap_points.pdf", width=12, height=7)
 
 for (idx in 4:length(years)){
   this_year <- years[idx]
-  access_plot <- levelplot(use_gap_stack[[idx]],
-                           par.settings=rasterTheme(region= rev(wpal("diverging_tan_white_green_multi"))), at= seq(-1, 1, 0.025),
-                           xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, main=paste(this_year, "Use Gap"), maxpixels=max_pixels) +
-    latticeExtra::layer(sp.polygons(Africa)) +
-    latticeExtra::layer(sp.points(survey_points[[idx]]), theme = simpleTheme(col = "black",
-                                                                           cex=2))
-  print(access_plot)
+  print(this_year)
+  raster_layer <- levelplot(use_gap_stack[[idx]],
+                            par.settings=rasterTheme(region= rev(wpal("diverging_tan_white_green_multi"))), at= seq(-1, 1, 0.025),
+                            xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, main=paste(this_year, "Use Gap"), maxpixels=max_pixels)
+  border_layer <- latticeExtra::layer(sp.polygons(Africa))
+  points_layer <- latticeExtra::layer(sp.points(my.points, col=col, cex=cex, pch=pch),
+                                      data=list(sp.points=sp.points, my.points=survey_points[[idx]], 
+                                                col=match.cols(survey_data_cluster[year==this_year]$use_gap,
+                                                               pal=rev(wpal("diverging_tan_white_green_multi")),
+                                                               min=-1, max=1), cex=1.5, pch=3)
+                                    )
+                    
+  all_layers <- raster_layer + border_layer + points_layer  
+  no_points <- raster_layer + border_layer
+  full_plot <- grid.arrange(all_layers, raster_layer+border_layer, ncol=2)
+  print(full_plot)
 }
 
 graphics.off()
@@ -245,33 +285,6 @@ levelplot(use_rate,
           xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, main=paste(this_year, "Use:Access Ratio"), maxpixels=max_pixels) +
   latticeExtra::layer(sp.polygons(Africa))
 
-match.cols<-function(val){
-  n=1000
-  colfunc <- colorRampPalette(wpal("seaside", noblack = T))
-  col<-data.frame(val=seq(min(val),max(val),length.out=n),col=colfunc(n))
-  out<-rep(NA,length(col))
-  for(i in 1:length(val)){
-    out[i]<-as.character(col[which.min(abs(col$val-val[i])),'col'])
-  }
-  return(out)
-}
-point_colors <- match.cols(survey_data_cluster[year==2015]$percapita_nets)
-
-survey_points <- xyFromCell(use_gap_stack, survey_data_cluster[year==2015]$cellnumber,  spatial=T)
-
-# export this to pdf manually
-plot(Africa)
-plot(survey_points,  add=T, col=match.cols(survey_data_cluster[year==2015]$percapita_nets), pch=16, cex=0.75)
-
-
-access_plot <- levelplot(access_stack[[19]],
-                       par.settings=rasterTheme(region= wpal("seaside", noblack = T)), at= seq(0, 1, 0.025),
-                       xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, main="Access", maxpixels=max_pixels) +
-  latticeExtra::layer(sp.polygons(Africa)) 
-
-pdf(file.path(plot_dir, "access_2018.pdf"))
-  print(access_plot)
-graphics.off()
 
 use_plot <- levelplot(use_stack,
                       par.settings=rasterTheme(region= wpal("seaside", noblack = T)), at= seq(0, 1, 0.025),
