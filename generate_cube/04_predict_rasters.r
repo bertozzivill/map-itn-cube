@@ -123,6 +123,10 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, ma
     transformed_predictions[, percapita_net_dev:=percapita_nets - nat_percapita_nets]
     
     # subset to just the pixels for which there is data in that year, save
+    untransformed_data <- all_predictions[cellnumber %in% unique(survey_data$cellnumber)]
+    write.csv(untransformed_data, file.path(out_dir, paste0("untransformed_predictions_", this_year, ".csv")), row.names=F)
+    
+    
     for_data_comparison <- transformed_predictions[cellnumber %in% unique(survey_data$cellnumber)]
     write.csv(for_data_comparison, file.path(out_dir, paste0("all_predictions_wide_", this_year, ".csv")), row.names=F)
 
