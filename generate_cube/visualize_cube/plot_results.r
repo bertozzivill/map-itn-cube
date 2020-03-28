@@ -15,9 +15,9 @@ library(PNWColors)
 
 rm(list=ls())
 
-main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200312_draft_results/04_predictions"
+main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200328_remove_random_effect/04_predictions"
 indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200311_draft_results/for_cube"
-survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200311"
+survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200324"
 shape_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/shapefiles/"
 setwd(main_dir)
 out_dir <- main_dir
@@ -86,8 +86,8 @@ use_time_series <- ggplot(national_estimates[type=="use"], aes(x=time, y=value, 
                                  y="Net Use")
 
 dev_metrics <- c(
-                  "use_gap"# , "percapita_net_dev", 
-                  # "access_dev"
+                  "use_gap", "percapita_net_dev", 
+                  "access_dev"
                  ) 
 
 
@@ -95,11 +95,11 @@ survey_count <- survey_data[, list(count=.N), by="iso3"]
 mean_use <- national_estimates[type %in% dev_metrics, list(mean_use_gap=mean(value)), by="iso3"]
 mean_use <- merge(mean_use, survey_count)
 
-ggplot(mean_use, aes(x=mean_use_gap, y=count)) + 
-  geom_text(size=4, alpha=0.8, aes(label=iso3)) + 
-  geom_smooth(method="lm") +
-  labs(x="Mean Use Gap",
-       y="Survey Count")
+survey_use_relationship <- ggplot(mean_use, aes(x=mean_use_gap, y=count)) + 
+                              geom_text(size=4, alpha=0.8, aes(label=iso3)) + 
+                              geom_smooth(method="lm") +
+                              labs(x="Mean Use Gap",
+                                   y="Survey Count")
 
 dev_plots <- ggplot(national_estimates[type %in% dev_metrics], aes(x=time, y=value))+ 
                           geom_hline(yintercept=0) + 
@@ -282,6 +282,11 @@ use_rate <- use_stack[[19]]/access_stack[[19]]
 use_rate[use_rate>1] <- 1
 levelplot(use_rate,
           par.settings=rasterTheme(region= c("#722503", "#AB0002", "#F2A378", "#F4CA7D", "#C8D79E", "#70A800")), at= seq(0, 1, 0.025),
+          xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, main=paste(this_year, "Use:Access Ratio"), maxpixels=max_pixels) +
+  latticeExtra::layer(sp.polygons(Africa))
+
+levelplot(use_rate,
+          par.settings=rasterTheme(region= wpal("seaside", noblack = T)), at= seq(0, 1, 0.025),
           xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, main=paste(this_year, "Use:Access Ratio"), maxpixels=max_pixels) +
   latticeExtra::layer(sp.polygons(Africa))
 

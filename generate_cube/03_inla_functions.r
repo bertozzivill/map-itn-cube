@@ -86,7 +86,7 @@ run_inla <- function(data, outcome_var, cov_vars, start_year, end_year, temporal
   # prep data for model fitting
   cov_list<-data[, cov_vars, with=F]
   cov_list$time <- data$capped_time
-  cov_list$iso3 <- data$iso3 
+  # cov_list$iso3 <- data$iso3 
   cov_list[, Intercept:=1]
   cov_list <-as.list(cov_list)
   
@@ -115,7 +115,7 @@ run_inla <- function(data, outcome_var, cov_vars, start_year, end_year, temporal
     
     model_formula<- as.formula(paste(
       "response ~ -1 + Intercept  + f(field, model=spde_matern, group=field.group, control.group=list(model='ar1')) + ",
-      "f(iso3, model='iid') +", # add random effect
+      # "f(iso3, model='iid') +", # add random effect
       paste(cov_vars, collapse="+"),
       sep=""))
     
@@ -141,7 +141,7 @@ run_inla <- function(data, outcome_var, cov_vars, start_year, end_year, temporal
 
     model_formula<- as.formula(paste(
       "response ~ -1 + Intercept  + f(field, model=spde_matern) + ",
-      "f(iso3, model='iid') +", # add random effect
+      # "f(iso3, model='iid') +", # add random effect
       paste(cov_vars, collapse="+"),
       sep=""))
     
@@ -154,10 +154,10 @@ run_inla <- function(data, outcome_var, cov_vars, start_year, end_year, temporal
                       family=c("gaussian"),
                       control.predictor=list(A=inla.stack.A(stack_est), compute=TRUE,quantiles=NULL),
                       control.compute=list(cpo=TRUE,waic=TRUE, config=FALSE), # set config to TRUE when ready to run uncertainty
-                      keep=FALSE, verbose=TRUE,
+                      keep=FALSE, verbose=FALSE,
                       control.inla= list(strategy = "gaussian",
                                          int.strategy="ccd",
-                                         verbose=F,
+                                         verbose=FALSE,
                                          step.factor=1,
                                          stupid.search=FALSE)
   )

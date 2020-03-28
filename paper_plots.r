@@ -18,7 +18,7 @@ rm(list=ls())
 
 years <- 2000:2018
 
-main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200326_use_gap_ar1/04_predictions"
+main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200328_remove_random_effect/04_predictions"
 indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200311_draft_results/for_cube"
 survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200324"
 data_fname <- "../02_data_covariates.csv"

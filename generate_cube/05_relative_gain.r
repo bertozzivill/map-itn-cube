@@ -27,8 +27,8 @@ gg_color_hue <- function(n) {
   hcl(h = hues, l = 65, c = 100)[1:n]
 }
 
-in_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200204_no_ar1_effect/05_predictions"
-plot_dir <- "~/Dropbox (IDM)/Malaria Team Folder/projects/map_intervention_impact/writing_and_presentations/tza_2020/plots/raw"
+in_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200328_remove_random_effect/04_predictions"
+# plot_dir <- "~/Dropbox (IDM)/Malaria Team Folder/projects/map_intervention_impact/writing_and_presentations/tza_2020/plots/raw"
 shape_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/shapefiles/"
 # zed_root <- '/Volumes/map_data/'
 # compare_dir <- file.path(zed_root, 'cubes/5km/ITN/')
@@ -186,10 +186,10 @@ Africa <- gSimplify(Africa, tol=0.1, topologyPreserve=TRUE)
                           main="", margin=F, maxpixels=max_pixels) +
                   latticeExtra::layer(sp.polygons(Africa)) 
   
-  pdf(file.path(plot_dir, "rel_gain_2018.pdf"))
-    print(rel_gain_plot)
-  graphics.off()
-  
+  # pdf(file.path(plot_dir, "rel_gain_2018.pdf"))
+  #   print(rel_gain_plot)
+  # graphics.off()
+  # 
   
   
   
