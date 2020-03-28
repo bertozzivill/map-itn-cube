@@ -60,9 +60,8 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, ma
   
   INLA:::inla.dynload.workaround() 
   
-  # note: the mesh objects for any output should be the same-- we just pick the access dev ones here.
-  spatial_mesh <-  copy(inla_outputs[["access_dev"]][["spatial_mesh"]])
-  # temporal_mesh <- copy(inla_outputs[["access_dev"]][["temporal_mesh"]])
+  # note: the spatial mesh objects for any output should be the same-- we just pick the access dev ones here.
+  spatial_mesh <-  copy(inla_outputs[["use_gap"]][["spatial_mesh"]])
   
   ## Predict and make rasters by year  ## ---------------------------------------------------------
   ncores <- detectCores()
@@ -71,14 +70,6 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, ma
   prediction_outcomes <- foreach(this_year=prediction_years,.combine=rbind) %dopar% {
     
     print(paste("predicting for year", this_year))
-    
-    ## Year-specific inla matrix  ## --------------------------------------------------------- 
-    A_matrix <-inla.spde.make.A(spatial_mesh, 
-                                loc=as.matrix(prediction_xyz[, list(x,y,z)]), 
-                                # group=rep(min(this_year, max(temporal_mesh$interval)), length(prediction_indices)),
-                                # group.mesh=temporal_mesh
-                                )
-    
     
     ## Load year-specific covariates  ## ---------------------------------------------------------
     
@@ -96,6 +87,23 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, ma
     
     all_predictions <- rbindlist(lapply(names(inla_outputs), function(output_var){ # should be "access_dev", "use_gap", "percapita_net_dev
       print(paste(this_year, "predicting", output_var))
+      
+      
+      if (is.null(inla_outputs[[output_var]][["temporal_mesh"]])){
+        ## Year-specific inla matrix  ## --------------------------------------------------------- 
+        A_matrix <-inla.spde.make.A(spatial_mesh, 
+                                    loc=as.matrix(prediction_xyz[, list(x,y,z)])
+        )
+      }else{
+        ## Year-specific inla matrix  ## --------------------------------------------------------- 
+        temporal_mesh <- inla_outputs[[output_var]][["temporal_mesh"]]
+        A_matrix <-inla.spde.make.A(spatial_mesh, 
+                                    loc=as.matrix(prediction_xyz[, list(x,y,z)]), 
+                                    group=rep(min(this_year, max(temporal_mesh$interval)), length(prediction_indices)),
+                                    group.mesh=temporal_mesh
+        )
+      }
+      
       these_predictions <- predict_inla(model=inla_outputs[[output_var]], A_matrix, thisyear_covs, prediction_cells)
       these_predictions[, year:=this_year]
       these_predictions[, metric:= ifelse(output_var=="percapita_net_dev", output_var, paste0("emp_", output_var))]
@@ -122,10 +130,10 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, ma
     transformed_predictions[, use_gap:=access-use]
     transformed_predictions[, percapita_net_dev:=percapita_nets - nat_percapita_nets]
     
-    # subset to just the pixels for which there is data in that year, save
-    untransformed_data <- all_predictions[cellnumber %in% unique(survey_data$cellnumber)]
-    write.csv(untransformed_data, file.path(out_dir, paste0("untransformed_predictions_", this_year, ".csv")), row.names=F)
-    
+    # # subset to just the pixels for which there is data in that year, save
+    # untransformed_data <- all_predictions[cellnumber %in% unique(survey_data$cellnumber)]
+    # write.csv(untransformed_data, file.path(out_dir, paste0("untransformed_predictions_", this_year, ".csv")), row.names=F)
+    # 
     
     for_data_comparison <- transformed_predictions[cellnumber %in% unique(survey_data$cellnumber)]
     write.csv(for_data_comparison, file.path(out_dir, paste0("all_predictions_wide_", this_year, ".csv")), row.names=F)
@@ -139,7 +147,8 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, ma
                                                          use_gap = mean(use_gap, na.rm=F),
                                                          nat_percapita_nets= mean(nat_percapita_nets, na.rm=F),
                                                          percapita_nets = mean(percapita_nets, na.rm=F),
-                                                         percapita_net_dev = mean(percapita_net_dev, na.rm=F)),
+                                                         percapita_net_dev = mean(percapita_net_dev, na.rm=F)
+                                                         ),
                                                   by=list(iso3, year, cellnumber)
                                                   ]
     
@@ -207,8 +216,8 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, ma
 
 if (Sys.getenv("run_individually")!=""){
   
-  # dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-highmem-64 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20191214 main_indir=gs://map_users/amelia/itn/itn_cube/results/20200128_return_dynamic_covs/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ indicators_indir=gs://map_users/amelia/itn/stock_and_flow/results/20200127_no_par/for_cube --input run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/05_predict_rasters.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20200128_return_dynamic_covs/ --command 'Rscript ${CODE}'
-  
+  # dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-highmem-64 --disk-size 400 --boot-disk-size 50 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20191214 indicators_indir=gs://map_users/amelia/itn/stock_and_flow/results/20200311_draft_results/for_cube main_indir=gs://map_users/amelia/itn/itn_cube/results/20200326_use_gap_ar1/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/04_predict_rasters.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20200326_use_gap_ar1/ --command 'Rscript ${CODE}'
+
   package_load <- function(package_list){
     # package installation/loading
     new_packages <- package_list[!(package_list %in% installed.packages()[,"Package"])]

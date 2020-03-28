@@ -91,6 +91,9 @@ run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, sta
   ## Prep for model ##-------------------------------------------------------------
   
   outcome_names <- c("ihs_emp_access_dev", "ihs_emp_use_gap", "ihs_percapita_net_dev")
+  run_temporal <- list(ihs_emp_access_dev=F,
+                       ihs_emp_use_gap=T,
+                       ihs_percapita_net_dev=F)
   
   # calculate use gap,  access deviation, and percapita net deviation for data points
   data[, emp_use_gap:=emplogit2(access_count, pixel_pop) - emplogit2(use_count, pixel_pop)] # emplogit difference of access-use
@@ -116,27 +119,31 @@ run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, sta
   data <- merge(data, xyz, by="row_id", all=T)
   
   # shuffle row order (why?)
-  data <- data[sample(1:nrow(data),replace=F),]
+  # data <- data[sample(1:nrow(data),replace=F),]
   
   # limit data to chosen "end year"
   data[, capped_time:=pmin(time, end_year-0.046)]
   
-  ## Run model ##-------------------------------------------------------------
-  
-  # for testing
-  outcome_var <- outcome_names[[1]]
-  cov_vars <- selected_cov_names[[outcome_var]]
-  
-  
+  ## Run model ##------------------------------------------------------------
 
   ncores <- detectCores()
   print(paste("--> Machine has", ncores, "cores available"))
   registerDoParallel(ncores-2)
+  
+  # use lapply for bug testing
+  # inla_outputs <- lapply(outcome_names, function(outcome_var){
+  #   these_cov_names <- selected_cov_names[[outcome_var]]
+  #   
+  #   inla_results <- run_inla(data, outcome_var, these_cov_names, start_year, end_year, temporal=run_temporal[[outcome_var]])
+  #   inla_results <- c(inla_results, theta=all_thetas[[outcome_var]])
+  #   
+  #   return(inla_results)
+  # })  
+  
   inla_outputs<-foreach(outcome_var=outcome_names) %dopar% {
-    
     these_cov_names <- selected_cov_names[[outcome_var]]
     
-    inla_results <- run_inla(data, outcome_var, these_cov_names, start_year, end_year)
+    inla_results <- run_inla(data, outcome_var, these_cov_names, start_year, end_year, temporal=run_temporal[[outcome_var]])
     inla_results <- c(inla_results, theta=all_thetas[[outcome_var]])
     
     return(inla_results)

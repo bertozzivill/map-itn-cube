@@ -68,31 +68,11 @@ ll_to_xyz<-function(ll){
 }
 
 
-run_inla <- function(data, outcome_var, cov_vars, start_year, end_year){
+run_inla <- function(data, outcome_var, cov_vars, start_year, end_year, temporal=F){
   
   # initialize inla
   INLA:::inla.dynload.workaround() 
-  
-  
-  # the commented section here is for testing out a barrier mesh method
-  # shape_dir <- "~/Desktop/Africa"
-  # Africa<-readOGR(file.path(shape_dir, "Africa.shp"))
-  # Africa <- gSimplify(Africa, tol=0.1, topologyPreserve=TRUE)
-  # lps <- coordinates(Africa)
-  # ID <- cut(lps[,1], quantile(lps[,1]), include.lowest=TRUE)
-  # reg4 <- unionSpatialPolygons(Africa, ID)
-  # 
-  # ids <- sapply(slot(Africa, "polygons"), function(x) slot(x, "ID"))
-  # 
-  # 
-  
-  # test_mesh <- inla.mesh.2d(loc= unique(data[, list(x,y, z)]),
-  #                           # boundary = Africa,
-  #                           cutoff=0.006,
-  #                           min.angle=c(25,25),
-  #                           max.edge=c(0.06,500))
-  
-  
+
   # generate spatial mesh using unique xyz values 
   spatial_mesh = inla.mesh.2d(loc= unique(data[, list(x,y,z)]),
                               cutoff=0.006,
@@ -103,9 +83,6 @@ run_inla <- function(data, outcome_var, cov_vars, start_year, end_year){
   # generate spde matern model from mesh
   spde_matern =inla.spde2.matern(spatial_mesh,alpha=2) 
   
-  # generate temporal mesh
-  # temporal_mesh=inla.mesh.1d(seq(start_year,end_year,by=2),interval=c(start_year,end_year),degree=2) 
-  
   # prep data for model fitting
   cov_list<-data[, cov_vars, with=F]
   cov_list$time <- data$capped_time
@@ -113,48 +90,81 @@ run_inla <- function(data, outcome_var, cov_vars, start_year, end_year){
   cov_list[, Intercept:=1]
   cov_list <-as.list(cov_list)
   
-  # generate observation matrix
-  A_est =
-    inla.spde.make.A(spatial_mesh, 
-                     loc=as.matrix(data[, list(x,y,z)]), 
-                     # group=data$capped_time,
-                     # group.mesh=temporal_mesh
-                     )
-  # field_indices = inla.spde.make.index("field", n.spde=spatial_mesh$n, n.group=temporal_mesh$m)
-  
-  # Generate "stack"
-  stack_est = inla.stack(data=list(response=data[[outcome_var]]),
-                         A=list(A_est,1),
-                         effects=
-                           list(field=1:spde_matern$n.spde,
-                                c(cov_list)),
-                         tag="est", remove.unused=TRUE)
-  stack_est<-inla.stack(stack_est)
-  
-  model_formula<- as.formula(paste(
-    # "response ~ -1 + Intercept  + f(field, model=spde_matern, group=field.group, control.group=list(model='ar1')) + ",
-    "response ~ -1 + Intercept  + f(field, model=spde_matern) + ",
-    "f(iso3, model='iid') +", # add random effect
-    paste(cov_vars, collapse="+"),
-    sep=""))
+  # additional features for temporal model:
+  if (temporal){
+    # generate temporal mesh
+    temporal_mesh <- inla.mesh.1d(seq(start_year,end_year,by=2),interval=c(start_year,end_year),degree=2) 
+    
+    # generate observation matrix
+    A_est <- 
+      inla.spde.make.A(spatial_mesh, 
+                       loc=as.matrix(data[, list(x,y,z)]), 
+                       group=data$capped_time,
+                       group.mesh=temporal_mesh
+      )
+    field_indices <- inla.spde.make.index("field", n.spde=spatial_mesh$n, n.group=temporal_mesh$m)
+    
+    # Generate "stack"
+    stack_est <-  inla.stack(data=list(response=data[[outcome_var]]),
+                           A=list(A_est,1),
+                           effects=
+                             list(c(field_indices),
+                                  c(cov_list)),
+                           tag="est", remove.unused=TRUE)
+    stack_est<-inla.stack(stack_est)
+    
+    model_formula<- as.formula(paste(
+      "response ~ -1 + Intercept  + f(field, model=spde_matern, group=field.group, control.group=list(model='ar1')) + ",
+      "f(iso3, model='iid') +", # add random effect
+      paste(cov_vars, collapse="+"),
+      sep=""))
+    
+    
+  }else{
+    
+    temporal_mesh <- NULL
+    
+    # generate observation matrix
+    A_est <- 
+      inla.spde.make.A(spatial_mesh, 
+                       loc=as.matrix(data[, list(x,y,z)]), 
+      )
+    
+    # Generate "stack"
+    stack_est <-  inla.stack(data=list(response=data[[outcome_var]]),
+                           A=list(A_est,1),
+                           effects=
+                             list(field=1:spde_matern$n.spde,
+                                  c(cov_list)),
+                           tag="est", remove.unused=TRUE)
+    stack_est<-inla.stack(stack_est)
+
+    model_formula<- as.formula(paste(
+      "response ~ -1 + Intercept  + f(field, model=spde_matern) + ",
+      "f(iso3, model='iid') +", # add random effect
+      paste(cov_vars, collapse="+"),
+      sep=""))
+    
+    
+  }
   
   #-- Call INLA and get results --#
   inla_model =   inla(model_formula,
                       data=inla.stack.data(stack_est),
                       family=c("gaussian"),
                       control.predictor=list(A=inla.stack.A(stack_est), compute=TRUE,quantiles=NULL),
-                      control.compute=list(cpo=TRUE,waic=TRUE, config=T), # set config to TRUE when ready to run uncertainty
+                      control.compute=list(cpo=TRUE,waic=TRUE, config=FALSE), # set config to TRUE when ready to run uncertainty
                       keep=FALSE, verbose=TRUE,
                       control.inla= list(strategy = "gaussian",
                                          int.strategy="ccd",
-                                         verbose=TRUE,
+                                         verbose=F,
                                          step.factor=1,
                                          stupid.search=FALSE)
   )
   
   print(summary(inla_model))
   
-  return(list(model_output=inla_model, spatial_mesh=spatial_mesh # , temporal_mesh=temporal_mesh
+  return(list(model_output=inla_model, spatial_mesh=spatial_mesh, temporal_mesh=temporal_mesh
               ))
   
 }

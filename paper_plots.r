@@ -18,7 +18,7 @@ rm(list=ls())
 
 years <- 2000:2018
 
-main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200312_draft_results/04_predictions"
+main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200326_use_gap_ar1/04_predictions"
 indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200311_draft_results/for_cube"
 survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200324"
 data_fname <- "../02_data_covariates.csv"
@@ -139,8 +139,8 @@ data_points[, data_emp_access_dev:= emplogit2(access_count, pixel_pop) - emplogi
 
 data_points <- data_points[, list(year, month, cellnumber, survey, iso3, 
                                   lat, lon, time, 
-                                  national_access, access, access_dev, use, use_gap, percapita_nets, 
-                                  data_percapita_net_dev=percapita_net_dev,
+                                  national_access, access, access_dev, use, use_gap, # percapita_nets, 
+                                  # data_percapita_net_dev=percapita_net_dev,
                                   data_emp_access_dev, data_emp_use_gap)]
 
 
@@ -158,19 +158,13 @@ this_year_raw[, fast_use_gap:=fast_access-fast_use]
 this_year_raw[, slow_access_dev:=plogis(emp_access_dev)]
 this_year_raw[, slow_use_gap:=plogis(emp_use_gap)]
 
-compare_raw <- merge(data_points[year==this_year], this_year_raw[, list(year, month, cellnumber, emp_access_dev, emp_use_gap, percapita_net_dev)],
+compare_raw <- merge(data_points[year==this_year], this_year_raw[, list(year, month, cellnumber, emp_access_dev, emp_use_gap)],
                      all.x=T)
 
-ggplot(compare_raw, aes(x=data_emp_use_gap, y=emp_use_gap)) + 
-  geom_abline() + 
-  geom_point()
+raw_comparison_plot <- ggplot(compare_raw, aes(x=data_emp_use_gap, y=emp_use_gap)) + 
+                        geom_abline() + 
+                        geom_point()
 
-
-this_year_raw <- this_year_raw[, list(year, month, cellnumber, 
-                                                pred_emp_access_dev=emp_access_dev,
-                                                pred_percapita_net_dev=percapita_net_dev,
-                                                pred_emp_use_gap=emp_use_gap
-)]
 
 
 data_predictions <- rbindlist(lapply(data_years, function(this_year){
@@ -181,8 +175,8 @@ data_predictions <- rbindlist(lapply(data_years, function(this_year){
                                                         pred_access=access,
                                                         pred_access_dev=access_dev,
                                                         # pred_national_percapita_nets=nat_percapita_nets,
-                                                        pred_percapita_nets=percapita_nets,
-                                                        pred_percapita_net_dev=percapita_net_dev,
+                                                        # pred_percapita_nets=percapita_nets,
+                                                        # pred_percapita_net_dev=percapita_net_dev,
                                                         pred_use=use,
                                                         pred_use_gap=use_gap
   )]
