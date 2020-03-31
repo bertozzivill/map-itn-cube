@@ -2,6 +2,8 @@
 ## assess_model_fit.r
 ## Amelia Bertozzi-Villa
 ## March 2020
+## 
+## are the models matching the data?
 ##############################################################################################################
 
 library(survey)
@@ -11,105 +13,233 @@ library(gridExtra)
 library(MapSuite)
 library(maptools)
 library(PNWColors)
-library(INLA)
 
 rm(list=ls())
 
 years <- 2000:2018
 
+main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200328_remove_random_effect/04_predictions"
+indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200311_draft_results/for_cube"
+survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200324"
+data_fname <- "../02_data_covariates.csv"
 
+test_survey_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200330_add_summary_metrics"
 
-main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20191102_new_stockflow_data"
-saved_data_fname <- file.path(main_dir, "03_data_covariates.csv")
-load(file.path(main_dir, "04_inla_dev_gap.Rdata"))
+# main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200128_return_dynamic_covs/05_predictions"
+# indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200127_no_par/for_cube"
+# survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200127"
+# data_fname <- "../03_data_covariates.csv"
 
+shape_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/shapefiles/"
 
-# main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200312_draft_results"
-# saved_data_fname <- file.path(main_dir, "02_data_covariates.csv")
-# load(file.path(main_dir, "03_inla_outputs.Rdata"))
+setwd(main_dir)
+out_dir <- main_dir
 
+plot_dir <- file.path(main_dir, "../diagnostic_plots")
+dir.create(plot_dir, showWarnings = F)
 
-response_var <- "use_gap"
-single_model <- inla_outputs[[response_var]]
+gg_color_hue <- function(n) {
+  hues = seq(15, 375, length = n + 1)
+  hcl(h = hues, l = 65, c = 100)[1:n]
+}
 
-func_fname <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/03_inla_functions.r"
-source(func_fname)
+emplogit <- function (y, eps = 1e-3){
+  log((eps + y)/(1 - y + eps))
+} 
 
-# cov_names <- single_model[["model_output"]][["names.fixed"]]
-# orig_data <- as.data.table(single_model[["model_output"]][[".args"]][["data"]][cov_names])
-# orig_response <- as.data.table(single_model[["model_output"]][[".args"]][["data"]][["response"]])
-
-saved_data <- fread(saved_data_fname)
-
-outcome_names <- c("ihs_emp_access_dev", "ihs_emp_use_gap", "ihs_percapita_net_dev")
-
-# calculate use gap,  access deviation, and percapita net deviation for data points
-saved_data[, emp_use_gap:=emplogit2(access_count, pixel_pop) - emplogit2(use_count, pixel_pop)] # emplogit difference of access-use
-saved_data[, emp_access_dev:= emplogit2(access_count, pixel_pop) - emplogit(national_access)]
-
-# convert via ihs
-all_thetas <- list()
-for (outcome_var in outcome_names){
-  pre_transform_var <- gsub("ihs_", "", outcome_var)
-  print(paste("IHS transforming", pre_transform_var))
-  this_theta <- optimise(ihs_loglik, lower=0.001, upper=50, x=saved_data[[pre_transform_var]], maximum=TRUE)$maximum
-  saved_data[, ihs_var:= ihs(get(pre_transform_var), this_theta)] 
-  setnames(saved_data, "ihs_var", outcome_var)
-  all_thetas[[outcome_var]] <- this_theta
+emplogit2<-function(y, n){
+  # approximation of a log odds
+  # y: # of occurrences of interest
+  # n: # of tries
+  top=y+0.5
+  bottom=n-y+0.5
+  return(log(top/bottom))
 }
 
 
-# set up objects necessary for prediction (namely A_matrix)
-prediction_xyz <- ll_to_xyz(saved_data[, list(row_id, latitude=lat, longitude=lon)])
-spatial_mesh <-  copy(inla_outputs[["access_dev"]][["spatial_mesh"]])
-A_matrix <-inla.spde.make.A(spatial_mesh, 
-                            loc=as.matrix(prediction_xyz[, list(x,y,z)]), 
-                            # group=rep(min(this_year, max(temporal_mesh$interval)), length(prediction_indices)),
-                            # group.mesh=temporal_mesh
-)
+######
+## National Time Series
+###### 
 
 
+# load survey-level  values to plot against model estimates
+survey_data <- fread(file.path(survey_indir, "itn_aggregated_survey_data.csv"))
+hh_survey_data <- fread(file.path(survey_indir, "itn_hh_survey_data.csv"))
+survey_data[, included_in_cube:=ifelse( surveyid %in% unique(hh_survey_data$SurveyId), "Included in Cube", "Not Included in Cube")]
 
-# guts of "predict" function below: 
-# predict_inla <- function(model, A_matrix, covs, prediction_cells){
+# load stock and flow results
+# compare INLA-estimated national access and nets percapita to stock and flow outputs
+stock_and_flow <- fread(file.path(indicators_indir, "stock_and_flow_access_npc.csv"))
+stock_and_flow <- melt(stock_and_flow, id.vars = c("iso3", "year", "month", "time"), variable.name="type")
+stock_and_flow[, type:=gsub("nat_", "", type)]
+stock_and_flow[, model:="Stock and Flow"]
+time_map <- unique(stock_and_flow[, list(year, month, time)])
 
-model <- single_model
-covs <- copy(saved_data)
-prediction_cells <- saved_data[, list(row_id=cellnumber,iso3)]
 
-  fixed_effects <- model[["model_output"]]$summary.fixed
-  random_effects <- model[["model_output"]]$summary.random$field
-  predicted_random <- drop(A_matrix %*% random_effects$mean)
+# load time series from INLA
+national_estimates <- fread(file.path(main_dir, "national_time_series.csv"))
+national_estimates <- national_estimates[iso3 %in% unique(stock_and_flow$iso3)]
+national_estimates <- merge(national_estimates, time_map, all.x=T)
+national_estimates[, model:="INLA"]
+
+
+# load alternate survey source
+test_survey_data <- fread(file.path(test_survey_indir, "01_survey_summary.csv"))
+
+all_access_npc_estimates <- rbind(stock_and_flow, national_estimates[type %in% unique(stock_and_flow$type)])
+
+
+ggplot(all_access_npc_estimates[type=="access"], aes(x=time, y=value)) + 
+  geom_line(aes(color=model)) + 
+  geom_point(data=test_survey_data, aes(x=date, y=access_mean)) + 
+  facet_wrap(~iso3, scales="free_y") + 
+  theme_minimal() +
+  theme(legend.title=element_blank()) + 
+  labs(title="Version 1 Access: Stock and Flow vs INLA",
+       x="Time",
+       y="Net Use")
+
+
+if ("use_mean" %in% names(survey_data)){
+  use_time_series <- ggplot(national_estimates[type=="use"], aes(x=time, y=value))+ 
+    geom_line(color="#00BFC4") + 
+    geom_pointrange(data=test_survey_data, aes(x=date, y=use_mean,
+                                                                                ymin=use_mean-1.96*use_se,
+                                                                                ymax=use_mean+1.96*use_se),
+                    size=0.5) + 
+    facet_wrap(~iso3, scales="free_y") + 
+    theme_minimal() +
+    theme(legend.title=element_blank()) + 
+    labs(title="Version 1 Use From INLA Model",
+         x="Time",
+         y="Net Use")
+}
+
+if ("use_gap_mean" %in% names(survey_data)){
+  ggplot(national_estimates[type=="access_dev"], aes(x=time, y=value))+ 
+    geom_line(size=1, color="#00BFC4") + 
+    # geom_pointrange(data=survey_data[included_in_cube=="Included in Cube"], aes(x=date, y=use_gap_mean,
+    #                                                                             ymin=use_gap_mean-1.96*use_se,
+    #                                                                             ymax=use_gap_mean+1.96*use_se)) + 
+    geom_point(data=test_survey_data, aes(x=date, y=access_deviation_mean)) + 
+    facet_wrap(~iso3) + 
+    theme_minimal() +
+    theme(legend.title=element_blank()) + 
+    labs(title="Use Gap From INLA Model",
+         x="Time",
+         y="Net Use Gap")
   
-  all_predictions <- lapply(1:12, function(this_month){
-    # print(paste("predicting for month", this_month))
-    these_covs <- covs[month==this_month]
-    these_covs[, "Intercept":=1]
-    
-    predictions <- data.table(month=this_month,
-                              cellnumber=these_covs$cellnumber)
-    
-    predictions[, fixed:= as.matrix(these_covs[, rownames(fixed_effects), with=F]) %*% fixed_effects$mean]
-    predictions[, random:= predicted_random]
-    predictions[, full:= fixed + random]
-    predictions[, final_prediction := inv_ihs(full, theta=model[["theta"]])] # TODO: confirm the inverse ihs function is correct
-    
-    predictions <- merge(predictions, prediction_cells[, list(cellnumber=row_id, iso3)], by="cellnumber", all=T)
-    
-    return(predictions)
-  })
+  # pdf(file.path(plot_dir, "use_gap_timeseries.pdf"), width=10, height=7)
+  # print(use_gap_time_series)
+  # graphics.off()
+}
+
+
+
+
+
+######
+## Stock and Flow Results
+######
+
+
+
+
+######
+## Maps
+######
+
+
+data_points <- fread(data_fname)
+data_points[, access:= access_count/pixel_pop]
+data_points[, access_dev:= access_count/pixel_pop - national_access]
+data_points[, use:= use_count/pixel_pop]
+data_points[, use_gap:=(access_count-use_count)/pixel_pop]
+
+data_points[, data_emp_use_gap:=emplogit2(access_count, pixel_pop) - emplogit2(use_count, pixel_pop)] # emplogit difference of access-use
+data_points[, data_emp_access_dev:= emplogit2(access_count, pixel_pop) - emplogit(national_access)]
+
+data_points <- data_points[, list(year, month, cellnumber, survey, iso3, 
+                                  lat, lon, time, 
+                                  national_access, access, access_dev, use, use_gap, # percapita_nets, 
+                                  # data_percapita_net_dev=percapita_net_dev,
+                                  data_emp_access_dev, data_emp_use_gap)]
+
+
+data_years <- sort(unique(data_points$year))
+
+data_predictions <- rbindlist(lapply(data_years, function(this_year){
+  print(this_year)
+  this_year_predictions <- fread(file.path(main_dir, paste0("all_predictions_wide_", this_year, ".csv")))
+  this_year_predictions <- this_year_predictions[, list(year, month, cellnumber, 
+                                                        pred_national_access=nat_access,
+                                                        pred_access=access,
+                                                        pred_access_dev=access_dev,
+                                                        # pred_national_percapita_nets=nat_percapita_nets,
+                                                        # pred_percapita_nets=percapita_nets,
+                                                        # pred_percapita_net_dev=percapita_net_dev,
+                                                        pred_use=use,
+                                                        pred_use_gap=use_gap
+  )]
+  to_keep <- merge(data_points[year==this_year], this_year_predictions, all.x=T)
+  return(to_keep)
+}))
+
+data_predictions <- data_predictions[!is.na(pred_use)]
+
+deviations <- melt.data.table(data_predictions, id.vars=c("iso3", "survey", "year", "month", "time", "cellnumber", "lat", "lon"))
+deviations[, label := ifelse(variable %like% "pred", "predicted", "observed")]
+deviations[, variable := gsub("pred_", "", variable)]
+deviations <- dcast.data.table(deviations, iso3 + survey + year + month + time + variable +  cellnumber ~  label)
+# deviations[, var_label:=ifelse(variable=="access_dev", "Access Deviation", "Use Gap")]
+
+# add lat longs
+raster_template <- raster(file.path(main_dir, "ITN_2017_use_gap.tif"))
+latlons <- data.table(xyFromCell(raster_template, deviations$cellnumber))
+setnames(latlons, c("x", "y"), c("lon", "lat"))
+deviations <- cbind(deviations, latlons)
+ #write.csv(deviations, file= "~/Desktop/predicted_observed.csv")
+
+
+pdf(file.path(plot_dir, "prediction_error.pdf"), width=7, height=9)
+
+overall_error <- ggplot(deviations[variable %in% c("access_dev", "use_gap")], aes(x=observed, y=predicted)) +
+  geom_abline() + 
+  geom_point(alpha=0.5) + 
+  facet_grid(variable ~ .) +
+  theme_bw() + 
+  theme(legend.position = "none") + 
+  labs(title= "All Data: Observed vs Predicted Values",
+       x="Data",
+       y="Prediction")
+
+print(overall_error)
+
+for (this_iso in sort(unique(deviations$iso3))){
+  these_surveys <- unique(survey_data[iso3==this_iso & included_in_cube=="Included in Cube"]$surveyid)
   
-  all_predictions <- rbindlist(all_predictions)
+  if (length(these_surveys)==0){
+    next
+  }
   
-  # return(all_predictions)
-# }
+  print(this_iso)
+  error_plot <- ggplot(deviations[iso3==this_iso & survey %in% these_surveys & variable %in% c("access_dev", "use_gap")], aes(x=observed, y=predicted)) +
+    geom_abline() + 
+    geom_point(aes(color=survey)) + 
+    facet_grid(survey~variable) +
+    theme_bw() + 
+    theme(legend.position = "none") + 
+    labs(title=paste0(this_iso, ": Observed vs Predicted Values"),
+         x="Data",
+         y="Prediction")
+  print(error_plot)
+}
+
+graphics.off()
 
 
-library(inlabru)
-predict()  
 
 
 
 
-these_predictions <- predict_inla(model=single_model, A_matrix, saved_data, prediction_cells=saved_data[, list(row_id=cellnumber, iso3)])
 
