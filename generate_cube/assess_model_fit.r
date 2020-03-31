@@ -82,32 +82,38 @@ national_estimates <- national_estimates[iso3 %in% unique(stock_and_flow$iso3)]
 national_estimates <- merge(national_estimates, time_map, all.x=T)
 national_estimates[, model:="INLA"]
 
-version_1_estimates <- copy(national_estimates)
-version_1_estimates[, version:="Version 1"]
-
-
-version_2_estimates <- copy(national_estimates)
-version_2_estimates[, version:="Version 2"]
-
-both_versions <- rbind(version_1_estimates, version_2_estimates)
-
-ggplot(both_versions[type=="access_dev"], aes(x=time, y=value))+ 
-  geom_line(aes(color=version)) + 
-  # geom_pointrange(data=survey_data[included_in_cube=="Included in Cube"], aes(x=date, y=use_gap_mean,
-  #                                                                             ymin=use_gap_mean-1.96*use_se,
-  #                                                                             ymax=use_gap_mean+1.96*use_se)) + 
-  geom_point(data=test_survey_data, aes(x=date, y=access_deviation_mean)) + 
-  facet_wrap(~iso3) + 
-  theme_minimal() +
-  theme(legend.title=element_blank()) + 
-  labs(title="Access Deviation: Version Comparison",
-       x="Time",
-       y="Access Deviation")
-
-
-
 # load alternate survey source
 test_survey_data <- fread(file.path(test_survey_indir, "01_survey_summary.csv"))
+
+
+## for pete: compare time series of different versions
+
+version_names <- c(z_drive="20200331_reextract_20200107_fix_cluster_agg",
+                   version_1="20200330_add_ar1_all_metrics",
+                   version_2="20200328_remove_random_effect")
+
+all_versions <- rbindlist(lapply(names(version_names), function(this_name){
+  estimates <- fread(file.path("/Volumes/GoogleDrive/My Drive/itn_cube/results/", version_names[[this_name]],
+                              "04_predictions", "national_time_series.csv"))
+  estimates <- estimates[iso3 %in% unique(stock_and_flow$iso3)]
+  estimates <- merge(estimates, time_map, all.x=T)
+  estimates[, version:=this_name]
+}))
+
+
+ggplot(all_versions[type=="use"], aes(x=time, y=value))+ 
+  geom_line(aes(color=version)) + 
+  geom_point(data=test_survey_data, aes(x=date, y=use_mean)) + 
+  facet_wrap(~iso3) + 
+  theme_minimal() +
+  theme(legend.title=element_blank(),
+        axis.text.x = element_text(angle=45, hjust=1)) + 
+  labs(title="INLA Use: Version Comparison",
+       x="Time",
+       y="Use")
+
+
+
 
 all_access_npc_estimates <- rbind(stock_and_flow, national_estimates[type %in% unique(stock_and_flow$type)])
 
