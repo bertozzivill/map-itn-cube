@@ -14,7 +14,7 @@ library(MapSuite)
 library(maptools)
 library(PNWColors)
 
-rm(list=ls())
+# rm(list=ls())
 
 years <- 2000:2018
 
@@ -82,6 +82,29 @@ national_estimates <- national_estimates[iso3 %in% unique(stock_and_flow$iso3)]
 national_estimates <- merge(national_estimates, time_map, all.x=T)
 national_estimates[, model:="INLA"]
 
+version_1_estimates <- copy(national_estimates)
+version_1_estimates[, version:="Version 1"]
+
+
+version_2_estimates <- copy(national_estimates)
+version_2_estimates[, version:="Version 2"]
+
+both_versions <- rbind(version_1_estimates, version_2_estimates)
+
+ggplot(both_versions[type=="access_dev"], aes(x=time, y=value))+ 
+  geom_line(aes(color=version)) + 
+  # geom_pointrange(data=survey_data[included_in_cube=="Included in Cube"], aes(x=date, y=use_gap_mean,
+  #                                                                             ymin=use_gap_mean-1.96*use_se,
+  #                                                                             ymax=use_gap_mean+1.96*use_se)) + 
+  geom_point(data=test_survey_data, aes(x=date, y=access_deviation_mean)) + 
+  facet_wrap(~iso3) + 
+  theme_minimal() +
+  theme(legend.title=element_blank()) + 
+  labs(title="Access Deviation: Version Comparison",
+       x="Time",
+       y="Access Deviation")
+
+
 
 # load alternate survey source
 test_survey_data <- fread(file.path(test_survey_indir, "01_survey_summary.csv"))
@@ -89,15 +112,15 @@ test_survey_data <- fread(file.path(test_survey_indir, "01_survey_summary.csv"))
 all_access_npc_estimates <- rbind(stock_and_flow, national_estimates[type %in% unique(stock_and_flow$type)])
 
 
-ggplot(all_access_npc_estimates[type=="access"], aes(x=time, y=value)) + 
-  geom_line(aes(color=model)) + 
-  geom_point(data=test_survey_data, aes(x=date, y=access_mean)) + 
-  facet_wrap(~iso3, scales="free_y") + 
-  theme_minimal() +
-  theme(legend.title=element_blank()) + 
-  labs(title="Version 1 Access: Stock and Flow vs INLA",
-       x="Time",
-       y="Net Use")
+access_plot <- ggplot(all_access_npc_estimates[type=="access"], aes(x=time, y=value)) + 
+                geom_line(aes(color=model)) + 
+                geom_point(data=test_survey_data, aes(x=date, y=access_mean)) + 
+                facet_wrap(~iso3, scales="free_y") + 
+                theme_minimal() +
+                theme(legend.title=element_blank()) + 
+                labs(title="Version 1 Access: Stock and Flow vs INLA",
+                     x="Time",
+                     y="Net Use")
 
 
 if ("use_mean" %in% names(survey_data)){
@@ -114,6 +137,7 @@ if ("use_mean" %in% names(survey_data)){
          x="Time",
          y="Net Use")
 }
+
 
 if ("use_gap_mean" %in% names(survey_data)){
   ggplot(national_estimates[type=="access_dev"], aes(x=time, y=value))+ 

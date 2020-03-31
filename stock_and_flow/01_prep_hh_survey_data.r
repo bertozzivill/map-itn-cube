@@ -441,6 +441,7 @@ survey_summary <- lapply(unique(all_data$SurveyId), function(this_svy){
   svy_means <- lapply(meanvals, function(this_val){
     uniques <- unique(this_svy_data[[this_val]])
     if (length(uniques)==1 & is.na(uniques[1])){
+      warning("single null value found")
       mean_df<- as.data.frame(svymean(as.formula(paste("~", this_val)), svy_strat))
     }else{
       mean_df<- as.data.frame(svymean(as.formula(paste("~", this_val)), svy_strat, na.rm=T))

@@ -53,6 +53,17 @@ prep_data <- function(main_indir, survey_indir, indicators_indir, main_outdir, f
   # find access (# with a net available) and use (# sleeping under net) per household 
   HH[, n.with.access.to.ITN:=pmin(n.ITN.per.hh*2, n.individuals.that.slept.in.surveyed.hhs)]
   
+  # In Senegal's 2008 MIS there are a few clusters in which some (not all) households have a sample weight of zero. I suppose we should drop these?
+  strange_clust <- unique(HH[, list(Survey.hh, Cluster.hh, sample.w)])
+  strange_clust[, count:=.N, by=list(Survey.hh, Cluster.hh)]
+  strange_clust <- strange_clust[count>1]
+  if (length(unique(strange_clust$Survey.hh))>1){
+    stop("Additional surveys with strange sample weight behavior found besides SN2008MIS! Check your data.")
+  }
+  sen_to_drop <- unique(strange_clust[count>1]$Cluster.hh)
+  HH <- HH[!(Survey.hh=="SN2008MIS" & Cluster.hh %in% sen_to_drop & sample.w==0)]
+  rm(strange_clust, sen_to_drop)
+  
   # Main loop: calculating access/use counts for each household cluster  ------------------------------------------------------------
   ncores <- detectCores()
   print(paste("--> Machine has", ncores, "cores available"))
@@ -118,7 +129,7 @@ prep_data <- function(main_indir, survey_indir, indicators_indir, main_outdir, f
                                                   net_count=sum(n.ITN.per.hh), # formerly T
                                                   national_access=weighted.mean(stockflow_access, n.individuals.that.slept.in.surveyed.hhs) # formerly Amean
     ),
-    by=list(iso3, Cluster.hh, time, year, month)]
+    by=list(iso3, Cluster.hh, time, year, month, sample.w)]
   
     setnames(summary_by_cluster, "Cluster.hh", "cluster")
     
@@ -146,7 +157,7 @@ prep_data <- function(main_indir, survey_indir, indicators_indir, main_outdir, f
                                                     national_access=weighted.mean(national_access, cluster_pop),
                                                     count=mean(count)
       ),
-      by=list(iso3, cluster)]
+      by=list(iso3, cluster, sample.w)]
       to_aggregate[, interval:=findInterval(time, time_map$time)]
       setnames(to_aggregate, "time", "old_time")
       to_aggregate <- merge(to_aggregate, time_map, by="interval", all.x=T)
@@ -159,8 +170,58 @@ prep_data <- function(main_indir, survey_indir, indicators_indir, main_outdir, f
     return(summary_by_cluster)
   }
   
-  # renaming
+  # renaming for pixel-level aggregation
   final_data<-copy(cluster_stats)
+  
+  # with the cluster-level data: find survey-level metrics of all indicators for use in plotting
+  cluster_stats[, percapita_nets:=net_count/cluster_pop]
+  cluster_stats[, percapita_net_deviation:= percapita_nets-national_percapita_nets]
+  cluster_stats[, access:= access_count/cluster_pop]
+  cluster_stats[, access_deviation:=access - national_access]
+  cluster_stats[, use:=use_count/cluster_pop]
+  cluster_stats[, use_gap:=(access_count-use_count)/cluster_pop]
+  
+  print("Summarizing surveys")
+  survey_summary <- lapply(unique(cluster_stats$survey), function(this_svy){
+    
+    print(this_svy)
+    this_svy_data <- cluster_stats[survey==this_svy]
+    
+    # set up survey design
+    svy_strat<-svydesign(ids=~cluster, data=this_svy_data, weight=~sample.w) 
+    
+    meanvals <- c("percapita_nets", "percapita_net_deviation", "access", "access_deviation", "use", "use_gap")
+    svy_means <- lapply(meanvals, function(this_val){
+      uniques <- unique(this_svy_data[[this_val]])
+      if (length(uniques)==1 & is.na(uniques[1])){
+        warning("single null value found")
+        mean_df<- as.data.frame(svymean(as.formula(paste("~", this_val)), svy_strat))
+      }else{
+        mean_df<- as.data.frame(svymean(as.formula(paste("~", this_val)), svy_strat, na.rm=T))
+      }
+      names(mean_df) <- c("mean", "se")
+      return(mean_df)
+    })
+    svy_summary <- do.call("rbind", svy_means)
+    
+    svy_summary$variable <- rownames(svy_summary)
+    
+    svy_summary <- data.table(svy_summary,
+                              surveyid = this_svy,
+                              iso3=unique(this_svy_data$iso3) ,
+                              date=svymean(~time, svy_strat)[[1]],
+                              min_date=min(this_svy_data$time),
+                              max_date=max(this_svy_data$time)
+    )
+    svy_summary <- melt(svy_summary, measure.vars = c("mean", "se"), variable.name="metric")
+    svy_summary[, variable:=paste(variable, metric, sep="_")]
+    svy_summary <- dcast(svy_summary, surveyid + iso3 + date +  min_date + max_date  ~ variable, value.var="value")
+    
+    return(svy_summary)
+  })
+  survey_summary <- data.table(rbindlist(survey_summary))
+  write.csv(survey_summary, file=file.path(main_outdir, "01_survey_summary.csv"), row.names=F)
+  
   
   # Cleanup: remove flawed points, print summary messages, aggregate to pixel level, save ------------------------------------------------------------
   
@@ -252,13 +313,13 @@ if (Sys.getenv("run_individually")!="" | exists("run_locally")){
     lapply(package_list, library, character.only=T)
   }
   
-  package_load(c("zoo","raster","VGAM", "doParallel", "data.table", "lubridate"))
+  package_load(c("zoo","raster","VGAM", "doParallel", "data.table", "lubridate", "survey"))
   
   if(Sys.getenv("main_indir")=="") {
     main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
-    survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200206"
-    indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200119_add_access_calc/for_cube"
-    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200120_test_access_calc/"
+    survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200311"
+    indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200311_draft_results/for_cube"
+    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200330_add_summary_metrics/"
     func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
   } else {
     main_indir <- Sys.getenv("main_indir")
