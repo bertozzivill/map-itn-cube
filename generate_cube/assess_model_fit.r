@@ -88,29 +88,27 @@ test_survey_data <- fread(file.path(test_survey_indir, "01_survey_summary.csv"))
 
 ## for pete: compare time series of different versions
 
-# version_names <- c(z_drive="20200331_reextract_20200107_fix_cluster_agg",
-#                    version_1="20200330_add_ar1_all_metrics",
-#                    version_2="20200328_remove_random_effect")
-# 
-# all_versions <- rbindlist(lapply(names(version_names), function(this_name){
-#   estimates <- fread(file.path("/Volumes/GoogleDrive/My Drive/itn_cube/results/", version_names[[this_name]],
-#                               "04_predictions", "national_time_series.csv"))
-#   estimates <- estimates[iso3 %in% unique(stock_and_flow$iso3)]
-#   estimates <- merge(estimates, time_map, all.x=T)
-#   estimates[, version:=this_name]
-# }))
-# 
-# 
-# ggplot(all_versions[type=="access_dev"], aes(x=time, y=value))+ 
-#   geom_line(aes(color=version)) + 
-#   geom_point(data=test_survey_data, aes(x=date, y=access_deviation_mean)) + 
-#   facet_wrap(~iso3) + 
-#   theme_minimal() +
-#   theme(legend.title=element_blank(),
-#         axis.text.x = element_text(angle=45, hjust=1)) + 
-#   labs(title="INLA Use: Version Comparison",
-#        x="Time",
-#        y="Use")
+version_names <- c(z_drive="amelia_itn_itn_cube_results_20200331_reextract_20200107_fix_cluster_agg_04_predictions_national_time_series.csv",
+                   version_1="amelia_itn_itn_cube_results_20200330_add_ar1_all_metrics_04_predictions_national_time_series.csv",
+                   version_2="amelia_itn_itn_cube_results_20200328_remove_random_effect_04_predictions_national_time_series.csv")
+
+all_versions <- rbindlist(lapply(names(version_names), function(this_name){
+  estimates <- fread(file.path("~/Downloads", version_names[[this_name]]))
+  estimates <- estimates[iso3 %in% unique(stock_and_flow$iso3)]
+  estimates <- merge(estimates, time_map, all.x=T)
+  estimates[, version:=this_name]
+}))
+
+ggplot(all_versions[type=="access_dev"], aes(x=time, y=value))+
+  geom_line(aes(color=version)) +
+  geom_point(data=test_survey_data, aes(x=date, y=access_deviation_mean)) +
+  facet_wrap(~iso3) +
+  theme_minimal() +
+  theme(legend.title=element_blank(),
+        axis.text.x = element_text(angle=45, hjust=1)) # +
+  # labs(title="INLA Use: Version Comparison",
+  #      x="Time",
+  #      y="Use")
 
 
 

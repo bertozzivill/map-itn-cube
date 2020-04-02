@@ -172,7 +172,6 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, ma
     print("finding monthly rasters and national time series")
     all_monthly_results <- lapply(monthly_metrics, function(this_metric){
       these_monthly_results <- lapply(1:12, function(this_month){
-        print(this_month)
         this_raster <- copy(national_raster)
         this_data <- transformed_predictions[month==this_month]
         this_data <- this_data[order(cellnumber)]
@@ -183,7 +182,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, ma
         
         # aggregate nationally
         pop_raster <- copy(national_raster)
-        pop_data <- annual_covs[year==2018, list(year, cellnumber, Population)]
+        pop_data <- annual_covs[year==this_year, list(year, cellnumber, Population)]
         pop_data <- pop_data[order(cellnumber)]
         pop_raster[pop_data$cellnumber] <- pop_data$Population
         pop_raster[!is.na(national_raster) & is.na(pop_raster)] <- 0
@@ -216,7 +215,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, ma
 
 if (Sys.getenv("run_individually")!=""){
   
-  # dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-highmem-64 --disk-size 400 --boot-disk-size 50 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20191214 indicators_indir=gs://map_users/amelia/itn/stock_and_flow/results/20200311_draft_results/for_cube main_indir=gs://map_users/amelia/itn/itn_cube/results/20200326_use_gap_ar1/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/04_predict_rasters.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20200326_use_gap_ar1/ --command 'Rscript ${CODE}'
+  # dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-highmem-64 --disk-size 400 --boot-disk-size 50 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20191214 indicators_indir=gs://map_users/amelia/itn/stock_and_flow/results/20200311_draft_results/for_cube main_indir=gs://map_users/amelia/itn/itn_cube/results/20200330_add_ar1_all_metrics/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/04_predict_rasters.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20200330_add_ar1_all_metrics/ --command 'Rscript ${CODE}'
 
   package_load <- function(package_list){
     # package installation/loading

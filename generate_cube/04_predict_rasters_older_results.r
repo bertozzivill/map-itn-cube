@@ -174,7 +174,6 @@ predict_rasters <- function(input_dir, main_indir, cov_dir, main_outdir, func_di
     print("finding monthly rasters and national time series")
     all_monthly_results <- lapply(monthly_metrics, function(this_metric){
       these_monthly_results <- lapply(1:12, function(this_month){
-        print(this_month)
         this_raster <- copy(national_raster)
         this_data <- transformed_predictions[month==this_month]
         this_data <- this_data[order(cellnumber)]
@@ -185,7 +184,7 @@ predict_rasters <- function(input_dir, main_indir, cov_dir, main_outdir, func_di
         
         # aggregate nationally
         pop_raster <- copy(national_raster)
-        pop_data <- annual_covs[year==2018, list(year, cellnumber, Population)]
+        pop_data <- annual_covs[year==this_year, list(year, cellnumber, Population)]
         pop_data <- pop_data[order(cellnumber)]
         pop_raster[pop_data$cellnumber] <- pop_data$Population
         pop_raster[!is.na(national_raster) & is.na(pop_raster)] <- 0
