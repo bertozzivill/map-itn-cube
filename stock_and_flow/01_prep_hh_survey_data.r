@@ -375,6 +375,7 @@ summary_table <- lapply(unique(all_data$SurveyId), function(survey_name){
                         if (length(survey_years)>2){
                           print("UNEXPECTED SURVEY YEAR COUNT")
                         }
+                        main_year <- survey_years[sapply(survey_years, grepl, x=survey_name)]
                         survey_label <- ifelse(length(survey_years)==1, as.character(survey_years), paste0(min(survey_years), "-", max(survey_years)))
                         
                         survey_source <- ifelse(survey_name %like% "DHS", "DHS",
@@ -389,6 +390,7 @@ summary_table <- lapply(unique(all_data$SurveyId), function(survey_name){
                                              country=unique(this_survey$CountryName),
                                              iso3=unique(this_survey$iso3),
                                              svy_years=survey_label,
+                                             main_year=main_year,
                                              source=survey_source,
                                              cluster_count=cluster_count,
                                              individuals=sum(this_survey$n_defacto_pop),

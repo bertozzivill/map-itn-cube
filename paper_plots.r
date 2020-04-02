@@ -30,7 +30,7 @@ data_fname <- "../02_data_covariates.csv"
 shape_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/shapefiles/"
 
 setwd(cube_indir)
-out_dir <- file.path(main_dir, "../final_plots")
+out_dir <- file.path(cube_indir, "../final_plots")
 dir.create(out_dir, showWarnings = F)
 
 
@@ -60,6 +60,26 @@ emplogit2<-function(y, n){
 ################## ----------------------------------------------------------------------------------------------------------------------
 ## Stock and Flow   ----------------------------------------------------------------------------------------------------------------------
 ################# ----------------------------------------------------------------------------------------------------------------------
+
+## Data: Survey count and type by country
+survey_summary <- fread(file.path(survey_indir, "summary_tables", "summary_table_intermediate.csv"))
+survey_summary[, short_source:=ifelse(source %like% "MICS", "MICS",
+                                      ifelse(source %like% "OTHER", "Other",
+                                             source))]
+
+
+survey_panel <- ggplot(survey_summary, aes(x=main_year, y=country)) + 
+                        geom_point(aes(shape=included_in_cube, color=short_source), size=3) +
+                        scale_x_continuous(labels=2000:2018, breaks = 2000:2018) + 
+                        theme_bw() + 
+                        labs(y="", 
+                             x="",
+                             title="Surveys by Country and Type")
+
+
+## Plot NMCP data with missings
+
+
 
 stockflow_model_name <- gsub(".*/[0-9]{8}_", "", stockflow_indir)
 
@@ -114,7 +134,7 @@ npc_time_series_plot <- ggplot(accesss_npc, aes(x=time, y=nat_percapita_nets)) +
 ## ITN Cube  ----------------------------------------------------------------------------------------------------------------------
 ############ ----------------------------------------------------------------------------------------------------------------------
 
-
+## dotplot of all 
 
 
 

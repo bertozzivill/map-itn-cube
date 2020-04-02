@@ -18,7 +18,7 @@ library(PNWColors)
 
 years <- 2000:2018
 
-main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200328_remove_random_effect/04_predictions"
+main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200330_test_model_replicability/04_predictions"
 indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200311_draft_results/for_cube"
 survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200324"
 data_fname <- "../02_data_covariates.csv"
@@ -88,29 +88,29 @@ test_survey_data <- fread(file.path(test_survey_indir, "01_survey_summary.csv"))
 
 ## for pete: compare time series of different versions
 
-version_names <- c(z_drive="20200331_reextract_20200107_fix_cluster_agg",
-                   version_1="20200330_add_ar1_all_metrics",
-                   version_2="20200328_remove_random_effect")
-
-all_versions <- rbindlist(lapply(names(version_names), function(this_name){
-  estimates <- fread(file.path("/Volumes/GoogleDrive/My Drive/itn_cube/results/", version_names[[this_name]],
-                              "04_predictions", "national_time_series.csv"))
-  estimates <- estimates[iso3 %in% unique(stock_and_flow$iso3)]
-  estimates <- merge(estimates, time_map, all.x=T)
-  estimates[, version:=this_name]
-}))
-
-
-ggplot(all_versions[type=="use"], aes(x=time, y=value))+ 
-  geom_line(aes(color=version)) + 
-  geom_point(data=test_survey_data, aes(x=date, y=use_mean)) + 
-  facet_wrap(~iso3) + 
-  theme_minimal() +
-  theme(legend.title=element_blank(),
-        axis.text.x = element_text(angle=45, hjust=1)) + 
-  labs(title="INLA Use: Version Comparison",
-       x="Time",
-       y="Use")
+# version_names <- c(z_drive="20200331_reextract_20200107_fix_cluster_agg",
+#                    version_1="20200330_add_ar1_all_metrics",
+#                    version_2="20200328_remove_random_effect")
+# 
+# all_versions <- rbindlist(lapply(names(version_names), function(this_name){
+#   estimates <- fread(file.path("/Volumes/GoogleDrive/My Drive/itn_cube/results/", version_names[[this_name]],
+#                               "04_predictions", "national_time_series.csv"))
+#   estimates <- estimates[iso3 %in% unique(stock_and_flow$iso3)]
+#   estimates <- merge(estimates, time_map, all.x=T)
+#   estimates[, version:=this_name]
+# }))
+# 
+# 
+# ggplot(all_versions[type=="access_dev"], aes(x=time, y=value))+ 
+#   geom_line(aes(color=version)) + 
+#   geom_point(data=test_survey_data, aes(x=date, y=access_deviation_mean)) + 
+#   facet_wrap(~iso3) + 
+#   theme_minimal() +
+#   theme(legend.title=element_blank(),
+#         axis.text.x = element_text(angle=45, hjust=1)) + 
+#   labs(title="INLA Use: Version Comparison",
+#        x="Time",
+#        y="Use")
 
 
 
@@ -146,18 +146,18 @@ if ("use_mean" %in% names(survey_data)){
 
 
 if ("use_gap_mean" %in% names(survey_data)){
-  ggplot(national_estimates[type=="access_dev"], aes(x=time, y=value))+ 
-    geom_line(size=1, color="#00BFC4") + 
-    # geom_pointrange(data=survey_data[included_in_cube=="Included in Cube"], aes(x=date, y=use_gap_mean,
-    #                                                                             ymin=use_gap_mean-1.96*use_se,
-    #                                                                             ymax=use_gap_mean+1.96*use_se)) + 
-    geom_point(data=test_survey_data, aes(x=date, y=access_deviation_mean)) + 
-    facet_wrap(~iso3) + 
-    theme_minimal() +
-    theme(legend.title=element_blank()) + 
-    labs(title="Use Gap From INLA Model",
-         x="Time",
-         y="Net Use Gap")
+  use_gap_timeseries <- ggplot(national_estimates[type=="access_dev"], aes(x=time, y=value))+ 
+                              geom_line(size=1, color="#00BFC4") + 
+                              # geom_pointrange(data=survey_data[included_in_cube=="Included in Cube"], aes(x=date, y=use_gap_mean,
+                              #                                                                             ymin=use_gap_mean-1.96*use_se,
+                              #                                                                             ymax=use_gap_mean+1.96*use_se)) + 
+                              geom_point(data=test_survey_data, aes(x=date, y=access_deviation_mean)) + 
+                              facet_wrap(~iso3) + 
+                              theme_minimal() +
+                              theme(legend.title=element_blank()) + 
+                              labs(title="Use Gap From INLA Model",
+                                   x="Time",
+                                   y="Net Use Gap")
   
   # pdf(file.path(plot_dir, "use_gap_timeseries.pdf"), width=10, height=7)
   # print(use_gap_time_series)

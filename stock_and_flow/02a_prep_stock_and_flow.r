@@ -119,13 +119,16 @@ summary_table <- fread(file.path(main_dir, "summary_tables", "summary_table_raw.
 summary_to_append <- all_to_append[, list(survey_id=surveyid,
                                           country,
                                           iso3,
-                                          svy_years="TODO",
+                                          svy_years=gsub(".* ([0-9]+)", "\\1", surveyid),
+                                          main_year=as.integer(gsub(".* ([0-9]+)", "\\1", surveyid)),
                                           source=c(rep("MICS3", nrow(mics3_data)), report_only_surveydata$Type.of.survey),
                                           cluster_count=0,
                                           individuals=NA,
                                           included_in_cube="No"
                                           )]
 
+summary_to_append[nchar(svy_years)>4, main_year:=as.integer(substr(svy_years,1,4))+1]
+summary_to_append[nchar(svy_years)>4, svy_years:=paste0(substr(svy_years,1,4), "-20", substr(svy_years,5,6))]
 
 summary_table <- rbind(summary_table, summary_to_append)
 summary_table[, demographics:=""]
