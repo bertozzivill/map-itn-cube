@@ -18,7 +18,7 @@ library(PNWColors)
 
 years <- 2000:2018
 
-main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200330_test_model_replicability/04_predictions"
+main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200331_reextract_20200107_fix_cluster_agg/04_predictions"
 indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200311_draft_results/for_cube"
 survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200324"
 data_fname <- "../02_data_covariates.csv"
@@ -92,6 +92,7 @@ version_names <- c(z_drive="amelia_itn_itn_cube_results_20200331_reextract_20200
                    version_1="amelia_itn_itn_cube_results_20200330_add_ar1_all_metrics_04_predictions_national_time_series.csv",
                    version_2="amelia_itn_itn_cube_results_20200328_remove_random_effect_04_predictions_national_time_series.csv")
 
+
 all_versions <- rbindlist(lapply(names(version_names), function(this_name){
   estimates <- fread(file.path("~/Downloads", version_names[[this_name]]))
   estimates <- estimates[iso3 %in% unique(stock_and_flow$iso3)]
@@ -99,9 +100,12 @@ all_versions <- rbindlist(lapply(names(version_names), function(this_name){
   estimates[, version:=this_name]
 }))
 
-ggplot(all_versions[type=="access_dev"], aes(x=time, y=value))+
+all_versions_annual <- all_versions[, list(value=mean(value)), 
+                                    by=list(version,iso3, type, year)]
+
+ggplot(all_versions_annual[type=="access"], aes(x=year, y=value))+
   geom_line(aes(color=version)) +
-  geom_point(data=test_survey_data, aes(x=date, y=access_deviation_mean)) +
+  geom_point(data=test_survey_data, aes(x=date, y=access_mean)) +
   facet_wrap(~iso3) +
   theme_minimal() +
   theme(legend.title=element_blank(),

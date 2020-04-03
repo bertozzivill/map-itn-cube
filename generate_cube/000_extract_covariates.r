@@ -32,7 +32,7 @@ if(Sys.getenv("input_dir")=="") {
   main_outdir <- Sys.getenv("main_outdir")
 }
 
-prediction_years <- 2000:2020
+prediction_years <- 2000:2021
 
 # Functions ------------------------------------------------------------
 
@@ -111,9 +111,9 @@ all_annual <- foreach(this_year=prediction_years) %dopar%{
   these_fnames[, year_to_use:=pmin(end_year, this_year)] # cap year by covariate availability
   these_fnames[, year_to_use:=pmax(year_to_use, start_year)] 
   
-  if (this_year%%5>0){
-    these_fnames[fpath %like% "Population", fname:=gsub("YEAR", "YEAR-Interp", fname)]
-  }
+  # if (this_year%%5>0){
+  #   these_fnames[fpath %like% "Population", fname:=gsub("YEAR", "YEAR-Interp", fname)]
+  # }
   
   these_fnames[, new_fname:=str_replace(fname, "YEAR", as.character(year_to_use))]
   these_fnames[, full_fname:= file.path(vm_path, new_fname)]

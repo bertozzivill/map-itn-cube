@@ -8,7 +8,7 @@
 ## 
 ##############################################################################################################
 
-# dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --boot-disk-size 50 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive old_dir=gs://map_users/amelia/itn/itn_cube/results/20200122_test_percapita_nets/ new_dir=gs://map_users/amelia/itn/itn_cube/results/20200328_remove_random_effect/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input CODE=gs://map_users/amelia/itn/code/generate_cube/view_changes.r --output out_path=gs://map_users/amelia/itn/itn_cube/results/20200328_remove_random_effect/compare_changes_20200122_test_percapita_nets.pdf --command 'Rscript ${CODE}'
+# dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --boot-disk-size 50 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive old_dir=gs://map_users/amelia/itn/itn_cube/results/20200328_remove_random_effect/ new_dir=gs://map_users/amelia/itn/itn_cube/results/20200401_new_population_rasters/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input CODE=gs://map_users/amelia/itn/code/generate_cube/view_changes.r --output out_path=gs://map_users/amelia/itn/itn_cube/results/20200401_new_population_rasters/compare_changes_20200328_remove_random_effect.pdf --command 'Rscript ${CODE}'
 
 rm(list=ls())
 
@@ -95,9 +95,9 @@ pdf(out_path, width=11, height=7)
 
 # ## 02: check survey data
 # print("comparing old and new data files")
-# new_data <- fread(file.path(new_dir, "02_survey_data.csv"))
-# old_data <- fread(file.path(old_dir, "02_survey_data.csv"))
-# 
+new_data <- fread(file.path(new_dir, "01_survey_data.csv"))
+old_data <- fread(file.path(old_dir, "01_survey_data.csv"))
+
 # if ("gap_1" %in% names(old_data)){
 #   old_data[, c("gap_1", "gap_2", "gap_3"):=NULL]
 # }
@@ -156,42 +156,41 @@ pdf(out_path, width=11, height=7)
 # print(surv_plot)
 
 
-# ## 03: check covariates
-# print("comparing old and new data covariate files")
-# new_covs <- fread(file.path(new_dir, "03_data_covariates.csv"))
-# old_covs <- fread(file.path(old_dir, "03_data_covariates.csv"))
-# 
-# # adjust names
-# if ("Landcover_0_Water" %in% names(old_covs)){
-#   setnames(old_covs, "Landcover_0_Water", "Landcover_17_Water")
-# }
-# 
-# # name_key <- fread(file.path(func_dir, "oldnew_covariate_names.csv"))
-# # setnames(old_covs, name_key$old_name, name_key$common_name)
-# # setnames(new_covs, name_key$new_name, name_key$common_name)
-# 
-# all_covs <- append_dts(old_covs, new_covs)
-# cov_names <- names(new_covs)
-# cov_names <- cov_names[!cov_names %in% c(names(new_data), "row_id", "type")]
-# toplot_covs <- melt(all_covs, id.vars=c("type", "year", "iso3", "survey", "cellnumber"), measure.vars = cov_names)
-# 
-# cov_plot <- ggplot(toplot_covs, aes(x=variable, y=value)) +
-#               geom_boxplot(aes(color=type, fill=type), alpha=0.25) +
-#               facet_wrap( ~ variable, scales="free") +
-#               theme(legend.position="bottom",
-#                     legend.title = element_blank(),
-#                     axis.text.x = element_blank()) +
-#               labs(title="Covariate Comparison",
-#                    y="",
-#                    x="")
-# print(cov_plot)
+## 03: check covariates
+print("comparing old and new data covariate files")
+new_covs <- fread(file.path(new_dir, "02_data_covariates.csv"))
+old_covs <- fread(file.path(old_dir, "02_data_covariates.csv"))
 
+# adjust names
+if ("Landcover_0_Water" %in% names(old_covs)){
+  setnames(old_covs, "Landcover_0_Water", "Landcover_17_Water")
+}
+
+# name_key <- fread(file.path(func_dir, "oldnew_covariate_names.csv"))
+# setnames(old_covs, name_key$old_name, name_key$common_name)
+# setnames(new_covs, name_key$new_name, name_key$common_name)
+
+all_covs <- append_dts(old_covs, new_covs)
+cov_names <- names(new_covs)
+cov_names <- cov_names[!cov_names %in% c(names(new_data), "row_id", "type")]
+toplot_covs <- melt(all_covs, id.vars=c("type", "year", "iso3", "survey", "cellnumber"), measure.vars = cov_names)
+
+cov_plot <- ggplot(toplot_covs, aes(x=variable, y=value)) +
+              geom_boxplot(aes(color=type, fill=type), alpha=0.25) +
+              facet_wrap( ~ variable, scales="free") +
+              theme(legend.position="bottom",
+                    legend.title = element_blank(),
+                    axis.text.x = element_blank()) +
+              labs(title="Covariate Comparison",
+                   y="",
+                   x="")
+print(cov_plot)
 
 ## 04: inla models
 print("comparing old and new inla files")
 load(file.path(new_dir, "03_inla_outputs.Rdata"))
 new_models <- copy(inla_outputs)
-load(file.path(old_dir, "04_inla_dev_gap.Rdata"))
+load(file.path(old_dir, "03_inla_outputs.Rdata"))
 old_models <- copy(inla_outputs)
 
 for (this_name in names(old_models)){
@@ -258,7 +257,7 @@ for (this_name in names(old_models)){
 
 # 05: .tifs
 print("comparing old and new raster files")
-old_raster_dir <- file.path(old_dir, "05_predictions")
+old_raster_dir <- file.path(old_dir, "04_predictions")
 new_raster_dir <- file.path(new_dir, "04_predictions")
 new_files <- list.files(new_raster_dir)
 old_files <- list.files(old_raster_dir)
@@ -282,7 +281,7 @@ compare_tifs <- function(old_tif, new_tif, name="", cutoff=0.001){
 
 # old_var_names <- c("\\.MEAN", "\\.ACC", "\\.USE")
 new_var_names <- c("ITN_[0-9]{4}_nat_access\\.", "ITN_[0-9]{4}_access\\.", "ITN_[0-9]{4}_use\\.","ITN_[0-9]{4}_percapita_nets\\.", "ITN_[0-9]{4}_nat_percapita_nets\\." )
-old_var_names <- new_var_names[1:3]
+old_var_names <- new_var_names
 
 for (idx in 1:length(old_var_names)){
   var_name <- old_var_names[[idx]]

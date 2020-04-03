@@ -22,7 +22,8 @@ disk_size <- 400
 core_dir <- "gs://map_users/amelia/itn/itn_cube/"
 cloud_func_dir <- "gs://map_users/amelia/itn/code/generate_cube/"
 cov_dir <- "gs://mastergrids_5km/"
-cov_outlabel <- "20191214"
+pop_dir <- "gs://gbd2020/Populations/Output_Pop_Unmasked"
+cov_outlabel <- "20200401"
 
 # machine options
 dsub_str <- "dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1"
@@ -46,6 +47,8 @@ input_dir_str <- paste("--input-recursive",
 cov_dt <- fread(file.path(func_dir, "covariate_key.csv"))
 cov_dt <- cov_dt[used_sam=="T"]
 cov_indirs <- paste0(cov_dt$cov_name, "=", cov_dir, cov_dt$fpath)
+cov_indirs[cov_indirs %like% "Population="] <- paste0("Population=", pop_dir)
+
 # account for custom covariates not in mastergrids
 cov_indirs <- gsub(paste0(cov_dir, "custom_covariates"), paste0(core_dir, "input_data/custom_covariates"), cov_indirs)
 cov_indirs <- paste(cov_indirs, collapse=" ")
