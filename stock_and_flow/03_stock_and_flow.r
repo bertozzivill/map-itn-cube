@@ -26,14 +26,14 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
   ### Read in all data #####----------------------------------------------------------------------------------------------------------------------------------
   
   # From WHO: NMCP data and manufacturer data
-  nmcp_data<-fread(file.path(nmcp_manu_dir, "NMCP_2019.csv"),stringsAsFactors=FALSE)
+  nmcp_data<-fread(file.path(nmcp_manu_dir, "NMCP_2020.csv"),stringsAsFactors=FALSE)
   setnames(nmcp_data, "ITN", "CITN")
   
   # Set all NMCP NA's to zero based on time series patterns and notes from Manuela Runge in TZA
   nmcp_data[is.na(LLIN), LLIN:=0]
   nmcp_data[is.na(CITN), CITN:=0]
   
-  manufacturer_llins <- fread(file.path(nmcp_manu_dir, "MANU_2019.csv"),stringsAsFactors=FALSE)
+  manufacturer_llins <- fread(file.path(nmcp_manu_dir, "MANU_2020.csv"),stringsAsFactors=FALSE)
   setnames(manufacturer_llins, names(manufacturer_llins), as.character(manufacturer_llins[1,]))
   manufacturer_llins <- manufacturer_llins[2:nrow(manufacturer_llins),]
   manufacturer_llins <- manufacturer_llins[Country!=""]
@@ -257,8 +257,8 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
 						manufacturer_llins_est[year_idx] ~ dnorm(manufacturer_llins[year_idx], ((manufacturer_llins[year_idx]+1e-12)*manufacturer_sigma[year_idx])^-2) T(0,)
 						
 						# error in percapita NMCP distributions
-						nmcp_sigma_llin[year_idx] ~ dunif(0, 0.01) 	 			
-						nmcp_sigma_citn[year_idx] ~ dunif(0, 0.01) 	 
+						nmcp_sigma_llin[year_idx] ~ dunif(0, 0.03) 	 			
+						nmcp_sigma_citn[year_idx] ~ dunif(0, 0.03) 	 
 						nmcp_nets_percapita_llin_est[year_idx] ~ dnorm(nmcp_nets_percapita_llin[year_idx], nmcp_sigma_llin[year_idx]^-2) T(0,)
 						nmcp_nets_percapita_citn_est[year_idx] ~ dnorm(nmcp_nets_percapita_citn[year_idx], nmcp_sigma_citn[year_idx]^-2) T(0,)
 						
@@ -664,7 +664,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
 }
 
 # DSUB FOR MAIN RUN
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20200311 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who CODE=gs://map_users/amelia/itn/code/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200401_restrict_loss_prior --command 'cd ${CODE}; Rscript stock_and_flow/03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list.tsv
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20200324 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020 CODE=gs://map_users/amelia/itn/code/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200402_new_nmcp_manu_turn_off_taps --command 'cd ${CODE}; Rscript stock_and_flow/03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list.tsv
 
 # DSUB FOR SENSITIVITY ANALYSIS
 # dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highmem-2 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20191205 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who CODE=gs://map_users/amelia/itn/code/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191211_full_sensitivity --command 'cd ${CODE}; Rscript stock_and_flow/03_stock_and_flow.r ${this_country} ${survey_count} ${order_type}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_sensitivity_TESTING.tsv
@@ -680,11 +680,11 @@ package_load <- function(package_list){
 package_load(c("data.table","raster","rjags", "zoo", "ggplot2", "doParallel", "lubridate", "VGAM"))
 
 if(Sys.getenv("main_dir")=="") {
-  nmcp_manu_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who"
-  main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20191205"
+  nmcp_manu_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020"
+  main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200324"
   out_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/testing"
   code_dir <- "~/repos/map-itn-cube"
-  this_country <- "BFA"
+  this_country <- "DJI"
   sensitivity_survey_count <- NA # 2
   sensitivity_type <- NA # "chron_order"
   setwd(code_dir)
@@ -700,7 +700,7 @@ if(Sys.getenv("main_dir")=="") {
 source("stock_and_flow/jags_functions.r")
 source("generate_cube/01_data_functions.r")
 start_year <- 2000
-end_year<- 2018
+end_year<- 2021
 
 gg_color_hue <- function(n) {
   hues = seq(15, 375, length = n + 1)

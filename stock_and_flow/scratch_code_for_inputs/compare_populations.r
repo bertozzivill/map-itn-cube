@@ -11,22 +11,28 @@ library(ggplot2)
 
 rm(list=ls())
 
-root_dir <- "/Volumes/GoogleDrive"
-for_sam_pop <- fread(file.path(root_dir, "Shared drives/WMR/WMR2019/ITN_Estimates/ITN_Raw_Data/Population_for_Sam_2019.csv"))
-# originally from  \map_data\GBD2019\Processing\Stages\03b_Population_Figures_Export\Checkpoint_Outputs\ihme_populations.csv
-gbd_pop <- fread(file.path(root_dir, "My Drive/stock_and_flow/input_data/ihme_populations.csv"))
 
-gbd_subset <- gbd_pop[year>=2000 & admin_unit_level=="ADMIN0" & age_bin=="All_Ages" & iso3 %in% unique(for_sam_pop$iso3), 
-                      list(year, iso2, iso3, country_name, total_pop, pop_at_risk_pf, prop_pop_at_risk_pf=pop_at_risk_pf/total_pop,  type="custom")
+for_sam_pop <- fread(file.path("/Volumes/GoogleDrive", "Shared drives/WMR/WMR2019/ITN_Estimates/ITN_Raw_Data/Population_for_Sam_2019.csv"))
+
+main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who"
+pop_2019 <- fread(file.path(main_dir, "ihme_populations.csv"))
+pop_2019[, version:="GBD2019"]
+pop_2020 <- fread(file.path(main_dir, "ihme_populations_2020.csv"))
+pop_2020[, version:="GBD2020"]
+all_pop <- rbind(pop_2019, pop_2020)
+
+pop_subset <- all_pop[year>=2000 & admin_unit_level=="ADMIN0" & age_bin=="All_Ages" & iso3 %in% unique(for_sam_pop$iso3) & who_region=="AFRO", 
+                      list(year, iso2, iso3, country_name, total_pop, pop_at_risk_pf, prop_pop_at_risk_pf=pop_at_risk_pf/total_pop,  version)
                      ]
 
-for_sam_pop[, type:="premade"]
 
-compare <- rbind(for_sam_pop, gbd_subset)
-
-ggplot(compare, aes(x=year, y=pop_at_risk_pf)) +
-  geom_line(aes(color=type)) +
-  facet_wrap(~iso3, scales="free_y")
+ggplot(pop_subset[iso3 %in% c("COM", "ERI", "LBR", "NGA", "SSD")], aes(x=year, y=total_pop)) +
+  geom_line(aes(color=version), size=1) +
+  facet_wrap(~iso3, scales="free_y") +
+  theme(axis.text.x = element_text(angle=45, hjust=1)) +
+  labs(x="Year",
+       y="Population",
+       title="GBD Population: Version Comparison")
 
 
 # use the ihme #'s for now until we work out where the WMR numbers came from
