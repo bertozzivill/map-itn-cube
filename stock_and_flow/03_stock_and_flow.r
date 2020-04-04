@@ -52,6 +52,16 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
   # subset data to country level
   this_survey_data <- survey_data[iso3 %in% this_country,]
 
+  # TEST: remove Cameroon MIS report that might have incongruent data; similar for Sierra Leone MICS4
+  if (this_country=="CMR"){
+    this_survey_data <- this_survey_data[!surveyid %like% "Cameroon_2011_reportonly"]
+  }
+  
+  if (this_country=="SLE"){
+    this_survey_data <- this_survey_data[!surveyid %like% "SierraLeone 2010"]
+  }
+  
+  
   this_manufacturer_llins <- manufacturer_llins[ISO3==this_country]
   this_nmcp <- nmcp_data[ISO3==this_country]
   this_pop <- population_full[iso3==this_country & year<=end_year]
@@ -257,8 +267,8 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
 						manufacturer_llins_est[year_idx] ~ dnorm(manufacturer_llins[year_idx], ((manufacturer_llins[year_idx]+1e-12)*manufacturer_sigma[year_idx])^-2) T(0,)
 						
 						# error in percapita NMCP distributions
-						nmcp_sigma_llin[year_idx] ~ dunif(0, 0.03) 	 			
-						nmcp_sigma_citn[year_idx] ~ dunif(0, 0.03) 	 
+						nmcp_sigma_llin[year_idx] ~ dunif(0, 0.01) 	 			
+						nmcp_sigma_citn[year_idx] ~ dunif(0, 0.01) 	 
 						nmcp_nets_percapita_llin_est[year_idx] ~ dnorm(nmcp_nets_percapita_llin[year_idx], nmcp_sigma_llin[year_idx]^-2) T(0,)
 						nmcp_nets_percapita_citn_est[year_idx] ~ dnorm(nmcp_nets_percapita_citn[year_idx], nmcp_sigma_citn[year_idx]^-2) T(0,)
 						
@@ -664,7 +674,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
 }
 
 # DSUB FOR MAIN RUN
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20200324 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020 CODE=gs://map_users/amelia/itn/code/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200402_new_nmcp_manu_turn_off_taps --command 'cd ${CODE}; Rscript stock_and_flow/03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list.tsv
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20200324 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020 CODE=gs://map_users/amelia/itn/code/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200403_turn_off_taps_narrow_nmcp_priors --command 'cd ${CODE}; Rscript stock_and_flow/03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list_TESTING.tsv
 
 # DSUB FOR SENSITIVITY ANALYSIS
 # dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highmem-2 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20191205 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who CODE=gs://map_users/amelia/itn/code/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191211_full_sensitivity --command 'cd ${CODE}; Rscript stock_and_flow/03_stock_and_flow.r ${this_country} ${survey_count} ${order_type}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_sensitivity_TESTING.tsv
@@ -684,7 +694,7 @@ if(Sys.getenv("main_dir")=="") {
   main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200324"
   out_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/testing"
   code_dir <- "~/repos/map-itn-cube"
-  this_country <- "DJI"
+  this_country <- "SLE"
   sensitivity_survey_count <- NA # 2
   sensitivity_type <- NA # "chron_order"
   setwd(code_dir)

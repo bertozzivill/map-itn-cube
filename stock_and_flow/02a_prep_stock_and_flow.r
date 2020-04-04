@@ -98,7 +98,7 @@ mics3_estimates <-data.table(surveyid=mics3_data$names,
 ### preprocess "Report Only" Surveys #####----------------------------------------------------------------------------------------------------------------------------------
 
 # Justification for se calculation in eLife paper
-no_report_estimates <- report_only_surveydata[, list(surveyid=paste(names, round(time)),
+no_report_estimates <- report_only_surveydata[, list(surveyid=paste(names, floor(time)),
                                                    country=Country,
                                                    iso3=ISO3,
                                                    date=time,

@@ -189,14 +189,8 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
       
       # generate labels stating half life in first and last three years of time series
       
-      start_halflives <- half_life_comparison[[this_country]][base_year<=(max(base_year)+2) & net_type=="llin", 
-                                                              list(half_life_start=mean(half_life)), by="model"]
-      
-      end_halflives <- half_life_comparison[[this_country]][base_year>=(max(base_year)-2) & net_type=="llin", 
-                                                            list(half_life_end=mean(half_life)), by="model"]
-      halflife_labels <- merge(start_halflives, end_halflives, by="model")
-      halflife_labels[, label:= paste0(model, "\n LLIN Half Life ", round(half_life_start, 2), "/", round(half_life_end, 2),  " yrs" )]
-      
+      halflife_labels <- unique(half_life_comparison[[this_country]][net_type=="llin", list(model, half_life)])
+      halflife_labels[, label:= paste0(model, "\n LLIN Half Life ", round(half_life, 2), " yrs" )]
       
       nets_in_houses <- merge(nets_in_houses, halflife_labels[, list(model, label)], by="model")
       
@@ -362,7 +356,7 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
   half_life_comparison[, model:=factor(model, levels=model_order)]
   
   
-  for_sigmoids <- half_life_comparison[base_year>=(max(base_year)-2), 
+  for_sigmoids <- half_life_comparison[base_year==2000, # these should be the same every year with a single half life, so just pick a year 
                                        list(sig=mean(sig),
                                             half_life=mean(half_life)), by=c("iso3", "model", "net_type", "time")]
   
@@ -416,7 +410,7 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
   
 }
 
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive model_dir_1=gs://map_users/amelia/itn/stock_and_flow/results/20200311_draft_results model_dir_2=gs://map_users/amelia/itn/stock_and_flow/results/20200402_new_nmcp_manu_turn_off_taps CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive plot_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200402_new_nmcp_manu_turn_off_taps --command 'cd ${CODE}; Rscript 04_compare_outputs.r'
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive model_dir_1=gs://map_users/amelia/itn/stock_and_flow/results/20200402_new_nmcp_manu_turn_off_taps model_dir_2=gs://map_users/amelia/itn/stock_and_flow/results/20200403_turn_off_taps_narrow_nmcp_priors CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive plot_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200403_turn_off_taps_narrow_nmcp_priors --command 'cd ${CODE}; Rscript 04_compare_outputs.r'
 package_load <- function(package_list){
   # package installation/loading
   new_packages <- package_list[!(package_list %in% installed.packages()[,"Package"])]
@@ -451,7 +445,7 @@ if(Sys.getenv("model_dir_1")=="") {
   setwd(func_dir)
   plot_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20191209_clean_code"
   
-  model_dirs <- c("20191209_clean_code", "20191205_new_surveydata", "20191003_no_gp")
+  model_dirs <- c("20200311_draft_results", "20200402_new_nmcp_manu_turn_off_taps")
   
 } else {
   plot_dir <- Sys.getenv("plot_dir") 
