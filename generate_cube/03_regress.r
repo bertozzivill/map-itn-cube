@@ -91,9 +91,9 @@ run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, sta
   ## Prep for model ##-------------------------------------------------------------
   
   outcome_names <- c("ihs_emp_access_dev", "ihs_emp_use_gap", "ihs_percapita_net_dev")
-  run_temporal <- list(ihs_emp_access_dev=F,
+  run_temporal <- list(ihs_emp_access_dev=T,
                        ihs_emp_use_gap=T,
-                       ihs_percapita_net_dev=F)
+                       ihs_percapita_net_dev=T)
   
   # calculate use gap,  access deviation, and percapita net deviation for data points
   data[, emp_use_gap:=emplogit2(access_count, pixel_pop) - emplogit2(use_count, pixel_pop)] # emplogit difference of access-use

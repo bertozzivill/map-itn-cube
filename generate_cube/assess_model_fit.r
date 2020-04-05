@@ -19,7 +19,7 @@ library(PNWColors)
 years <- 2000:2018
 
 main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200331_reextract_20200107_fix_cluster_agg/04_predictions"
-indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200311_draft_results/for_cube"
+indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200402_new_nmcp_manu_turn_off_taps/for_cube"
 survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200324"
 data_fname <- "../02_data_covariates.csv"
 
@@ -88,9 +88,9 @@ test_survey_data <- fread(file.path(test_survey_indir, "01_survey_summary.csv"))
 
 ## for pete: compare time series of different versions
 
-version_names <- c(z_drive="amelia_itn_itn_cube_results_20200331_reextract_20200107_fix_cluster_agg_04_predictions_national_time_series.csv",
-                   version_1="amelia_itn_itn_cube_results_20200330_add_ar1_all_metrics_04_predictions_national_time_series.csv",
-                   version_2="amelia_itn_itn_cube_results_20200328_remove_random_effect_04_predictions_national_time_series.csv")
+version_names <- c(gbd2020="amelia_itn_itn_cube_results_20200331_reextract_20200107_fix_cluster_agg_04_predictions_national_time_series.csv",
+                   freeze_distributions="amelia_itn_itn_cube_results_20200403_sf_turn_off_taps_with_dev_ar1_04_predictions_national_time_series.csv",
+                   no_excess_stock="amelia_itn_itn_cube_results_20200404_ToT_no_excess_stock_04_predictions_national_time_series.csv")
 
 
 all_versions <- rbindlist(lapply(names(version_names), function(this_name){
@@ -100,22 +100,45 @@ all_versions <- rbindlist(lapply(names(version_names), function(this_name){
   estimates[, version:=this_name]
 }))
 
+all_versions_quarterly <- copy(all_versions)
+all_versions_quarterly[, quarter:=floor((month-1)/3)+1]
+all_versions_quarterly <- all_versions_quarterly[, list(value=mean(value),
+                                                        time=mean(time)), 
+                                    by=list(version,iso3, type, year, quarter)]
+
 all_versions_annual <- all_versions[, list(value=mean(value)), 
                                     by=list(version,iso3, type, year)]
+all_versions_annual[, time:=year]
 
-ggplot(all_versions_annual[type=="access"], aes(x=year, y=value))+
-  geom_line(aes(color=version)) +
-  geom_point(data=test_survey_data, aes(x=date, y=access_mean)) +
+ggplot(all_versions_annual[type=="use"], aes(x=time))+
+  geom_line(aes(color=version, y=value), size=1) +
+  geom_linerange(data=test_survey_data, aes(x=date, ymin=use_mean-1.96*use_se, ymax=use_mean+1.96*use_se)) + 
+  geom_point(data=test_survey_data, aes(x=date, y=use_mean)) +
   facet_wrap(~iso3) +
   theme_minimal() +
   theme(legend.title=element_blank(),
-        axis.text.x = element_text(angle=45, hjust=1)) # +
-  # labs(title="INLA Use: Version Comparison",
-  #      x="Time",
-  #      y="Use")
+        axis.text.x = element_text(angle=45, hjust=1))  +
+  labs(title="INLA Use: Version Comparison",
+       x="Time",
+       y="Use")
 
 
+# append to MAP comparison spreadsheet
+map_model_name <- "20200404_no_excess_stock"
+map_label <- "no_excess_stock"
+for_map <- all_versions_annual[version==map_label & type=="use",
+                               list(iso3, year, itn.value=value, model=map_model_name)]
+map_compare <- fread("~/Desktop/ITN_comparison3.csv")
+# setnames(map_compare, "antimalarial.value", "itn.value")
+map_key <- unique(map_compare[, list(name, iso3, id, GAUL_Code, IHME_location_ID, year, pop)])
+for_map <- merge(map_key[year<2022], for_map[!iso3 %in% c("DJI", "COM")], all=T)
+for_map[is.na(itn.value) & iso3=="NAM", model:=map_model_name]
+map_compare <- rbind(map_compare, for_map)
 
+ggplot(map_compare[iso3=="NGA" & model!="Latest"], aes(x=year, y=itn.value)) + 
+  geom_line(aes(color=model), size=1)
+
+write.csv(map_compare, file="~/Desktop/ITN_comparison4.csv", row.names = F)
 
 all_access_npc_estimates <- rbind(stock_and_flow, national_estimates[type %in% unique(stock_and_flow$type)])
 

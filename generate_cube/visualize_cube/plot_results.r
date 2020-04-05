@@ -15,8 +15,8 @@ library(PNWColors)
 
 rm(list=ls())
 
-main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200328_remove_random_effect/04_predictions"
-indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200311_draft_results/for_cube"
+main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200403_sf_turn_off_taps_with_dev_ar1/04_predictions"
+indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200402_new_nmcp_manu_turn_off_taps/for_cube"
 survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200324"
 shape_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/shapefiles/"
 setwd(main_dir)
@@ -202,7 +202,7 @@ Africa <- gSimplify(Africa, tol=0.1, topologyPreserve=TRUE)
 # africa.df <- data.frame( ID=1:length(Africa), row.names = africa_ids)
 # spdf <- SpatialPolygonsDataFrame(Africa, africa.df)
 
-years <- 2000:2018
+years <- 2000:2021
 max_pixels <- 2e5
 
 use_stack <- stack(paste0("ITN_", years, "_use.tif"))
@@ -293,7 +293,7 @@ levelplot(use_rate,
 
 use_plot <- levelplot(use_stack,
                       par.settings=rasterTheme(region= wpal("seaside", noblack = T)), at= seq(0, 1, 0.025),
-                      xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, maxpixels=max_pixels)  +
+                      xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F) # +
                       latticeExtra::layer(sp.polygons(Africa))
 
 npc_plot <- levelplot(nets_percapita_stack[[16]],
