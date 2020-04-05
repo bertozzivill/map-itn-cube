@@ -7,7 +7,7 @@
 ## Main script for the stock and flow model
 ##############################################################################################################
 
-run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmcp_manu_dir, out_dir, sensitivity_survey_count=NA, sensitivity_type=NA){
+run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmcp_manu_dir, out_dir, last_distribution_year=NA, sensitivity_survey_count=NA, sensitivity_type=NA){
   
   print(paste("RUNNING STOCK AND FLOW FOR", this_country))
   
@@ -16,13 +16,20 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
   # we run the model for (end_year-start_year)*4 +1 quarters.
   # The extra "+1" is to allow for interpolation in the final quarter of the time series.
   quarter_timesteps <- seq(start_year, end_year + 1, 0.25)
+  
+  # last_distribution_year refers to a scenario in which we run the model into the future, "turning off" distributions for at least a year. 
+  # hence, last_distribution_year is the final year in which distributions actually occur. In the current example, it is 2019
+  last_distribution_year <- ifelse(is.na(last_distribution_year), end_year, last_distribution_year)
+  
+  print(paste("End year is", end_year, "last distribution year is", last_distribution_year))
+  
   # set.seed(084)
   
   n.adapt=10000
   update=1000000
   n.iter=50000
   thin=10
-
+  
   ### Read in all data #####----------------------------------------------------------------------------------------------------------------------------------
   
   # From WHO: NMCP data and manufacturer data
@@ -43,15 +50,15 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
   # From GBD2019 folder: annual population and pop at risk
   population_full <- fread(file.path(nmcp_manu_dir, "ihme_populations.csv"))
   population_full <- population_full[year>=2000 & admin_unit_level=="ADMIN0" & age_bin=="All_Ages", 
-                        list(year, iso3, country_name, total_pop, pop_at_risk_pf, prop_pop_at_risk_pf=pop_at_risk_pf/total_pop)
-                        ]
+                                     list(year, iso3, country_name, total_pop, pop_at_risk_pf, prop_pop_at_risk_pf=pop_at_risk_pf/total_pop)
+                                     ]
   
   # From 02a_prep_stock_and_flow: survey data
   survey_data <- fread(file.path(main_dir, "itn_aggregated_survey_data_plus_reportonly.csv"))
   
   # subset data to country level
   this_survey_data <- survey_data[iso3 %in% this_country,]
-
+  
   # TEST: remove Cameroon MIS report that might have incongruent data; similar for Sierra Leone MICS4
   if (this_country=="CMR"){
     this_survey_data <- this_survey_data[!surveyid %like% "Cameroon_2011_reportonly"]
@@ -137,10 +144,10 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
       rbind( as.data.table(c( metric = "mean" ,
                               list(date = totnet_calc_list$date),
                               extract_jags(c("llin_count", "citn_count"), colMeans(survey_model_output[[1]]))
-                              )), 
-             as.data.table(c( metric = "sd" ,
-                              list(date = totnet_calc_list$date),
-                              extract_jags(c("llin_count", "citn_count"), apply(survey_model_output[[1]],2,sd))))
+      )), 
+      as.data.table(c( metric = "sd" ,
+                       list(date = totnet_calc_list$date),
+                       extract_jags(c("llin_count", "citn_count"), apply(survey_model_output[[1]],2,sd))))
       )
     
     survey_total_nets <- melt(survey_total_nets, id.vars = c("metric", "date"), value.name="net_count", variable.name="net_type")
@@ -150,8 +157,8 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
     # add parameter limits for full model
     sd_limit_multiplier <- 3
     survey_total_nets <- survey_total_nets[, list(net_type, date, mean, sd, 
-                                                            lower_limit= pmax(mean - sd*sd_limit_multiplier, 0),
-                                                            upper_limit= pmax(mean + sd*sd_limit_multiplier, 0)
+                                                  lower_limit= pmax(mean - sd*sd_limit_multiplier, 0),
+                                                  upper_limit= pmax(mean + sd*sd_limit_multiplier, 0)
     )]
     
     # merge the order of surveys for out of sample error metrics in sensitivity analysis
@@ -160,12 +167,12 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
     to_merge_sens[, c("variable", "value"):=NULL]
     
     survey_total_nets <- merge(survey_total_nets, to_merge_sens, by=c("net_type", "date"))
-  
-    # quarter indices
-   start_indices <-  sapply(floor(totnet_calc_list$date/0.25) * 0.25, function(time){which(time==quarter_timesteps)})
-   end_indices <- start_indices+1
     
-   # set up the list of inputs for the full model
+    # quarter indices
+    start_indices <-  sapply(floor(totnet_calc_list$date/0.25) * 0.25, function(time){which(time==quarter_timesteps)})
+    end_indices <- start_indices+1
+    
+    # set up the list of inputs for the full model
     main_input_list <- list(survey_llin_count = survey_total_nets[net_type=="llin"]$mean,
                             survey_llin_sd = survey_total_nets[net_type=="llin"]$sd,
                             survey_llin_lowerlim = survey_total_nets[net_type=="llin"]$lower_limit,
@@ -184,8 +191,8 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
                             quarter_count = length(quarter_timesteps),
                             survey_count = totnet_calc_list$survey_count,
                             population = this_pop$total_pop
-      )
-    }
+    )
+  }
   
   ### Format NMCP reports  #####----------------------------------------------------------------------------------------------------------------------------------
   
@@ -195,7 +202,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
   # find nets per person
   this_nmcp <- melt(this_nmcp, id.vars=c("MAP_Country_Name", "ISO3", "year"),
                     measure.vars = c("LLIN", "CITN"),
-                      variable.name = "type", value.name = "nmcp_count")
+                    variable.name = "type", value.name = "nmcp_count")
   
   this_nmcp <- merge(this_nmcp, this_pop[, list(ISO3=iso3, year, total_pop)], by=c("ISO3", "year"), all=T)
   this_nmcp[, nmcp_nets_percapita := nmcp_count/total_pop]
@@ -216,7 +223,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
   main_input_list <- c(main_input_list, nmcp_list)
   
   ### Store population at risk and "time since distribution" parameters.  #####----------------------------------------------------------------------------------------------------------------------------------
-
+  
   main_input_list$PAR <- this_pop$pop_at_risk_pf
   
   ### create "counter" matrix that marks time since net distribution for each quarter   #####----------------------------------------------------------------------------------------------------------------------------------
@@ -228,6 +235,10 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
     }
   }
   main_input_list$time_since_distribution <- time_since_distribution
+  
+  # for restricting the NMCP priors for 2020 and 2021
+  main_input_list$last_distribution_year_count <- which(years==last_distribution_year)
+  
   
   ### load indicator priors #####----------------------------------------------------------------------------------------------------------------------------------
   extract_prior <- function(varname, data){
@@ -261,14 +272,14 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
   annual_stock_and_flow <- "
           
           # Manufacturer and NMCP counts
-					for(year_idx in 1:year_count){
+					for(year_idx in 1:last_distribution_year_count){
 						
 						manufacturer_sigma[year_idx] ~ dunif(0, 0.075) 	 # error in llin manufacturer	
 						manufacturer_llins_est[year_idx] ~ dnorm(manufacturer_llins[year_idx], ((manufacturer_llins[year_idx]+1e-12)*manufacturer_sigma[year_idx])^-2) T(0,)
 						
 						# error in percapita NMCP distributions
-						nmcp_sigma_llin[year_idx] ~ dunif(0, 0.01) 	 			
-						nmcp_sigma_citn[year_idx] ~ dunif(0, 0.01) 	 
+						nmcp_sigma_llin[year_idx] ~ dunif(0, 0.03) 	 			
+						nmcp_sigma_citn[year_idx] ~ dunif(0, 0.03) 	 
 						nmcp_nets_percapita_llin_est[year_idx] ~ dnorm(nmcp_nets_percapita_llin[year_idx], nmcp_sigma_llin[year_idx]^-2) T(0,)
 						nmcp_nets_percapita_citn_est[year_idx] ~ dnorm(nmcp_nets_percapita_citn[year_idx], nmcp_sigma_citn[year_idx]^-2) T(0,)
 						
@@ -277,6 +288,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
 						nmcp_count_citn_est[year_idx] <- max(0, nmcp_nets_percapita_citn_est[year_idx]*population[year_idx])			
 										
 					}
+				
 							
 					##### Stock and flow: Initialize with no stock
 					
@@ -296,8 +308,10 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
 					# final stock (initial stock minus distribution for the year)
 					final_stock[1] <- initial_stock[1] - adjusted_llins_distributed[1]
 				
+				
+				
 					##### loop over years to get stock and capped llin distributions
-					for(year_idx in 2:year_count){
+					for(year_idx in 2:last_distribution_year_count){
 					  
 					  # initial stock: last year's final stock + nets from manufacturer 
 						initial_stock[year_idx] <- final_stock[year_idx-1] + manufacturer_llins_est[year_idx]
@@ -314,11 +328,58 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
 						
 						# final stock for the year (initial stock minus distribution for the year)
 						final_stock[year_idx] <- initial_stock[year_idx]-adjusted_llins_distributed[year_idx]	
-					}"
+					}
+					
+
+  "
   
-    # loss functions and quarterly distribution-- see section 3.2.2.3
-    llin_quarterly <- 
-            "
+  annual_stock_and_flow_no_distributions <- 
+    "
+    
+    # Set NMCP distributions to zero
+    for(year_idx in ((last_distribution_year_count+1):year_count)){
+						
+						manufacturer_sigma[year_idx] ~ dunif(0, 0.075) 	 # error in llin manufacturer	
+						manufacturer_llins_est[year_idx] ~ dnorm(manufacturer_llins[year_idx], ((manufacturer_llins[year_idx]+1e-12)*manufacturer_sigma[year_idx])^-2) T(0,)
+						
+						# error in percapita NMCP distributions
+						nmcp_sigma_llin[year_idx] ~ dunif(0, 0.001) 	 			
+						nmcp_sigma_citn[year_idx] ~ dunif(0, 0.001) 	 
+						nmcp_nets_percapita_llin_est[year_idx] ~ dnorm(nmcp_nets_percapita_llin[year_idx], nmcp_sigma_llin[year_idx]^-2) T(0,)
+						nmcp_nets_percapita_citn_est[year_idx] ~ dnorm(nmcp_nets_percapita_citn[year_idx], nmcp_sigma_citn[year_idx]^-2) T(0,)
+						
+            # convert to total nets
+						nmcp_count_llin_est[year_idx] <- 0
+						nmcp_count_citn_est[year_idx] <- 0			
+										
+					}
+  
+    # Don't allow distribution of stock
+    for(year_idx in ((last_distribution_year_count+1):year_count)){
+					  
+					  # initial stock: last year's final stock + nets from manufacturer 
+						initial_stock[year_idx] <- final_stock[year_idx-1] + manufacturer_llins_est[year_idx]
+					  
+					  # net distribution count: smaller of initial stock or nmcp count
+						raw_llins_distributed[year_idx] <- min(nmcp_count_llin_est[year_idx] , initial_stock[year_idx])					
+						
+						# add some uncertainty about additional nets distributed
+						distribution_uncertainty_betapar[year_idx]~dunif(20, 24) 
+						llin_distribution_noise[year_idx]~dbeta(2, distribution_uncertainty_betapar[year_idx]) T(0, 0.25)
+						
+						# net distribution count, with uncertainty 
+						adjusted_llins_distributed[year_idx] <- 0
+						
+						# final stock for the year (initial stock minus distribution for the year)
+						final_stock[year_idx] <- initial_stock[year_idx]-adjusted_llins_distributed[year_idx]	
+					}
+  
+  "
+  
+  
+  # loss functions and quarterly distribution-- see section 3.2.2.3
+  llin_quarterly <- 
+    "
             #  stationary sigmoidal loss parameter
             k_llin <- 20 
             
@@ -357,7 +418,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
               
             "
   citn_quarterly <- 
-            " 
+    " 
             #  stationary sigmoidal loss parameter
             k_citn <- 20 
             
@@ -447,31 +508,33 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
         }
   
   "
-    
+  
   # Specify model.
-  # For countries with no survey data, don't try to calibrate to surveys
-  if(any(is.na(main_input_list$survey_llin_sd)) | any(is.na(main_input_list$survey_citn_sd))){
+  # When you're not running with "no distribution years", don't include the extra model restrictions
+  if(last_distribution_year==end_year){
     full_model_string <- paste(model_preface, 
                                annual_stock_and_flow, 
                                llin_quarterly, 
                                citn_quarterly, 
                                accounting, 
+                               surveys,
                                indicators, 
                                model_suffix,
                                sep="\n")
   }else{
     full_model_string <- paste(model_preface, 
                                annual_stock_and_flow, 
+                               annual_stock_and_flow_no_distributions, # this is the only difference
                                llin_quarterly, 
                                citn_quarterly, 
                                accounting, 
-                               surveys,  # this is the only difference
+                               surveys,  
                                indicators, 
                                model_suffix,
                                sep="\n")
     
   }
-    
+  
   # write to file
   fileConn<-file(file.path(out_dir, paste0(this_country, "_model", outdir_suffix, ".txt")))
   writeLines(full_model_string, fileConn)
@@ -491,41 +554,41 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
   
   # Extract outputs
   names_to_extract <- c(
-                        "nmcp_nets_percapita_llin_est",
-                        "nmcp_nets_percapita_citn_est",
-                        "manufacturer_llins_est",
-                        "nmcp_count_llin_est",
-                        "nmcp_count_citn_est",
-                        "llin_distribution_noise",
-                        "distribution_uncertainty_betapar",
-                        "raw_llins_distributed",
-                        "initial_stock",
-                        "adjusted_llins_distributed",
-                        "final_stock",
-                        "k_llin",
-                        "L_llin",
-                        "llins_distributed_quarterly",
-                        "quarterly_nets_remaining_matrix_llin",
-                        "k_citn",
-                        "L_citn",
-                        "citns_distributed_quarterly",
-                        "quarterly_nets_remaining_matrix_citn",
-                        "quarterly_nets_in_houses_llin",
-                        "quarterly_nets_in_houses_citn",
-                        "total_percapita_nets",
-                        "survey_llin_count_est",
-                        "survey_citn_count_est",
-                        "survey_llin_count",
-                        "survey_citn_count",
-                        "p1_nonet_prop",
-                        "p2_nonet_prop",
-                        "b1_nonet_prop",
-                        "b2_nonet_prop",
-                        "b3_nonet_prop",
-                        "alpha_mean_nets",
-                        "beta_mean_nets",
-                        "nonet_prop_est",
-                        "mean_net_count_est"
+    "nmcp_nets_percapita_llin_est",
+    "nmcp_nets_percapita_citn_est",
+    "manufacturer_llins_est",
+    "nmcp_count_llin_est",
+    "nmcp_count_citn_est",
+    "llin_distribution_noise",
+    "distribution_uncertainty_betapar",
+    "raw_llins_distributed",
+    "initial_stock",
+    "adjusted_llins_distributed",
+    "final_stock",
+    "k_llin",
+    "L_llin",
+    "llins_distributed_quarterly",
+    "quarterly_nets_remaining_matrix_llin",
+    "k_citn",
+    "L_citn",
+    "citns_distributed_quarterly",
+    "quarterly_nets_remaining_matrix_citn",
+    "quarterly_nets_in_houses_llin",
+    "quarterly_nets_in_houses_citn",
+    "total_percapita_nets",
+    "survey_llin_count_est",
+    "survey_citn_count_est",
+    "survey_llin_count",
+    "survey_citn_count",
+    "p1_nonet_prop",
+    "p2_nonet_prop",
+    "b1_nonet_prop",
+    "b2_nonet_prop",
+    "b3_nonet_prop",
+    "alpha_mean_nets",
+    "beta_mean_nets",
+    "nonet_prop_est",
+    "mean_net_count_est"
   )
   
   jdat <- coda.samples(jags,variable.names=names_to_extract,
@@ -670,11 +733,11 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
   ### Saving  #####----------------------------------------------------------------------------------------------------------------------------------
   print("saving all outputs")
   save(list = ls(all.names = TRUE), file = file.path(out_dir, paste0(this_country, "_all_output", outdir_suffix, ".RData")), envir = environment())
-
+  
 }
 
 # DSUB FOR MAIN RUN
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20200324 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020 CODE=gs://map_users/amelia/itn/code/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200403_turn_off_taps_narrow_nmcp_priors --command 'cd ${CODE}; Rscript stock_and_flow/03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list_TESTING.tsv
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20200324 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020 CODE=gs://map_users/amelia/itn/code/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200404_ToT_block_excess_stock_distribution --command 'cd ${CODE}; Rscript stock_and_flow/03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list.tsv
 
 # DSUB FOR SENSITIVITY ANALYSIS
 # dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highmem-2 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20191205 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who CODE=gs://map_users/amelia/itn/code/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191211_full_sensitivity --command 'cd ${CODE}; Rscript stock_and_flow/03_stock_and_flow.r ${this_country} ${survey_count} ${order_type}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_sensitivity_TESTING.tsv
@@ -694,7 +757,7 @@ if(Sys.getenv("main_dir")=="") {
   main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200324"
   out_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/testing"
   code_dir <- "~/repos/map-itn-cube"
-  this_country <- "SLE"
+  this_country <- "CMR"
   sensitivity_survey_count <- NA # 2
   sensitivity_type <- NA # "chron_order"
   setwd(code_dir)
@@ -711,13 +774,14 @@ source("stock_and_flow/jags_functions.r")
 source("generate_cube/01_data_functions.r")
 start_year <- 2000
 end_year<- 2021
+last_distribution_year <- 2019
 
 gg_color_hue <- function(n) {
   hues = seq(15, 375, length = n + 1)
   hcl(h = hues, l = 65, c = 100)[1:n]
 }
 
-run_stock_and_flow(this_country, start_year, end_year, main_dir, nmcp_manu_dir, out_dir, sensitivity_survey_count, sensitivity_type)
+run_stock_and_flow(this_country, start_year, end_year, main_dir, nmcp_manu_dir, out_dir, last_distribution_year, sensitivity_survey_count, sensitivity_type)
 
 
 

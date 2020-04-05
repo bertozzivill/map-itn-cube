@@ -324,8 +324,12 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
       print(paste("No comparison file found for", this_country))
     }
     
-    time_dt <- fread(file.path(reference_dir, paste0(this_country, "_time.csv")))
-    timing_all <- list.append(timing_all, time_dt)
+    time_fname <- file.path(reference_dir, paste0(this_country, "_time.csv"))
+    if (file.exists(time_fname)){
+      time_dt <- fread(time_fname)
+      timing_all <- list.append(timing_all, time_dt)
+    }
+    
     
   }
   
@@ -410,7 +414,7 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
   
 }
 
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive model_dir_1=gs://map_users/amelia/itn/stock_and_flow/results/20200402_new_nmcp_manu_turn_off_taps model_dir_2=gs://map_users/amelia/itn/stock_and_flow/results/20200403_turn_off_taps_narrow_nmcp_priors CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive plot_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200403_turn_off_taps_narrow_nmcp_priors --command 'cd ${CODE}; Rscript 04_compare_outputs.r'
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive model_dir_1=gs://map_users/amelia/itn/stock_and_flow/results/20200402_new_nmcp_manu_turn_off_taps model_dir_2=gs://map_users/amelia/itn/stock_and_flow/results/20200404_ToT_block_excess_stock_distribution CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive plot_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200404_ToT_block_excess_stock_distribution --command 'cd ${CODE}; Rscript 04_compare_outputs.r'
 package_load <- function(package_list){
   # package installation/loading
   new_packages <- package_list[!(package_list %in% installed.packages()[,"Package"])]
@@ -443,9 +447,9 @@ if(Sys.getenv("model_dir_1")=="") {
   base_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/"
   func_dir <- "~/repos/map-itn-cube/stock_and_flow/"
   setwd(func_dir)
-  plot_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20191209_clean_code"
+  plot_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200404_ToT_block_excess_stock_distribution"
   
-  model_dirs <- c("20200311_draft_results", "20200402_new_nmcp_manu_turn_off_taps")
+  model_dirs <- c("20200402_new_nmcp_manu_turn_off_taps", "20200404_ToT_block_excess_stock_distribution")
   
 } else {
   plot_dir <- Sys.getenv("plot_dir") 
