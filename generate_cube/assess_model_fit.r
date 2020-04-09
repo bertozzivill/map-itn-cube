@@ -18,12 +18,10 @@ library(PNWColors)
 
 years <- 2000:2018
 
-main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200331_reextract_20200107_fix_cluster_agg/04_predictions"
-indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200402_new_nmcp_manu_turn_off_taps/for_cube"
+main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200404_ToT_no_excess_stock/04_predictions"
+indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200404_ToT_block_excess_stock_distribution/for_cube"
 survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200324"
-data_fname <- "../02_data_covariates.csv"
-
-test_survey_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200330_add_summary_metrics"
+data_fname <- "../01_survey_data.csv"
 
 # main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200128_return_dynamic_covs/05_predictions"
 # indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200127_no_par/for_cube"
@@ -83,63 +81,7 @@ national_estimates <- merge(national_estimates, time_map, all.x=T)
 national_estimates[, model:="INLA"]
 
 # load alternate survey source
-test_survey_data <- fread(file.path(test_survey_indir, "01_survey_summary.csv"))
-
-
-## for pete: compare time series of different versions
-
-version_names <- c(gbd2020="amelia_itn_itn_cube_results_20200331_reextract_20200107_fix_cluster_agg_04_predictions_national_time_series.csv",
-                   freeze_distributions="amelia_itn_itn_cube_results_20200403_sf_turn_off_taps_with_dev_ar1_04_predictions_national_time_series.csv",
-                   no_excess_stock="amelia_itn_itn_cube_results_20200404_ToT_no_excess_stock_04_predictions_national_time_series.csv")
-
-
-all_versions <- rbindlist(lapply(names(version_names), function(this_name){
-  estimates <- fread(file.path("~/Downloads", version_names[[this_name]]))
-  estimates <- estimates[iso3 %in% unique(stock_and_flow$iso3)]
-  estimates <- merge(estimates, time_map, all.x=T)
-  estimates[, version:=this_name]
-}))
-
-all_versions_quarterly <- copy(all_versions)
-all_versions_quarterly[, quarter:=floor((month-1)/3)+1]
-all_versions_quarterly <- all_versions_quarterly[, list(value=mean(value),
-                                                        time=mean(time)), 
-                                    by=list(version,iso3, type, year, quarter)]
-
-all_versions_annual <- all_versions[, list(value=mean(value)), 
-                                    by=list(version,iso3, type, year)]
-all_versions_annual[, time:=year]
-
-ggplot(all_versions_annual[type=="use"], aes(x=time))+
-  geom_line(aes(color=version, y=value), size=1) +
-  geom_linerange(data=test_survey_data, aes(x=date, ymin=use_mean-1.96*use_se, ymax=use_mean+1.96*use_se)) + 
-  geom_point(data=test_survey_data, aes(x=date, y=use_mean)) +
-  facet_wrap(~iso3) +
-  theme_minimal() +
-  theme(legend.title=element_blank(),
-        axis.text.x = element_text(angle=45, hjust=1))  +
-  labs(title="INLA Use: Version Comparison",
-       x="Time",
-       y="Use")
-
-
-# append to MAP comparison spreadsheet
-map_model_name <- "20200404_no_excess_stock"
-map_label <- "no_excess_stock"
-for_map <- all_versions_annual[version==map_label & type=="use",
-                               list(iso3, year, itn.value=value, model=map_model_name)]
-map_compare <- fread("~/Desktop/ITN_comparison3.csv")
-# setnames(map_compare, "antimalarial.value", "itn.value")
-map_key <- unique(map_compare[, list(name, iso3, id, GAUL_Code, IHME_location_ID, year, pop)])
-for_map <- merge(map_key[year<2022], for_map[!iso3 %in% c("DJI", "COM")], all=T)
-for_map[is.na(itn.value) & iso3=="NAM", model:=map_model_name]
-map_compare <- rbind(map_compare, for_map)
-
-ggplot(map_compare[iso3=="NGA" & model!="Latest"], aes(x=year, y=itn.value)) + 
-  geom_line(aes(color=model), size=1)
-
-write.csv(map_compare, file="~/Desktop/ITN_comparison4.csv", row.names = F)
-
+test_survey_data <- fread(file.path(main_dir, "../01_survey_summary.csv"))
 all_access_npc_estimates <- rbind(stock_and_flow, national_estimates[type %in% unique(stock_and_flow$type)])
 
 
@@ -173,9 +115,6 @@ if ("use_mean" %in% names(survey_data)){
 if ("use_gap_mean" %in% names(survey_data)){
   use_gap_timeseries <- ggplot(national_estimates[type=="access_dev"], aes(x=time, y=value))+ 
                               geom_line(size=1, color="#00BFC4") + 
-                              # geom_pointrange(data=survey_data[included_in_cube=="Included in Cube"], aes(x=date, y=use_gap_mean,
-                              #                                                                             ymin=use_gap_mean-1.96*use_se,
-                              #                                                                             ymax=use_gap_mean+1.96*use_se)) + 
                               geom_point(data=test_survey_data, aes(x=date, y=access_deviation_mean)) + 
                               facet_wrap(~iso3) + 
                               theme_minimal() +
@@ -211,14 +150,14 @@ data_points[, access_dev:= access_count/pixel_pop - national_access]
 data_points[, use:= use_count/pixel_pop]
 data_points[, use_gap:=(access_count-use_count)/pixel_pop]
 
-data_points[, data_emp_use_gap:=emplogit2(access_count, pixel_pop) - emplogit2(use_count, pixel_pop)] # emplogit difference of access-use
-data_points[, data_emp_access_dev:= emplogit2(access_count, pixel_pop) - emplogit(national_access)]
+# data_points[, data_emp_use_gap:=emplogit2(access_count, pixel_pop) - emplogit2(use_count, pixel_pop)] # emplogit difference of access-use
+# data_points[, data_emp_access_dev:= emplogit2(access_count, pixel_pop) - emplogit(national_access)]
 
 data_points <- data_points[, list(year, month, cellnumber, survey, iso3, 
                                   lat, lon, time, 
-                                  national_access, access, access_dev, use, use_gap, # percapita_nets, 
+                                  national_access, access, access_dev, use, use_gap # , # percapita_nets, 
                                   # data_percapita_net_dev=percapita_net_dev,
-                                  data_emp_access_dev, data_emp_use_gap)]
+                                  )]
 
 
 data_years <- sort(unique(data_points$year))
@@ -254,13 +193,15 @@ latlons <- data.table(xyFromCell(raster_template, deviations$cellnumber))
 setnames(latlons, c("x", "y"), c("lon", "lat"))
 deviations <- cbind(deviations, latlons)
  #write.csv(deviations, file= "~/Desktop/predicted_observed.csv")
-
+deviations[, year_factor:=factor(year)]
+deviations[, iso_year_count:=.N, by=list(iso3, year, variable)]
 
 pdf(file.path(plot_dir, "prediction_error.pdf"), width=7, height=9)
 
 overall_error <- ggplot(deviations[variable %in% c("access_dev", "use_gap")], aes(x=observed, y=predicted)) +
   geom_abline() + 
   geom_point(alpha=0.5) + 
+  geom_smooth() + 
   facet_grid(variable ~ .) +
   theme_bw() + 
   theme(legend.position = "none") + 
@@ -278,10 +219,14 @@ for (this_iso in sort(unique(deviations$iso3))){
   }
   
   print(this_iso)
-  error_plot <- ggplot(deviations[iso3==this_iso & survey %in% these_surveys & variable %in% c("access_dev", "use_gap")], aes(x=observed, y=predicted)) +
+  error_plot <- ggplot(deviations[iso3==this_iso & 
+                                    survey %in% these_surveys & 
+                                    variable %in% c("access_dev", "use_gap") &
+                                    iso_year_count>10], aes(x=observed, y=predicted)) +
     geom_abline() + 
-    geom_point(aes(color=survey)) + 
-    facet_grid(survey~variable) +
+    geom_point(aes(color=year_factor)) + 
+    geom_smooth(aes(color=year_factor)) +
+    facet_grid(year_factor~variable) +
     theme_bw() + 
     theme(legend.position = "none") + 
     labs(title=paste0(this_iso, ": Observed vs Predicted Values"),

@@ -113,7 +113,37 @@ run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, sta
   print("all thetas:")
   print(all_thetas)
   
-  # transform data from latlong to cartesian coordinates
+  data[, access_dev:=(access_count/pixel_pop)-national_access]
+  data[, use_gap:=(access_count-use_count)/pixel_pop]
+  
+ 
+  data_distributions <- melt(data, id.vars = c("iso3", "survey", "year",
+                                               "month", "cellnumber", "time", "lat", "lon"),
+                             measure.vars = c("access_dev", "use_gap", "percapita_net_dev",
+                                              "emp_access_dev", "emp_use_gap",
+                                              "ihs_emp_use_gap", "ihs_emp_access_dev", "ihs_percapita_net_dev"))
+  data_distributions[, transform:=ifelse(variable %like% "ihs", "IHS & \n Empirical Logit",
+                                         ifelse(variable %like% "^emp", "Empirical Logit",
+                                                "Level"))]
+  
+  data_distributions[, transform:=factor(transform, levels=c("Level",
+                                                             "Empirical Logit",
+                                                             "IHS & \n Empirical Logit"))]
+  
+  data_distributions[, base_variable:=ifelse(variable %like% "access", "Access Deviation",
+                                             ifelse(variable %like% "use", "Use Gap",
+                                                    "Percapita Net Deviation"))]
+  
+  data_distributions[, base_variable:=factor(base_variable, levels=c("Access Deviation",
+                                                             "Use Gap",
+                                                             "Percapita Net Deviation"))]
+  
+  ggplot(data_distributions[transform!="Level"], aes(x=value)) +
+    geom_density(aes(color=base_variable, fill=base_variable)) +
+    facet_grid(base_variable~transform, scales="free") +
+    theme(legend.position = "none")
+  
+  $# transform data from latlong to cartesian coordinates
   xyz<-ll_to_xyz(data[, list(row_id, longitude=lon, latitude=lat)])
   
   data <- merge(data, xyz, by="row_id", all=T)
@@ -177,8 +207,8 @@ if (Sys.getenv("run_individually")!=""){
   
   if(Sys.getenv("input_dir")=="") {
     input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
-    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200210_eth_noreport/"
-    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200210_eth_noreport/"
+    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200404_ToT_no_excess_stock/"
+    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200404_ToT_no_excess_stock/"
     func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
   } else {
     input_dir <- Sys.getenv("input_dir")
@@ -188,7 +218,7 @@ if (Sys.getenv("run_individually")!=""){
   }
   
   start_year=2000
-  end_year=2018
+  end_year=2021
   
   run_dev_gap_models(input_dir, func_dir, main_indir, main_outdir, start_year=start_year, end_year=end)
   

@@ -15,7 +15,7 @@ library(PNWColors)
 
 rm(list=ls())
 
-main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200403_sf_turn_off_taps_with_dev_ar1/04_predictions"
+main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200404_ToT_no_excess_stock/04_predictions"
 indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200402_new_nmcp_manu_turn_off_taps/for_cube"
 survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200324"
 shape_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/shapefiles/"
@@ -74,7 +74,7 @@ national_estimates <- merge(national_estimates, time_map, all.x=T)
 national_estimates[, model:="INLA"]
 
 # todo: map of survey cluster points
-survey_data_cluster <- fread("../02_survey_data.csv")
+survey_data_cluster <- fread("../02_data_covariates.csv")
 
 use_time_series <- ggplot(national_estimates[type=="use"], aes(x=time, y=value, color=type))+ 
                             geom_line(size=1) + 
@@ -202,7 +202,7 @@ Africa <- gSimplify(Africa, tol=0.1, topologyPreserve=TRUE)
 # africa.df <- data.frame( ID=1:length(Africa), row.names = africa_ids)
 # spdf <- SpatialPolygonsDataFrame(Africa, africa.df)
 
-years <- 2000:2021
+years <- 2000:2018
 max_pixels <- 2e5
 
 use_stack <- stack(paste0("ITN_", years, "_use.tif"))
@@ -259,7 +259,7 @@ pdf("~/Desktop/use_gap_points.pdf", width=12, height=7)
 for (idx in 4:length(years)){
   this_year <- years[idx]
   print(this_year)
-  raster_layer <- levelplot(use_gap_stack[[idx]],
+  raster_layer <- levelplot(use_gap_stack[[1]],
                             par.settings=rasterTheme(region= rev(wpal("diverging_tan_white_green_multi"))), at= seq(-1, 1, 0.025),
                             xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, main=paste(this_year, "Use Gap"), maxpixels=max_pixels)
   border_layer <- latticeExtra::layer(sp.polygons(Africa))
@@ -272,8 +272,8 @@ for (idx in 4:length(years)){
                     
   all_layers <- raster_layer + border_layer + points_layer  
   no_points <- raster_layer + border_layer
-  full_plot <- grid.arrange(all_layers, raster_layer+border_layer, ncol=2)
-  print(full_plot)
+  # full_plot <- grid.arrange(all_layers, raster_layer+border_layer, ncol=2)
+  print(all_layers)
 }
 
 graphics.off()
