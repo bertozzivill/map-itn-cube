@@ -20,10 +20,10 @@ rm(list=ls())
 ## Inputs  ----------------------------------------------------------------------------------------------------------------------
 ############ ----------------------------------------------------------------------------------------------------------------------
 
-years <- 2000:2018
+years <- 2000:2019
 
-cube_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200328_remove_random_effect/04_predictions"
-stockflow_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200311_draft_results"
+cube_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200404_ToT_no_excess_stock/04_predictions"
+stockflow_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200404_ToT_block_excess_stock_distribution"
 survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200324"
 data_fname <- "../02_data_covariates.csv"
 
@@ -87,7 +87,7 @@ stockflow_model_name <- gsub(".*/[0-9]{8}_", "", stockflow_indir)
 load(file.path(stockflow_indir, "for_plotting.RData"))
 
 # money shot: time series of net crop vs survey data
-net_crop_timeseries_plot <- ggplot(nets_in_houses_all[model==stockflow_model_name], aes(x=date, color=type, fill=type)) +
+net_crop_timeseries_plot <- ggplot(nets_in_houses_all[model==stockflow_model_name & year %in% years], aes(x=date, color=type, fill=type)) +
                                     geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.3) +
                                     geom_line(aes(y=nets_houses), size=1) +
                                     geom_pointrange(data=survey_data_all[model==stockflow_model_name],
@@ -101,7 +101,10 @@ net_crop_timeseries_plot <- ggplot(nets_in_houses_all[model==stockflow_model_nam
 
 # also important: time series of available stock, nmcp distributions, & model distributions
 colors <- gg_color_hue(4)[c(1,2)]
-stock_and_dist_plot <- ggplot(stock_all[model==stockflow_model_name & metric!="raw_llins_distributed" & metric!="nmcp_count_llin_est"], aes(x=year, color=metric)) +
+stock_and_dist_plot <- ggplot(stock_all[model==stockflow_model_name &
+                                          metric!="raw_llins_distributed" &
+                                          metric!="nmcp_count_llin_est" & 
+                                          year %in% years], aes(x=year, color=metric)) +
                               geom_point(data=nmcp_data_all[model==stockflow_model_name &  type=="llin"], 
                                          aes(y=nets_distributed_data),size=2, alpha=0.5, color="black") +
                               geom_line(aes(y=value), size=1) +
@@ -134,7 +137,65 @@ npc_time_series_plot <- ggplot(accesss_npc, aes(x=time, y=nat_percapita_nets)) +
 ## ITN Cube  ----------------------------------------------------------------------------------------------------------------------
 ############ ----------------------------------------------------------------------------------------------------------------------
 
-## dotplot of all 
+# main_colors <- wpal("seaside", noblack = T)
+main_colors <- c("#722503", "#AB0002", "#F2A378", "#F4CA7D", "#C8D79E", "#70A800")
+relgain_colors <- wpal("cool_stormy", noblack = T)
+
+
+max_pixels <- 2e5
+Africa<-readOGR(file.path(shape_dir, "Africa.shp"))
+Africa <- gSimplify(Africa, tol=0.1, topologyPreserve=TRUE)
+
+# time series of itn use 
+use_stack <- stack(paste0("ITN_", years, "_use.tif"))
+use_plot <- levelplot(use_stack,
+                      par.settings=rasterTheme(region= main_colors), at= seq(0, 1, 0.025),
+                      xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F)  +
+                      latticeExtra::layer(sp.polygons(Africa))
+
+
+# relative gain for latest year
+access_stack <- stack(paste0("ITN_", years, "_access.tif"))
+
+this_use <- use_stack[[length(years)]]*100
+this_access <- access_stack[[length(years)]]*100
+this_capped_use <- min(this_use, this_access)
+this_use_rate <- (this_capped_use/this_access)*100
+
+# use gain: how many % points would you need to increase use to bring it to the level of access?
+use_gain <- this_access-this_use
+
+# access gain: what would use look like if you maximized access everywhere? 
+access_gain <- this_use_rate - this_use
+
+use_gain <- raster::mask(use_gain, access_gain)
+
+true_use <- levelplot(this_use,
+                      par.settings=rasterTheme(region= main_colors), at= seq(0, 100, 2.5),
+                      xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, main="True Use"
+)
+
+maxima <- stack(this_access, this_use_rate)
+names(maxima) <- c("Maximum with Use", "Maximum with Access")
+maxima_plot <- levelplot(maxima,
+                         par.settings=rasterTheme(region= main_colors), at= seq(0, 100, 2.5),
+                         xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F
+)
+
+new_comparison <- stack(use_gain, access_gain)
+names(new_comparison) <- c("Increase Use", "Increase Access")
+relative_gain_continuous <- levelplot(new_comparison,
+                                      par.settings=rasterTheme(region= relgain_colors), at= seq(0, 100, 2.5),
+                                      xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F
+)
+
+
+lay <- rbind(c(NA, NA, 2, 2, 2),
+             c(1,  1,  2, 2, 2),
+             c(1,  1,  3, 3, 3),
+             c(NA, NA, 3, 3, 3)
+)
+grid.arrange(true_use, maxima_plot, relative_gain_continuous, layout_matrix = lay)
 
 
 

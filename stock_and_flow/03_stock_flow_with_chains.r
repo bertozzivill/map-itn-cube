@@ -49,7 +49,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
   manufacturer_llins <- melt(manufacturer_llins, id.vars=c("MAP_Country_Name", "ISO3"), value.name="llins", variable.name="year")
   
   # From GBD2019 folder: annual population and pop at risk
-  population_full <- fread(file.path(nmcp_manu_dir, "ihme_populations.csv"))
+  population_full <- fread(file.path(nmcp_manu_dir, "../ihme_populations.csv"))
   population_full <- population_full[year>=2000 & admin_unit_level=="ADMIN0" & age_bin=="All_Ages", 
                                      list(year, iso3, country_name, total_pop, pop_at_risk_pf, prop_pop_at_risk_pf=pop_at_risk_pf/total_pop)
                                      ]
@@ -59,7 +59,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
   
   # subset data to country level
   this_survey_data <- survey_data[iso3 %in% this_country,]
-
+  
   this_manufacturer_llins <- manufacturer_llins[ISO3==this_country]
   this_nmcp <- nmcp_data[ISO3==this_country]
   this_pop <- population_full[iso3==this_country & year<=end_year]
@@ -228,8 +228,9 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
   }
   main_input_list$time_since_distribution <- time_since_distribution
   
-  # for restricting the NMCP priors in no-distribution years
+  # for restricting the NMCP priors for 2020 and 2021
   main_input_list$last_distribution_year_count <- which(years==last_distribution_year)
+  
   
   ### load indicator priors #####----------------------------------------------------------------------------------------------------------------------------------
   extract_prior <- function(varname, data){
@@ -293,10 +294,8 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
 					distribution_uncertainty_betapar[1] ~ dunif(20,24) 
 					llin_distribution_noise[1] ~ dbeta(2, distribution_uncertainty_betapar[1]) T(0, 0.25) 
 					
-					extra_llins_distributed[1] <- (initial_stock[1]-raw_llins_distributed[1])*llin_distribution_noise[1]
-					
 					# initial distribution count, with uncertainty
-					adjusted_llins_distributed[1] <- raw_llins_distributed[1] + extra_llins_distributed[1]
+					adjusted_llins_distributed[1] <- raw_llins_distributed[1] + ((initial_stock[1]-raw_llins_distributed[1])*llin_distribution_noise[1]) 
 					
 					# final stock (initial stock minus distribution for the year)
 					final_stock[1] <- initial_stock[1] - adjusted_llins_distributed[1]
@@ -316,22 +315,20 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
 						distribution_uncertainty_betapar[year_idx]~dunif(20, 24) 
 						llin_distribution_noise[year_idx]~dbeta(2, distribution_uncertainty_betapar[year_idx]) T(0, 0.25)
 						
-						extra_llins_distributed[year_idx] <- (initial_stock[year_idx]-raw_llins_distributed[year_idx])*llin_distribution_noise[year_idx]
-
 						# net distribution count, with uncertainty 
-						adjusted_llins_distributed[year_idx] <- raw_llins_distributed[year_idx] + 	extra_llins_distributed[year_idx]
+						adjusted_llins_distributed[year_idx] <- raw_llins_distributed[year_idx] + ((initial_stock[year_idx]-raw_llins_distributed[year_idx]) * llin_distribution_noise[year_idx])
 						
 						# final stock for the year (initial stock minus distribution for the year)
 						final_stock[year_idx] <- initial_stock[year_idx]-adjusted_llins_distributed[year_idx]	
 					}
-
+					
 
   "
   
   annual_stock_and_flow_no_distributions <- 
     "
     
-    # Set NMCP distributions to their table value exactly
+    # Set NMCP distributions to zero
     for(year_idx in ((last_distribution_year_count+1):year_count)){
 						
 						manufacturer_sigma[year_idx] ~ dunif(0, 0.075) 	 # error in llin manufacturer	
@@ -344,12 +341,12 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
 						nmcp_nets_percapita_citn_est[year_idx] ~ dnorm(nmcp_nets_percapita_citn[year_idx], nmcp_sigma_citn[year_idx]^-2) T(0,)
 						
             # convert to total nets
-						nmcp_count_llin_est[year_idx] <- nmcp_nets_percapita_llin[year_idx]*population[year_idx]
-						nmcp_count_citn_est[year_idx] <- nmcp_nets_percapita_citn[year_idx]*population[year_idx]			
+						nmcp_count_llin_est[year_idx] <- 0
+						nmcp_count_citn_est[year_idx] <- 0			
 										
 					}
   
-    # Don't allow distribution of excess stock
+    # Don't allow distribution of stock
     for(year_idx in ((last_distribution_year_count+1):year_count)){
 					  
 					  # initial stock: last year's final stock + nets from manufacturer 
@@ -362,10 +359,8 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
 						distribution_uncertainty_betapar[year_idx]~dunif(20, 24) 
 						llin_distribution_noise[year_idx]~dbeta(2, distribution_uncertainty_betapar[year_idx]) T(0, 0.25)
 						
-						extra_llins_distributed[year_idx] <- 0
-						
 						# net distribution count, with uncertainty 
-						adjusted_llins_distributed[year_idx] <- raw_llins_distributed[year_idx] + extra_llins_distributed[year_idx]
+						adjusted_llins_distributed[year_idx] <- 0
 						
 						# final stock for the year (initial stock minus distribution for the year)
 						final_stock[year_idx] <- initial_stock[year_idx]-adjusted_llins_distributed[year_idx]	
@@ -647,66 +642,66 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
     }
     
     # format draw-level indicators
-    print("formatting draw-level indicators")
     no_net_draws <- extract_jags_by_draw("nonet_prop_est", jdat)
     no_net_draws[, nonet_prop_est:=plogis(nonet_prop_est)]
     mean_net_draws <- extract_jags_by_draw("mean_net_count_est", jdat)
     mean_net_draws[mean_net_count_est<0, mean_net_count_est:=1e-6] # not bounded by 0 in jags code; adjust it here
     percapita_net_draws <- extract_jags_by_draw("total_percapita_nets", jdat)
     
-    indicator_draws <- merge(no_net_draws, mean_net_draws, by=c("ITER", "row", "column"), all=T)
-    indicator_draws <- merge(indicator_draws, percapita_net_draws, by=c("ITER", "row"), all=T)
+    indicator_draws <- merge(no_net_draws, mean_net_draws, by=c("CHAIN", "ITER", "row", "column"), all=T)
+    indicator_draws <- merge(indicator_draws, percapita_net_draws, by=c("CHAIN", "ITER", "row"), all=T)
     setnames(indicator_draws, c("row", "column", "nonet_prop_est", "mean_net_count_est", "total_percapita_nets"),
              c("quarter_start", "hh_size", "stockflow_prob_no_nets", "stockflow_mean_nets_per_hh", "stockflow_percapita_nets"))
     
     # It's too labor-intensive to convert all 5000 draws to access-- save 500 random draws instead
     set.seed(42)
-    print("finding random samples")
-    samples <- sample(unique(indicator_draws$ITER), 500)
-    indicator_draws <- indicator_draws[ITER %in% samples]
+    for_samples <- unique(indicator_draws[, list(ITER, CHAIN)])
+    samples <- sample(1:nrow(for_samples), 500)
+    selected_samples <- for_samples[samples]
+    selected_indicator_draws <- merge(selected_samples, indicator_draws, by=c("CHAIN", "ITER"), all.x=T)
     
     # Interpolate to monthly levels
     print("Interpolating from quarters to months")
-    indicator_draws <- melt(indicator_draws, id.vars = c("ITER", "hh_size", "quarter_start"), value.name="value_start")
-    indicator_draws[, quarter_end:= quarter_start +1]
-    end_vals <- indicator_draws[quarter_start>1, list(ITER, hh_size, variable, quarter_end=quarter_start, value_end=value_start)]
-    indicator_draws <- merge(indicator_draws, end_vals, all=T)
-    if (nrow(indicator_draws[is.na(value_end) & quarter_start<max(quarter_start)])>0){
+    selected_indicator_draws <- melt(selected_indicator_draws, id.vars = c("ITER", "hh_size", "quarter_start"), value.name="value_start")
+    selected_indicator_draws[, quarter_end:= quarter_start +1]
+    end_vals <- selected_indicator_draws[quarter_start>1, list(ITER, hh_size, variable, quarter_end=quarter_start, value_end=value_start)]
+    selected_indicator_draws <- merge(selected_indicator_draws, end_vals, all=T)
+    if (nrow(selected_indicator_draws[is.na(value_end) & quarter_start<max(quarter_start)])>0){
       stop("MERGE UNSUCCESSFUL: Nulls in end values")
     }
-    indicator_draws[, start_time:=start_year + quarter_start/4-0.25]
-    indicator_draws[, end_time:=start_year + quarter_end/4-0.25]
+    selected_indicator_draws[, start_time:=start_year + quarter_start/4-0.25]
+    selected_indicator_draws[, end_time:=start_year + quarter_end/4-0.25]
     
     # get decimal dates for the middle of each month: these are the dates for which we want interpolated values.
-    end_time <- ceiling(max(indicator_draws$end_time))
+    end_time <- ceiling(max(selected_indicator_draws$end_time))
     full_times <- seq(as.Date(paste0(start_year, "/1/15")), by = "month", length.out = (end_time-start_year-1)*12)
     monthly_times <- decimal_date(full_times)
-    time_map <- data.table(year=year(full_times), month=month(full_times), time=monthly_times, quarter_start=findInterval(monthly_times, unique(indicator_draws$start_time)))
+    time_map <- data.table(year=year(full_times), month=month(full_times), time=monthly_times, quarter_start=findInterval(monthly_times, unique(selected_indicator_draws$start_time)))
     
-    indicator_draws <- merge(indicator_draws, time_map, by="quarter_start", all=T, allow.cartesian=T)
-    indicator_draws <- indicator_draws[quarter_start!=max(quarter_start)] # final quarter will have na's
-    indicator_draws[, interp_val:= value_end*(time-start_time)/0.25 + value_start*(end_time-time)/0.25]
+    selected_indicator_draws <- merge(selected_indicator_draws, time_map, by="quarter_start", all=T, allow.cartesian=T)
+    selected_indicator_draws <- selected_indicator_draws[quarter_start!=max(quarter_start)] # final quarter will have na's
+    selected_indicator_draws[, interp_val:= value_end*(time-start_time)/0.25 + value_start*(end_time-time)/0.25]
     
     # clean and reshape wide
-    indicator_draws[, iso3:=this_country]
-    indicator_draws <- dcast.data.table(indicator_draws, iso3 + ITER + year + month + time + hh_size ~ variable, value.var = "interp_val")
+    selected_indicator_draws[, iso3:=this_country]
+    selected_indicator_draws <- dcast.data.table(selected_indicator_draws, iso3 + ITER + year + month + time + hh_size ~ variable, value.var = "interp_val")
     
     # calculate access
-    indicator_draws <- merge(indicator_draws, hh_distributions, by="hh_size", all.x=T)
+    selected_indicator_draws <- merge(selected_indicator_draws, hh_distributions, by="hh_size", all.x=T)
     
     print("Finding year-month-country net access across household sizes")
     # weight stock and flow values by household proportions 
-    indicator_draws[, weighted_prob_no_nets:=hh_size_prop*stockflow_prob_no_nets]
-    indicator_draws[, weighted_prob_any_net:=hh_size_prop*(1-stockflow_prob_no_nets)]
+    selected_indicator_draws[, weighted_prob_no_nets:=hh_size_prop*stockflow_prob_no_nets]
+    selected_indicator_draws[, weighted_prob_any_net:=hh_size_prop*(1-stockflow_prob_no_nets)]
     
     ncores <- detectCores()
     print(paste("--> Machine has", ncores, "cores available"))
     registerDoParallel(ncores-2)
     
     tic <- Sys.time()
-    access_draws <- foreach(this_time=unique(indicator_draws$time), .combine="rbind") %:%
-      foreach(this_sample=unique(indicator_draws$ITER), .combine=rbind) %dopar% {
-        subset <- indicator_draws[ITER==this_sample & time==this_time]
+    access_draws <- foreach(this_time=unique(selected_indicator_draws$time), .combine="rbind") %:%
+      foreach(this_sample=unique(selected_indicator_draws$ITER), .combine=rbind) %dopar% {
+        subset <- selected_indicator_draws[ITER==this_sample & time==this_time]
         access <- calc_access(subset, return_mean = T)
         return(data.table(ITER=this_sample, 
                           time=this_time,
@@ -719,8 +714,8 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
     print("Time elapsed to calculate access:")
     print(time_elapsed_access)
     
-    final_metrics <- indicator_draws[, list(iso3, ITER, year, month, time, hh_size, stockflow_percapita_nets,
-                                            stockflow_prob_no_nets, stockflow_mean_nets_per_hh)]
+    final_metrics <- selected_indicator_draws[, list(iso3, ITER, year, month, time, hh_size, stockflow_percapita_nets,
+                                                     stockflow_prob_no_nets, stockflow_mean_nets_per_hh)]
     final_metrics <- merge(final_metrics, access_draws, by=c("ITER", "time"), all=T)
     write.csv(final_metrics, file=file.path(out_dir, paste0(this_country, "_access_draws", outdir_suffix, ".csv")), row.names = F)
     
@@ -736,7 +731,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
 }
 
 # DSUB FOR MAIN RUN
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-8 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20200408 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020/20200409/ITN_C0.00_R0.25 CODE=gs://map_users/amelia/itn/code/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200409_BMGF_ITN_C0.00_R0.25 --command 'cd ${CODE}; Rscript stock_and_flow/03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list.tsv
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20200324 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020/20200409 CODE=gs://map_users/amelia/itn/code/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200409 --command 'cd ${CODE}; Rscript stock_and_flow/03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list.tsv
 
 # DSUB FOR SENSITIVITY ANALYSIS
 # dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highmem-2 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20191205 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who CODE=gs://map_users/amelia/itn/code/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191211_full_sensitivity --command 'cd ${CODE}; Rscript stock_and_flow/03_stock_and_flow.r ${this_country} ${survey_count} ${order_type}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_sensitivity_TESTING.tsv
@@ -752,11 +747,11 @@ package_load <- function(package_list){
 package_load(c("data.table","raster","rjags", "zoo", "ggplot2", "doParallel", "lubridate", "VGAM"))
 
 if(Sys.getenv("main_dir")=="") {
-  nmcp_manu_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020/20200409/ITN_C0.00_R0.25"
+  nmcp_manu_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020/20200402"
   main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200408"
   out_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/testing"
   code_dir <- "~/repos/map-itn-cube"
-  this_country <- "ERI"
+  this_country <- "CMR"
   sensitivity_survey_count <- NA # 2
   sensitivity_type <- NA # "chron_order"
   setwd(code_dir)
@@ -773,7 +768,7 @@ source("stock_and_flow/jags_functions.r")
 source("generate_cube/01_data_functions.r")
 start_year <- 2000
 end_year<- 2021
-last_distribution_year <- 2019
+last_distribution_year <- 2021
 
 gg_color_hue <- function(n) {
   hues = seq(15, 375, length = n + 1)

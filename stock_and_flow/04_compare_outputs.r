@@ -8,9 +8,9 @@
 ##############################################################################################################
 
 compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
-
+  
   ### Prep  #####----------------------------------------------------------------------------------------------------------------------------------
-
+  
   make_country_plots <- T
   
   model_names <- gsub("[0-9]{8}_", "", model_dirs)
@@ -62,12 +62,7 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
           new_objects <- setdiff(ls(), pre_new_objects)
           
           all_model_estimates[[this_model_name]] <- model_estimates
-          if (is.list(raw_posterior_densities)){
-            all_posterior_densities[[this_model_name]] <- HPDinterval(as.mcmc(do.call(rbind,jdat)))
-          }else{
-            all_posterior_densities[[this_model_name]] <- raw_posterior_densities
-          }
-         
+          all_posterior_densities[[this_model_name]] <- raw_posterior_densities
           all_input_data[[this_model_name]] <- main_input_list
           all_survey_data[[this_model_name]] <- this_survey_data
           
@@ -76,7 +71,7 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
       }
       
       ### Record half-life details for the end #####----------------------------------------------------------------------------------------------------------------------------------
-    
+      
       print("Calculating net retention curves")
       half_life_comparison[[this_country]] <- rbindlist(lapply(model_names, function(this_model_name){
         
@@ -88,24 +83,24 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
           
           net_loss_sig <- lapply(c("citn", "llin"), function(net_type){
             
-                            this_k <- net_loss_params[[paste0("mv_k_", net_type)]]
-                            this_L <- net_loss_params[[paste0("mv_L_", net_type)]]
-                            
-                            this_net_loss_sig <- rbindlist(lapply(1:length(this_k), function(idx){
-                                                  data.table(iso3=this_country,
-                                                             model=this_model_name,
-                                                             net_type=net_type,
-                                                             base_year=idx+1999,
-                                                             time=time_points,
-                                                             sig=sigmoid(time_points, this_k[idx], this_L[idx])
-                                                  )
-                                                }))
-                            this_net_loss_sig[, half_life:=time[which.min(abs(sig-0.5))], by="base_year"]
-                            return(this_net_loss_sig)
-                            
-                          })
+            this_k <- net_loss_params[[paste0("mv_k_", net_type)]]
+            this_L <- net_loss_params[[paste0("mv_L_", net_type)]]
+            
+            this_net_loss_sig <- rbindlist(lapply(1:length(this_k), function(idx){
+              data.table(iso3=this_country,
+                         model=this_model_name,
+                         net_type=net_type,
+                         base_year=idx+1999,
+                         time=time_points,
+                         sig=sigmoid(time_points, this_k[idx], this_L[idx])
+              )
+            }))
+            this_net_loss_sig[, half_life:=time[which.min(abs(sig-0.5))], by="base_year"]
+            return(this_net_loss_sig)
+            
+          })
           net_loss_sig <- rbindlist(net_loss_sig)
-        
+          
         }else{ # static or two-level net loss
           net_loss_params <- all_model_estimates[[this_model_name]][c("k_llin", "L_llin", "k_citn", "L_citn")]
           
@@ -254,12 +249,12 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
         this_data <- all_input_data[[this_model_name]]
         
         new_nmcp_data <- data.table(year=c(this_data$nmcp_year_indices_citn,
-                                            this_data$nmcp_year_indices_llin),
-                                     nets_distributed_data=c(this_data$nmcp_count_citn,
-                                                             this_data$nmcp_count_llin),
-                                     type=c(rep("citn", length(this_data$nmcp_year_indices_citn)),
-                                            rep("llin", length(this_data$nmcp_year_indices_llin))),
-                                     model=this_model_name)
+                                           this_data$nmcp_year_indices_llin),
+                                    nets_distributed_data=c(this_data$nmcp_count_citn,
+                                                            this_data$nmcp_count_llin),
+                                    type=c(rep("citn", length(this_data$nmcp_year_indices_citn)),
+                                           rep("llin", length(this_data$nmcp_year_indices_llin))),
+                                    model=this_model_name)
         new_nmcp_data[type=="llin", manufacturer_llins_data:=this_data$manufacturer_llins]
       }))
       nmcp_data[, year:=year + 2000-1]
@@ -267,7 +262,7 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
       # l-to-r order
       nets_distributed[, model:=factor(model, levels=model_order)]
       nmcp_data[, model:=factor(model, levels=model_order)]
-
+      
       distribution_plot <- ggplot(nets_distributed, aes(x=year, color=type, fill=type)) +
         geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.3) +
         geom_line(aes(y=nets_distributed_model), size=2, alpha=0.75) +
@@ -290,7 +285,7 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
                                   raw_llins_distributed=this_model$raw_llins_distributed,
                                   llin_distributed_noise = this_model$llin_distributed_noise,
                                   nmcp_count_llin_est = this_model$nmcp_count_llin_est
-                                  )
+        )
         stock_manuf[, year:=(1:nrow(stock_manuf)) + 1999]
         
         return(stock_manuf)
@@ -352,15 +347,15 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
   print("SAVING TIMING DATA")
   print(file.path(plot_dir, "timing_all.csv"))
   write.csv(timing_all, file=file.path(plot_dir, "timing_all.csv"), row.names=F)
-
+  
   ### Plot all net loss sigmoids #####----------------------------------------------------------------------------------------------------------------------------------
-
+  
   print("plotting net retention curves")
-
+  
   pdf(file.path(plot_dir, paste0("half_lives_", out_label, ".pdf")), height=8, width=14)
-
+  
   two_colors <- gg_color_hue(2)
-
+  
   half_life_comparison <- rbindlist(half_life_comparison)
   half_life_comparison[, model:=factor(model, levels=model_order)]
   
@@ -371,7 +366,7 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
   
   half_life_means <- for_sigmoids[, list (sig=mean(sig), half_life=mean(half_life)), by=c("model", "net_type", "time")]
   midpoints <- unique(half_life_means[, list(model, net_type, half_life)])
-
+  
   print(ggplot(for_sigmoids, aes(x=time, y=sig)) +
           geom_line(aes(group=iso3), alpha=0.5, color=two_colors[2]) +
           geom_line(data=half_life_means, size=2, color=two_colors[1]) +
@@ -381,13 +376,13 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
           labs(title="Net Retention by Country",
                x="Time since net received (years)",
                y="Prop. of nets retained"))
-
-
+  
+  
   country_lambdas <- unique(for_sigmoids[, list(model, net_type, iso3, half_life)])
   sorting_model <- ifelse(length(model_names)==1, model_names[[1]], model_names[[2]])
   descending_order <- country_lambdas[model==sorting_model & net_type=="llin"][order(half_life, decreasing=T)]$iso3
   country_lambdas[, iso3:= factor(iso3, levels = descending_order)]
-
+  
   print(ggplot(country_lambdas, aes(x=iso3, y=half_life)) +
           geom_text(aes(label=iso3)) +
           facet_grid(net_type~model) +
@@ -396,17 +391,17 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
                 legend.position = "none") +
           labs(x="",
                y="Net Half-life (years)"))
-
+  
   
   # half-life time series
   half_life_over_time <- unique(half_life_comparison[, list(model, net_type, iso3, base_year, half_life)])
   
   print(ggplot(half_life_over_time[net_type=="llin"], aes(x=base_year, y=half_life)) +
-    geom_line(aes(color=model)) +
-    facet_wrap(.~iso3) +
-    labs(x="Year",
-         y="Half-Life",
-         title="Half life of loss function over time, LLINs"))
+          geom_line(aes(color=model)) +
+          facet_wrap(.~iso3) +
+          labs(x="Year",
+               y="Half-Life",
+               title="Half life of loss function over time, LLINs"))
   
   print(ggplot(half_life_over_time[net_type=="citn"], aes(x=base_year, y=half_life)) +
           geom_line(aes(color=model)) +
@@ -419,7 +414,7 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
   
 }
 
-# sdsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive model_dir_1=gs://map_users/amelia/itn/stock_and_flow/results/20200404_ToT_block_excess_stock_distribution model_dir_2=gs://map_users/amelia/itn/stock_and_flow/results/20200408_4_chains_fewest_samples CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive plot_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200408_4_chains_fewest_samples --command 'cd ${CODE}; Rscript 04_compare_outputs.r'
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive model_dir_1=gs://map_users/amelia/itn/stock_and_flow/results/20200404_ToT_block_excess_stock_distribution model_dir_2=gs://map_users/amelia/itn/stock_and_flow/results/20200406_ToT_block_excess_stock_reduce_jags_sampling CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive plot_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200406_ToT_block_excess_stock_reduce_jags_sampling --command 'cd ${CODE}; Rscript 04_compare_outputs.r'
 package_load <- function(package_list){
   # package installation/loading
   new_packages <- package_list[!(package_list %in% installed.packages()[,"Package"])]
@@ -452,9 +447,9 @@ if(Sys.getenv("model_dir_1")=="") {
   base_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/"
   func_dir <- "~/repos/map-itn-cube/stock_and_flow/"
   setwd(func_dir)
-  plot_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200408_4_chains_fewest_samples"
+  plot_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200409_BMGF_ITN_C1.00_R1.00"
   
-  model_dirs <- c("20200404_ToT_block_excess_stock_distribution", "20200408_4_chains_fewest_samples")
+  model_dirs <- c("20200404_ToT_block_excess_stock_distribution", "20200409_BMGF_ITN_C1.00_R1.00")
   
 } else {
   plot_dir <- Sys.getenv("plot_dir") 
@@ -466,6 +461,5 @@ if(Sys.getenv("model_dir_1")=="") {
 source("jags_functions.r")
 
 compare_stock_and_flow(base_dir, model_dirs, plot_dir)
-
 
 

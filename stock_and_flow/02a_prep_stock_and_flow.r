@@ -21,13 +21,13 @@ n.iter=50000
 thin=10
 
 source("jags_functions.r")
-main_subdir <- "20200324"
+main_subdir <- "20200408"
 main_dir <- file.path("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep", main_subdir)
 input_dir <- file.path(main_dir, "../../00_survey_nmcp_manufacturer")
 
 # From Bonnie/Sam: pre-aggregated data from older surveys/reports, defer to eLife paper to explain them
 mics3_data <- fread(file.path(input_dir,"non_household_surveys/mics3_aggregated_08_august_2017.csv"),stringsAsFactors=FALSE)
-report_only_surveydata <-fread(file.path(input_dir,"non_household_surveys/other_aggregated_06_february_2020.csv"),stringsAsFactors=FALSE)
+report_only_surveydata <-fread(file.path(input_dir,"non_household_surveys/other_aggregated_08_april_2020.csv"),stringsAsFactors=FALSE)
 
 # From 01_prep_hh_survey_data: aggregated survey data. keep only needed columns;
 survey_data <- fread(file.path(main_dir, "itn_aggregated_survey_data.csv"),stringsAsFactors=FALSE)

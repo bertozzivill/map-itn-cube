@@ -37,13 +37,10 @@ extract_jags <- function(varnames, jdata, verbose=F){
 }
 
 extract_jags_by_draw <- function(varname, jdat){
-  full_estimates <- as.data.frame(as.matrix(jdat, iters = T, chains=T))
-  these_estimates <- full_estimates[(names(full_estimates)=="ITER") |
-                                      (names(full_estimates)=="CHAIN") |
-                                      (names(full_estimates)==varname) | 
-                                      (names(full_estimates) %like% paste0("^", varname, "\\[")) ]
+  full_estimates <- as.data.frame(as.matrix(jdat, iters = T))
+  these_estimates <- full_estimates[(names(full_estimates)=="ITER") |(names(full_estimates)==varname) | (names(full_estimates) %like% paste0("^", varname, "\\[")) ]
   these_estimates <- data.table(these_estimates)
-  these_estimates <- melt(these_estimates, id.vars=c("ITER", "CHAIN"), value.name=varname)
+  these_estimates <- melt(these_estimates, id.vars=c("ITER"), value.name=varname)
   if (these_estimates$variable[1] %like% ","){ # if metric is represented as a matrix
     these_estimates[, row:=as.integer(gsub(".*\\[(.*),(.*)\\]", "\\1", variable))]
     these_estimates[, column:=as.integer(gsub(".*\\[(.*),(.*)\\]", "\\2", variable))]

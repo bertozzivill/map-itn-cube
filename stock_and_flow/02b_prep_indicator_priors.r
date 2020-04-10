@@ -28,7 +28,7 @@ emplogit <- function (y, eps = 1e-3){
   log((eps + y)/(1 - y + eps))
 } 
 
-main_subdir <- "20200324"
+main_subdir <- "20200408"
 main_dir <- file.path("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep", main_subdir)
 
 ### Read in all data #####----------------------------------------------------------------------------------------------------------------------------------

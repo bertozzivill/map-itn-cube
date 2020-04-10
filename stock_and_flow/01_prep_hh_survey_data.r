@@ -16,7 +16,7 @@ library(lubridate)
 
 rm(list=ls())
 
-out_subdir <- "20200324"
+out_subdir <- "20200408"
 
 main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/household_surveys"
 out_dir <- file.path("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep", out_subdir)
@@ -111,6 +111,9 @@ old_dhs_data <- merge(old_dhs_data, old_dhs_cluster, by=c("Survey.hh", "Cluster.
 ## MICS4 data -- from 2014, extracted by Bonnie 
 # originally from Z:\Malaria data\MICS\Indicator data\MICS4\MICS4 Net details aggregated by household 21Jan.csv
 old_mics_data<-fread(file.path(main_dir, "mics4_hh_21_january.csv"))
+
+# The SLE 2010 survey was conducted prior to the mass distribution in the same year, so for now we need to exclude it.
+old_mics_data <- old_mics_data[Survey.hh!="SierraLeone 2010"]
 
 # standardize naming with other 'old' datasets
 to_sub_mics <- names(old_mics_data)[names(old_mics_data) %like% "LLIN"]
