@@ -21,7 +21,7 @@ rm(list=ls())
 ############ ----------------------------------------------------------------------------------------------------------------------
 
 years <- 2000:2019
-year_for_rel_gain <- 2019
+years_for_rel_gain <- c(2015, 2019)
 
 cube_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200412_BMGF_ITN_C0.00_R0.00/04_predictions"
 stockflow_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200412_BMGF_ITN_C0.00_R0.00"
@@ -108,30 +108,30 @@ half_life_means <- for_sigmoids[, list (sig=mean(sig), half_life=mean(half_life)
 midpoints <- unique(half_life_means[, list(model, net_type, half_life)])
 
 two_colors <- gg_color_hue(2)
-sigmoid_plot <- print(ggplot(for_sigmoids, aes(x=time, y=sig)) +
+sigmoid_plot <- ggplot(for_sigmoids, aes(x=time, y=sig)) +
                       geom_line(aes(group=iso3), alpha=0.5, color=two_colors[2]) +
-                      geom_line(data=half_life_means, size=2, color=two_colors[1]) +
-                      geom_vline(data=midpoints, aes(xintercept=half_life), size=2) +
+                      # geom_line(data=half_life_means, size=2, color=two_colors[1]) +
+                      # geom_vline(data=midpoints, aes(xintercept=half_life), size=2) +
                       geom_vline(xintercept=3) + 
-                      geom_text(data=midpoints, aes(x=half_life-0.75, y=1, label=paste("Mean half-life:\n", half_life, "years"))) + 
+                      #geom_text(data=midpoints, aes(x=half_life-0.75, y=1, label=paste("Mean half-life:\n", half_life, "years"))) + 
                       labs(title="",
                            x="Time since net received (years)",
-                           y="Prop. of nets retained"))
+                           y="Prop. of nets retained")
 
 country_lambdas <- unique(for_sigmoids[, list(model, net_type, iso3, half_life)])
-sorting_model <- ifelse(length(model_names)==1, model_names[[1]], model_names[[2]])
 descending_order <- country_lambdas[order(half_life, decreasing=T)]$iso3
 country_lambdas[, iso3:= factor(iso3, levels = descending_order)]
 
 # todo: make this into a map instead of a lame text plot
-half_life_iso_plot <- print(ggplot(country_lambdas, aes(x=iso3, y=half_life)) +
+half_life_iso_plot <- ggplot(country_lambdas, aes(x=iso3, y=half_life)) +
                               geom_text(aes(label=iso3)) +
+                              geom_hline(yintercept=3) + 
                               # ylim(0, 4) +
                               theme(axis.text.x = element_blank(),
                                     axis.ticks.x = element_blank(),
                                     legend.position = "none") +
                               labs(x="",
-                                   y="LLIN Half-life (years)"))
+                                   y="LLIN Half-life (years)")
 
 
 
@@ -249,52 +249,59 @@ use_plot <- levelplot(use_stack,
 # relative gain for latest year
 access_stack <- stack(paste0("ITN_", years, "_access.tif"))
 
-rel_gain_year_idx <- which(years==year_for_rel_gain)
-this_use <- use_stack[[rel_gain_year_idx]]*100
-this_access <- access_stack[[rel_gain_year_idx]]*100
+rel_gain_plots <- lapply(years_for_rel_gain, function(this_year){
+  rel_gain_year_idx <- which(years==this_year)
+  this_use <- use_stack[[rel_gain_year_idx]]*100
+  this_access <- access_stack[[rel_gain_year_idx]]*100
+  
+  # remove non-modeled countries
+  this_use[this_use==0] <- NA
+  this_access[this_access==0] <- NA
+  
+  # to prevent large numbers when dividing 
+  this_use[this_use<0.01] <- 0.01
+  this_access[this_access<0.01] <- 0.01
+  
+  this_capped_use <- min(this_use, this_access)
+  this_use_rate <- (this_capped_use/this_access)*100
+  
+  # use gain: how many % points would you need to increase use to bring it to the level of access?
+  use_gain <- this_access-this_capped_use
+  
+  # access gain: what would use look like if you maximized access everywhere? 
+  access_gain <- this_use_rate - this_capped_use
+  
+  true_use <- levelplot(this_use,
+                        par.settings=rasterTheme(region= main_colors), at= seq(0, 100, 2.5),
+                        xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, main=paste("True Use", this_year)) +
+    latticeExtra::layer(sp.polygons(Africa))
+  
+  maxima <- stack(this_access, this_use_rate)
+  names(maxima) <- c("Maximum with Use", "Maximum with Access")
+  maxima_plot <- levelplot(maxima,
+                           par.settings=rasterTheme(region= main_colors), at= seq(0, 100, 2.5),
+                           xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F) +
+    latticeExtra::layer(sp.polygons(Africa))
+  
+  new_comparison <- stack(use_gain, access_gain)
+  names(new_comparison) <- c("Increase Use", "Increase Access")
+  relative_gain_continuous <- levelplot(new_comparison,
+                                        par.settings=rasterTheme(region= relgain_colors), at= seq(0, 100, 2.5),
+                                        xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F) +
+    latticeExtra::layer(sp.polygons(Africa))
+  
+  
+  lay <- rbind(c(NA, NA, 2, 2, 2),
+               c(1,  1,  2, 2, 2),
+               c(1,  1,  3, 3, 3),
+               c(NA, NA, 3, 3, 3)
+  )
 
-# remove non-modeled countries
-this_use[this_use==0] <- NA
-this_access[this_access==0] <- NA
+  full_plot <- arrangeGrob(true_use, maxima_plot, relative_gain_continuous, layout_matrix = lay)
+  return(full_plot)
+  
+})
 
-# to prevent large numbers when dividing 
-this_use[this_use<0.01] <- 0.01
-this_access[this_access<0.01] <- 0.01
-
-this_capped_use <- min(this_use, this_access)
-this_use_rate <- (this_capped_use/this_access)*100
-
-# use gain: how many % points would you need to increase use to bring it to the level of access?
-use_gain <- this_access-this_capped_use
-
-# access gain: what would use look like if you maximized access everywhere? 
-access_gain <- this_use_rate - this_capped_use
-
-true_use <- levelplot(this_use,
-                      par.settings=rasterTheme(region= main_colors), at= seq(0, 100, 2.5),
-                      xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, main=paste("True Use", year_for_rel_gain)) +
-            latticeExtra::layer(sp.polygons(Africa))
-
-maxima <- stack(this_access, this_use_rate)
-names(maxima) <- c("Maximum with Use", "Maximum with Access")
-maxima_plot <- levelplot(maxima,
-                         par.settings=rasterTheme(region= main_colors), at= seq(0, 100, 2.5),
-                         xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F) +
-              latticeExtra::layer(sp.polygons(Africa))
-
-new_comparison <- stack(use_gain, access_gain)
-names(new_comparison) <- c("Increase Use", "Increase Access")
-relative_gain_continuous <- levelplot(new_comparison,
-                                      par.settings=rasterTheme(region= relgain_colors), at= seq(0, 100, 2.5),
-                                      xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F) +
-                            latticeExtra::layer(sp.polygons(Africa))
-
-
-lay <- rbind(c(NA, NA, 2, 2, 2),
-             c(1,  1,  2, 2, 2),
-             c(1,  1,  3, 3, 3),
-             c(NA, NA, 3, 3, 3)
-)
 
 
 ############ ----------------------------------------------------------------------------------------------------------------------
@@ -304,7 +311,7 @@ lay <- rbind(c(NA, NA, 2, 2, 2),
 # use comparative time series for 2018+
 
 version_names <- c(ITN_C0.00_R0.00="20200412_BMGF_ITN_C0.00_R0.00",
-                   ITN_C0.00_R0.25="20200409_BMGF_ITN_C0.00_R0.25_mismatch",
+                   ITN_C0.00_R0.25="20200409_BMGF_ITN_C0.00_R0.25",
                    ITN_C0.00_R0.50="20200409_BMGF_ITN_C0.00_R0.50",
                    ITN_C0.00_R0.75="20200409_BMGF_ITN_C0.00_R0.75",
                    ITN_C1.00_R1.00="20200409_BMGF_ITN_C1.00_R1.00")
@@ -322,17 +329,42 @@ all_versions_quarterly <- all_versions_quarterly[, list(value=mean(value),
                                                         time=mean(time)), 
                                                  by=list(version,iso3, type, year, quarter)]
 
-covid_compare_plot <- ggplot(all_versions_quarterly[time>2016 & type=="use"], aes(x=time, y=value)) + 
-  # geom_vline(xintercept=2019) + 
+all_versions_annual <- all_versions[, list(value=mean(value)), 
+                                    by=list(version,iso3, type, year)]
+all_versions_annual[, time:=year]
+
+covid_compare_plot <- ggplot(all_versions_quarterly[year>2007 &  type=="use"], aes(x=time, y=value)) + 
+  # geom_vline(xintercept=2020) + 
   geom_line(aes(color=version)) +
   facet_wrap(~iso3) +
   theme(legend.position = "bottom",
         axis.text.x = element_text(angle=45, hjust=1)) + 
-  labs(title="Version Comparison: ITN Use",
+  labs(title="COVID Scenario Comparison: ITN Use",
        x="",
        y="ITN Use") 
 
+percent_diff <- dcast.data.table(all_versions_annual, type + iso3 + year ~ version, value.var = "value")
+percent_diff <- melt(percent_diff, id.vars = c("type", "iso3", "year", "ITN_C1.00_R1.00"), variable.name="scenario")
+percent_diff[, perc_ratio:=value/ITN_C1.00_R1.00*100]
+percent_diff[, perc_reduction:=100-perc_ratio]
+percent_diff[, absolute_reduction:= (ITN_C1.00_R1.00-value)*100]
 
+this_percent_diff <- percent_diff[year==2020 & type=="use" & scenario=="ITN_C0.00_R0.00"]
+descending_order <- this_percent_diff[order(perc_reduction, decreasing=T)]$iso3
+this_percent_diff[, fact_iso3:= factor(iso3, levels = descending_order)]
+this_percent_diff[perc_reduction<0, perc_reduction:=0]
+this_percent_diff[absolute_reduction<0, absolute_reduction:=0]
+
+covid_barplot <- ggplot(this_percent_diff, aes(x=fact_iso3, y=perc_reduction)) + 
+                      # geom_point()
+                      geom_bar(aes(fill=absolute_reduction), stat="identity") +
+                      scale_fill_distiller(name="Absolute\nReduction", palette="YlGnBu", direction=1) + 
+                      # geom_hline(yintercept=3) + 
+                      theme(axis.text.x = element_text(angle=65, hjust=1),
+                            axis.ticks.x = element_blank()) +
+                      labs(x="",
+                           y="Percent Reduction",
+                           title="2020 Reduction in Use from Best to Worst-Case Scenario")
 
 
 ############ ----------------------------------------------------------------------------------------------------------------------
@@ -343,8 +375,11 @@ pdf(file.path(out_dir, "results_plots.pdf"), width=14, height=8)
   grid.arrange(sigmoid_plot, half_life_iso_plot, ncol=2, top="LLIN Retention Half-Lives")
   print(access_use_timeseries)
   print(use_plot)
-  print(grid.arrange(true_use, maxima_plot, relative_gain_continuous, layout_matrix = lay))
+  for (this_plot in rel_gain_plots){
+    grid.arrange(this_plot)
+  }
   print(covid_compare_plot)
+  print(covid_barplot)
 graphics.off()
 
 pdf(file.path(out_dir, "methods_and_supplement_plots.pdf"), width=14, height=8)
