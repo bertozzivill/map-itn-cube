@@ -143,7 +143,7 @@ run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, sta
     facet_grid(base_variable~transform, scales="free") +
     theme(legend.position = "none")
   
-  $# transform data from latlong to cartesian coordinates
+  # transform data from latlong to cartesian coordinates
   xyz<-ll_to_xyz(data[, list(row_id, longitude=lon, latitude=lat)])
   
   data <- merge(data, xyz, by="row_id", all=T)

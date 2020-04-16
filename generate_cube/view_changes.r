@@ -8,7 +8,7 @@
 ## 
 ##############################################################################################################
 
-# dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --boot-disk-size 50 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive old_dir=gs://map_users/amelia/itn/itn_cube/results/20200403_sf_turn_off_taps_with_dev_ar1/ new_dir=gs://map_users/amelia/itn/itn_cube/results/20200404_ToT_no_excess_stock/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input CODE=gs://map_users/amelia/itn/code/generate_cube/view_changes.r --output out_path=gs://map_users/amelia/itn/itn_cube/results/20200404_ToT_no_excess_stock/compare_changes_20200403_sf_turn_off_taps_with_dev_ar1.pdf --command 'Rscript ${CODE}'
+# dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --boot-disk-size 50 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive old_dir=gs://map_users/amelia/itn/itn_cube/results/20200404_ToT_no_excess_stock/ new_dir=gs://map_users/amelia/itn/itn_cube/results/20200409_BMGF_ITN_C1.00_R1.00/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input CODE=gs://map_users/amelia/itn/code/generate_cube/view_changes.r --output out_path=gs://map_users/amelia/itn/itn_cube/results/20200409_BMGF_ITN_C1.00_R1.00/compare_changes_20200404_ToT_no_excess_stock.pdf --command 'Rscript ${CODE}'
 
 rm(list=ls())
 

@@ -334,20 +334,7 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
   }
   
   graphics.off()
-  
-  ### Aggregate relevant datasets #####----------------------------------------------------------------------------------------------------------------------------------
-  nets_in_houses_all <- rbindlist(nets_in_houses_all)
-  survey_data_all <- rbindlist(survey_data_all)
-  nmcp_data_all <- rbindlist(nmcp_data_all)
-  stock_all <- rbindlist(stock_all)
-  
-  save(nets_in_houses_all, survey_data_all, nmcp_data_all, stock_all, file=file.path(plot_dir, "for_plotting.RData"))
-  
-  timing_all <- rbindlist(timing_all)
-  print("SAVING TIMING DATA")
-  print(file.path(plot_dir, "timing_all.csv"))
-  write.csv(timing_all, file=file.path(plot_dir, "timing_all.csv"), row.names=F)
-  
+
   ### Plot all net loss sigmoids #####----------------------------------------------------------------------------------------------------------------------------------
   
   print("plotting net retention curves")
@@ -412,9 +399,23 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){
   
   graphics.off()
   
+  ### Aggregate relevant datasets #####----------------------------------------------------------------------------------------------------------------------------------
+  nets_in_houses_all <- rbindlist(nets_in_houses_all)
+  survey_data_all <- rbindlist(survey_data_all)
+  nmcp_data_all <- rbindlist(nmcp_data_all)
+  stock_all <- rbindlist(stock_all)
+  
+  save(nets_in_houses_all, survey_data_all, nmcp_data_all, stock_all, half_life_comparison, file=file.path(plot_dir, "for_plotting.RData"))
+  
+  timing_all <- rbindlist(timing_all)
+  print("SAVING TIMING DATA")
+  print(file.path(plot_dir, "timing_all.csv"))
+  write.csv(timing_all, file=file.path(plot_dir, "timing_all.csv"), row.names=F)
+  
+  
 }
 
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive model_dir_1=gs://map_users/amelia/itn/stock_and_flow/results/20200404_ToT_block_excess_stock_distribution model_dir_2=gs://map_users/amelia/itn/stock_and_flow/results/20200406_ToT_block_excess_stock_reduce_jags_sampling CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive plot_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200406_ToT_block_excess_stock_reduce_jags_sampling --command 'cd ${CODE}; Rscript 04_compare_outputs.r'
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive model_dir_1=gs://map_users/amelia/itn/stock_and_flow/results/20200404_ToT_block_excess_stock_distribution model_dir_2=gs://map_users/amelia/itn/stock_and_flow/results/20200412_BMGF_ITN_C0.00_R0.00 CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive plot_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200412_BMGF_ITN_C0.00_R0.00 --command 'cd ${CODE}; Rscript 04_compare_outputs.r'
 package_load <- function(package_list){
   # package installation/loading
   new_packages <- package_list[!(package_list %in% installed.packages()[,"Package"])]

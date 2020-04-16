@@ -196,6 +196,15 @@ deviations <- cbind(deviations, latlons)
 deviations[, year_factor:=factor(year)]
 deviations[, iso_year_count:=.N, by=list(iso3, year, variable)]
 
+use_gap_dist <- melt(deviations[variable=="use_gap"], id.vars = c("iso3", "survey", "year", "month", "time", "cellnumber"),
+                     measure.vars=c("observed", "predicted"))
+
+ggplot(use_gap_dist, aes(x=value)) +
+  geom_histogram(aes(color=variable, fill=variable), alpha=0.5, position="dodge") + 
+  facet_wrap( ~ iso3, scales="free")
+
+
+
 pdf(file.path(plot_dir, "prediction_error.pdf"), width=7, height=9)
 
 overall_error <- ggplot(deviations[variable %in% c("access_dev", "use_gap")], aes(x=observed, y=predicted)) +

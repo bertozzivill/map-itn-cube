@@ -215,8 +215,8 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, ma
 
 if (Sys.getenv("run_individually")!=""){
   
-  # dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-highmem-64 --disk-size 400 --boot-disk-size 50 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20200401 indicators_indir=gs://map_users/amelia/itn/stock_and_flow/results/20200402_new_nmcp_manu_turn_off_taps/for_cube main_indir=gs://map_users/amelia/itn/itn_cube/results/20200403_sf_turn_off_taps/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/04_predict_rasters.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20200403_sf_turn_off_taps/ --command 'Rscript ${CODE}'
-
+  # dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-highmem-64 --disk-size 400 --boot-disk-size 50 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20200401 indicators_indir=gs://map_users/amelia/itn/stock_and_flow/results/20200409_BMGF_ITN_C0.00_R0.25/for_cube main_indir=gs://map_users/amelia/itn/itn_cube/results/20200409_BMGF_ITN_C0.00_R0.25/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/04_predict_rasters.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20200409_BMGF_ITN_C0.00_R0.25/ --command 'Rscript ${CODE}'
+  
   package_load <- function(package_list){
     # package installation/loading
     new_packages <- package_list[!(package_list %in% installed.packages()[,"Package"])]
@@ -242,7 +242,7 @@ if (Sys.getenv("run_individually")!=""){
     func_dir <- Sys.getenv("func_dir") # code directory for function scripts
   }
 
-  predict_rasters(input_dir, indicators_indir, main_indir, cov_dir, main_outdir, func_dir, prediction_years=2000:2018)
+  predict_rasters(input_dir, indicators_indir, main_indir, cov_dir, main_outdir, func_dir, prediction_years=2000:2021)
   
 }
 
