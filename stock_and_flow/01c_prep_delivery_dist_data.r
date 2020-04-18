@@ -14,41 +14,100 @@ code_dir <- "~/repos/map-itn-cube/stock_and_flow"
 sf_countries <- fread(file.path(code_dir, "for_gcloud", "batch_country_list.tsv"))
 names(sf_countries) <- "ISO3"
 
-main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who"
-date <- "20200409"
+main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020"
+date <- "20200418"
 
-out_dir <- file.path(main_dir, "data_2020", date)
+out_dir <- file.path(main_dir, date)
 dir.create(out_dir, showWarnings = F, recursive = T)
 
-# load NMCP data thru 2018 and MOP data for 2018-2020, see what we can come up with
-
-nmcp <- fread(file.path(main_dir, "data_2019", "NMCP_2019.csv"))
+# NMCP data: 2000-2018
+nmcp <- fread(file.path(main_dir, "../data_2019", "NMCP_2019.csv"))
 nmcp <- nmcp[ISO3 %in% sf_countries$ISO3]
 
+# use the minimum of 2014-18 to fill in as a proxy for routine distributions when you have no other information
 nmcp_mins <- unique(nmcp[year>=2014, list(MAP_Country_Name, LLIN=min(LLIN, na.rm=T)), by="ISO3"])
 write.csv(nmcp_mins, file.path(out_dir, "nmcp_2019_5yr_mins.csv"), row.names=F)
+setnames(nmcp_mins, "ISO3", "iso3")
 
-nmcp_fill_nas <- nmcp[, list(ISO3, year, LLIN, type="NMCP")]
-nmcp_fill_nas[, was_na:= ifelse(is.na(LLIN), "Was NA", "Not NA")]
-nmcp_fill_nas[is.na(LLIN), LLIN:=0]
+nmcp_fill_nas <- nmcp[, list(iso3=ISO3, year, llin=LLIN, type="NMCP")]
+nmcp_fill_nas[, was_na:= ifelse(is.na(llin), "Was NA", "Not NA")]
+nmcp_fill_nas[is.na(llin), llin:=0]
 
-mop <- fread(file.path(main_dir, "data_2020", "MOP_2020.csv"), header=T)
-mop <- mop[ISO3 %in% sf_countries$ISO3]
-mop <- melt(mop, id.vars = "ISO3", variable.name="year", value.name="LLIN")
+# ALMA data: 2016-2020
+alma_data <- fread(file.path(main_dir, "alma_distributions_2016_2020.csv"), header = T)
+alma_data <- alma_data[iso3 %in% sf_countries$ISO3]
+
+alma_data[, Country:=NULL]
+alma_data <- melt(alma_data, id.vars = "iso3", variable.name="year", value.name="llin")
+alma_data[, type:="ALMA"]
+alma_data[, year:=as.integer(as.character(year))]
+
+alma_fill_nas <- copy(alma_data)
+alma_fill_nas[, was_na:=ifelse(is.na(llin), "Was NA", "Not NA")]
+alma_fill_nas[is.na(llin), llin:=0]
+
+# MOP data: 2013-2020
+mop <- fread(file.path(main_dir, "MOP_2020.csv"), header=T)
+setnames(mop, "ISO3", "iso3")
+mop <- mop[iso3 %in% sf_countries$ISO3]
+mop <- melt(mop, id.vars = "iso3", variable.name="year", value.name="llin")
 mop[, year:=as.integer(as.character(year))]
 mop[, type:="MOP"]
 
 mop_fill_nas <- copy(mop)
-mop_fill_nas[, was_na:= ifelse(is.na(LLIN), "Was NA", "Not NA")]
-mop_fill_nas[is.na(LLIN), LLIN:=0]
+mop_fill_nas[, was_na:= ifelse(is.na(llin), "Was NA", "Not NA")]
+mop_fill_nas[is.na(llin), llin:=0]
 
-missingness_plot <- ggplot(nmcp_fill_nas, aes(x=year, y=LLIN, color=type, shape=was_na)) +
-                    geom_point() +
-                    geom_point(data=mop_fill_nas) +
+# plot missingness comparison
+for_manual_compare <- merge(nmcp[year>2015, list(country, iso3=ISO3, year, nmcp_llin=LLIN)],
+                            alma_data[, list(iso3, year, alma_llin=llin)], all=T)
+write.csv(for_manual_compare, file="~/Desktop/map_itn_data_needs_20200418.csv", row.names=F)
+
+
+missing_of_interest <- rbind(nmcp_fill_nas, alma_fill_nas)
+maxes <- missing_of_interest[, list(llin=max(llin)), by=list(iso3, year)]
+maxes[, type:="Greater of ALMA or NMCP"]
+
+last_time <- fread(file.path(main_dir, "20200409", "ITN_C1.00_R1.00", "prepped_llins_20200409.csv"))
+last_time <- last_time[, list(iso3=ISO3, year, llin=filled_llins, type="Previous Run")]
+noor_compare <- rbind(maxes, last_time)
+
+last_time_compare <- ggplot(noor_compare[year>2015 & year<2021], aes(x=year, y=llin, color=type)) +
+          geom_line() + 
+          geom_point(size=2) +
+          facet_wrap(~iso3, scales="free_y" ) + 
+          theme_minimal() + 
+          theme(axis.text.x = element_text(angle = 45, hjust=1),
+                legend.title = element_blank()) +
+          labs(x="",
+               y="LLINs Distributed",
+               title="")
+
+last_time_routine <- fread(file.path(main_dir, "20200409", "ITN_C0.00_R0.50", "prepped_llins_20200409.csv"))
+last_time_routine <- last_time_routine[year==2020, list(iso3=ISO3, llin=filled_llins*2)]
+routine_compare <- rbind(nmcp_mins[, list(iso3, llin=LLIN, type="Suggested")], last_time_routine[,list(iso3, llin, type="Previous Run")], fill=T)
+
+ggplot(routine_compare, aes(x=iso3, y=llin, color=type)) + 
+  geom_point()
+
+pdf("~/Desktop/compare_versions.pdf", width=14, height=8)
+  print(last_time_compare)
+graphics.off()
+
+missingness_plot <- ggplot(missing_of_interest[year>=2018], aes(x=year, y=llin, color=type)) +
+                    geom_line() +
+                    geom_point(aes(shape=was_na), size=2) +
+                    geom_hline(data=nmcp_mins, aes(yintercept = LLIN), color="#00BA38") +
                     scale_shape_manual(values=c(16,1)) + 
-                    facet_wrap(~ISO3, scales="free_y") +
-                    theme(axis.text.x = element_text(angle = 45, hjust=1))
-                  
+                    facet_wrap(~iso3, scales="free_y") +
+                    theme_minimal() +
+                    theme(axis.text.x = element_text(angle = 45, hjust=1),
+                          legend.title = element_blank()) +
+                    labs(x="",
+                         y="LLINs Distributed")
+pdf("~/Desktop/alma_nmcp_compare_2018_2020.pdf", width=14, height=8)
+  print(missingness_plot)
+graphics.off()
 
 ## Filling in missingness 
 
@@ -83,9 +142,7 @@ for_ratios <- for_ratios[year>(max_year-5)]
 for_ratios[, max_year:=NULL]
 
 # pull manufacturer data
-manu <- fread(file.path(main_dir, "data_2020", "base_manufacturer_deliveries.csv"))
-setnames(manu, names(manu), as.character(manu[1,]))
-manu <- manu[2:nrow(manu),]
+manu <- fread(file.path(main_dir, "base_manufacturer_deliveries.csv"), header=T)
 manu <- manu[Country!=""]
 manu <- melt(manu, id.vars=c("MAP_Country_Name", "Country", "ISO3"), value.name="llins", variable.name="year")
 manu[, year:=as.integer(as.character(year))]
@@ -172,7 +229,7 @@ new_distributions <- rbind(new_distributions, to_append_2021)
 #### 
 # 2020: fill in with values from Pete's AMP hybrid. Make a new dataset for each column name, and save 
 ####
-dists_2020 <- fread(file.path(main_dir, "data_2020", "Compiled_ITN_distribution_2020_FORMODEL.csv"))
+dists_2020 <- fread(file.path(main_dir, "Compiled_ITN_distribution_2020_FORMODEL.csv"))
 dists_2020 <- melt(dists_2020, id.vars = c("ISO3", "MAP_Country_Name"), variable.name = "counterfactual_type", value.name="llins")
 dists_2020[, llins:=as.integer(round(llins))]
 
