@@ -158,7 +158,7 @@ run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, sta
 
   ncores <- detectCores()
   print(paste("--> Machine has", ncores, "cores available"))
-  registerDoParallel(ncores-2)
+  registerDoParallel(length(outcome_names)+1)
   
   # use lapply for bug testing
   # inla_outputs <- lapply(outcome_names, function(outcome_var){
