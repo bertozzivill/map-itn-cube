@@ -17,6 +17,7 @@ names(sf_countries) <- "ISO3"
 main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020"
 date <- "20200418"
 
+in_dir <- file.path(main_dir, date, "inputs")
 out_dir <- file.path(main_dir, date)
 dir.create(out_dir, showWarnings = F, recursive = T)
 
@@ -26,7 +27,7 @@ nmcp <- nmcp[ISO3 %in% sf_countries$ISO3]
 
 # use the minimum of 2014-18 to fill in as a proxy for routine distributions when you have no other information
 nmcp_mins <- unique(nmcp[year>=2014, list(MAP_Country_Name, LLIN=min(LLIN, na.rm=T)), by="ISO3"])
-write.csv(nmcp_mins, file.path(out_dir, "nmcp_2019_5yr_mins.csv"), row.names=F)
+write.csv(nmcp_mins, file.path(in_dir, "nmcp_2019_5yr_mins.csv"), row.names=F)
 setnames(nmcp_mins, "ISO3", "iso3")
 
 nmcp_fill_nas <- nmcp[, list(iso3=ISO3, year, llin=LLIN, type="NMCP")]
@@ -35,9 +36,9 @@ nmcp_fill_nas[is.na(llin), llin:=0]
 
 
 # data that has manually combined nmcp/alma/pmi for 2016-2020, and routine distributions for 2020
-combined_2016_2020 <- fread(file.path(out_dir, "combined_data_2016_2020.csv"))
-routine_2020 <- fread(file.path(out_dir, "routine_distributions_2020.csv"))
-tanzania_special <- fread(file.path(out_dir, "tza_2013_2015.csv"))
+combined_2016_2020 <- fread(file.path(in_dir, "combined_data_2016_2020.csv"))
+routine_2020 <- fread(file.path(in_dir, "routine_distributions_2020.csv"))
+tanzania_special <- fread(file.path(in_dir, "tza_2013_2015.csv"))
 
 # pull manufacturer data
 manu <- fread(file.path(main_dir, "base_manufacturer_deliveries.csv"), header=T)
@@ -111,7 +112,7 @@ new_distributions <- rbind(new_distributions, to_append_2021)
 # 2020: fill in with appropriate values for each counterfactual
 ####
 
-counterfactual_key <- fread(file.path(out_dir, "counterfactual_key.csv"))
+counterfactual_key <- fread(file.path(in_dir, "counterfactual_key.csv"))
 
 all_scenarios <- lapply(1:nrow(counterfactual_key), function(counterfactual_idx){
   this_counterfactual <- counterfactual_key[counterfactual_idx]
