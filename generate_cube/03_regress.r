@@ -10,13 +10,14 @@
 ## 
 ##############################################################################################################
 
-run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, start_year, end_year){
+run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, start_year, end_year, save_uncertainty=F){
   
   # set.seed(212)
   
   # load relevant functions
   source(file.path(func_dir, "03_inla_functions.r"))
   output_fname <- file.path(main_outdir, "03_inla_outputs.Rdata")
+  summary_output_fname <- file.path(main_outdir, "03_inla_outputs_for_prediction.Rdata")
   
   ## Load data 
   data <- fread(file.path(main_indir, "02_data_covariates.csv"))
@@ -160,29 +161,38 @@ run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, sta
   print(paste("--> Machine has", ncores, "cores available"))
   registerDoParallel(length(outcome_names)+1)
   
-  # use lapply for bug testing
-  # inla_outputs <- lapply(outcome_names, function(outcome_var){
-  #   these_cov_names <- selected_cov_names[[outcome_var]]
-  #   
-  #   inla_results <- run_inla(data, outcome_var, these_cov_names, start_year, end_year, temporal=run_temporal[[outcome_var]])
-  #   inla_results <- c(inla_results, theta=all_thetas[[outcome_var]])
-  #   
-  #   return(inla_results)
-  # })  
-  
   inla_outputs<-foreach(outcome_var=outcome_names) %dopar% {
     these_cov_names <- selected_cov_names[[outcome_var]]
     
-    inla_results <- run_inla(data, outcome_var, these_cov_names, start_year, end_year, temporal=run_temporal[[outcome_var]])
+    inla_results <- run_inla(data, outcome_var, these_cov_names, start_year, end_year, temporal=run_temporal[[outcome_var]],
+                             save_uncertainty=save_uncertainty)
     inla_results <- c(inla_results, theta=all_thetas[[outcome_var]])
     
     return(inla_results)
   }
   
   names(inla_outputs) <- c("access_dev", "use_gap", "percapita_net_dev")
-  
   print(paste("Saving outputs to", output_fname))
   save(inla_outputs, file=output_fname)
+  
+  # also save a version with just the info we need to predict
+  inla_outputs_for_prediction <- lapply(names(inla_outputs), function(this_output){
+    these_outputs <- inla_outputs[[this_output]]
+    
+    model_fixed <- these_outputs[["model_output"]]$summary.fixed
+    model_random <- these_outputs[["model_output"]]$summary.random$field
+    
+    new_outputs <- list(fixed=model_fixed,
+                        random=model_random,
+                        spatial_mesh=these_outputs[["spatial_mesh"]],
+                        temporal_mesh=these_outputs[["temporal_mesh"]],
+                        ihs_theta=these_outputs[["theta"]]
+    )
+    return(new_outputs)
+  })
+  names(inla_outputs_for_prediction) <- names(inla_outputs)
+  print(paste("Saving summary outputs to", summary_output_fname))
+  save(inla_outputs_for_prediction, file=summary_output_fname)
   
 }
 
