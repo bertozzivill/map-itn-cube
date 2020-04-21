@@ -18,6 +18,7 @@ func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
 machine_type <- "n1-highmem-64"
 label <- "'type=itn_cube'"
 disk_size <- 400
+boot_disk_size <- 50
 
 core_dir <- "gs://map_users/amelia/itn/itn_cube/"
 cloud_func_dir <- "gs://map_users/amelia/itn/code/generate_cube/"
@@ -26,10 +27,11 @@ pop_dir <- "gs://gbd2020/Populations/Output_Pop_Unmasked"
 cov_outlabel <- "20200401"
 
 # machine options
-dsub_str <- "dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1"
+dsub_str <- "dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-geospatial --regions europe-west1"
 label_str <- paste("--label", label)
 machine_str <- paste("--machine-type", machine_type)
-disc_str <- paste("--disk-size", disk_size)
+disk_str <- paste("--disk-size", disk_size)
+boot_disk_str <- paste("--boot-disk-size", boot_disk_size)
 final_str <- "--command 'Rscript ${CODE}' "
 
 # directories
@@ -55,7 +57,7 @@ cov_indirs <- paste(cov_indirs, collapse=" ")
 input_dir_str <- paste(input_dir_str, cov_indirs)
 
 # assemble full dsub--copy and paste this to run 000_extract_covariates
-full_dsub_str <- paste(dsub_str, label_str, machine_str, disc_str, logging_str, input_str, input_dir_str, output_dir_str, final_str)
+full_dsub_str <- paste(dsub_str, label_str, machine_str, disk_str, boot_disk_str, logging_str, input_str, input_dir_str, output_dir_str, final_str)
 
 
 

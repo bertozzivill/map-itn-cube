@@ -11,14 +11,16 @@
 ## 
 ##############################################################################################################
 
-predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, main_outdir, func_dir, this_year){
+predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_dir, annual_cov_dir, dynamic_cov_dir, main_outdir, func_dir, this_year){
   
+  this_year <- as.integer(this_year)
   print(paste("predicting for year", this_year))
   
   # set.seed(212)
   out_dir <- file.path(main_outdir, "04_predictions")
   monthly_out_dir <- file.path(main_outdir, "04_predictions_monthly")
-  dir.create(file.path(out_dir), recursive=T,showWarnings = F)
+  dir.create(out_dir, recursive=T,showWarnings = F)
+  dir.create(file.path(out_dir, "aggregated"), showWarnings = F)
   
   print("loading inla outputs and relevant functions")
   print(mem_used())
@@ -46,15 +48,15 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, ma
   print(mem_used())
   
   print("static")
-  static_covs <- fread(file.path(cov_dir, "static_covariates.csv"))
+  static_covs <- fread(static_cov_dir)
   prediction_indices <- static_covs$cellnumber
   print("annual")
-  thisyear_covs <- fread(file.path(cov_dir, "annual_covariates.csv"))
+  thisyear_covs <- fread(annual_cov_dir)
   thisyear_covs <- thisyear_covs[year %in% this_year]
   thisyear_covs <- merge(thisyear_covs, static_covs, by="cellnumber", all=T)
   rm(static_covs)
   print("dynamic")
-  thisyear_covs <- merge(thisyear_covs, fread(file.path(cov_dir, paste0("dynamic_covariates/dynamic_", this_year, ".csv"))),
+  thisyear_covs <- merge(thisyear_covs, fread(dynamic_cov_dir),
                          by=c("cellnumber", "year"), all=T)
   print("splitting")
   thisyear_covs <- split(thisyear_covs, by="month")
@@ -178,7 +180,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, cov_dir, ma
     ]
     continent_level_predictions[, iso3:="AFR"]
     country_level_predictions <- rbind(continent_level_predictions, country_level_predictions)
-    write.csv(country_level_predictions, file.path(out_dir, paste0("aggregated_predictions_", this_year, "_", str_pad(this_month, 2, pad="0"),  ".csv")), row.names=F)
+    write.csv(country_level_predictions, file.path(out_dir, "aggregated", paste0("aggregated_predictions_", this_year, "_", str_pad(this_month, 2, pad="0"),  ".csv")), row.names=F)
 
     return(these_predictions)
   }
@@ -269,7 +271,7 @@ if (Sys.getenv("run_individually")!=""){
   }
   
   
-  predict_rasters(input_dir, indicators_indir, main_indir, cov_dir, main_outdir, func_dir, this_year=this_year)
+  predict_rasters(input_dir, indicators_indir, main_indir, static_cov_dir, annual_cov_dir, dynamic_cov_dir, main_outdir, func_dir, this_year=this_year)
   # prof <- lineprof(predict_rasters(input_dir, indicators_indir, main_indir, cov_dir, main_outdir, func_dir, this_year=this_year))
   
 }

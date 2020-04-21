@@ -97,7 +97,7 @@ all_scenarios_annual <- all_scenarios[, list(value=mean(value)),
                                     by=list(scenario,iso3, type, year)]
 all_scenarios_annual[, time:=year]
 
-annual_comparison_plot <- ggplot(all_scenarios_annual[type=="use" & year>2015], aes(x=time))+
+annual_comparison_plot <- ggplot(all_scenarios_annual[type=="use" & year>=2015 & year<2021], aes(x=time))+
                                               geom_line(aes(color=scenario, y=value), size=1) +
                                               # geom_linerange(data=survey_data, aes(x=date, ymin=use_mean-1.96*use_se, ymax=use_mean+1.96*use_se)) + 
                                               # geom_point(data=survey_data, aes(x=date, y=use_mean)) +
@@ -109,8 +109,32 @@ annual_comparison_plot <- ggplot(all_scenarios_annual[type=="use" & year>2015], 
                                                    x="Time",
                                                    y="Use")
 
+for_noor <- all_scenarios_annual[type=="use" & year>=2015 & year<2021 & !scenario %like% "C0.00_R1.00",
+                                 list(scenario, iso3, year, itn_coverage=value)]
+for_noor[, base_scenario:= as.numeric(gsub("ITN_C[0-1]{1}.00_R(.*)_V2", "\\1", scenario))*100]
+for_noor[base_scenario==100, base_scenario:=1]
+
+baseline_pete_labels <- c("BO1", "AM25", "AM50", "AM75")
+int_pete_labels <- c("BO", "IT")
+for_noor_baseline <- rbindlist(lapply(baseline_pete_labels, function(this_label){
+  return(for_noor[base_scenario==1, list(scenario=this_label, iso3, year, itn_coverage)])
+}))
+for_noor_intervention <- rbindlist(lapply(int_pete_labels, function(this_label){
+  return(for_noor[base_scenario!=1, list(scenario=paste0(this_label, base_scenario),
+                                         iso3, year, itn_coverage)])
+}))
+for_noor_all <- rbind(for_noor_baseline, for_noor_intervention)
+for_noor_all[, scenario:=paste0("It_Pr_", scenario)]
+# ggplot(for_noor_all, aes(x=year, y=itn_coverage, color=scenario)) +
+#   geom_line() +
+#   facet_wrap(~iso3)
+for_noor_all <- dcast.data.table(for_noor_all, iso3 + year ~ scenario)
+write.csv(for_noor_all, file=file.path(comparison_dir, "itn_coverage_by_scenario_20200418_v2.csv"), row.names = F)
+
+
 # baseline vs alternative lineplots
 for_regions <- fread(pop_fname)
+for_panels <- fread(file.path(comparison_dir, "manual_mass_campaign_categories.csv"))
 
 cov_compare_2020 <- all_scenarios_annual[year==2020 & type=="use"]
 baseline_name <- names(scenario_names)[[1]]
@@ -132,17 +156,26 @@ cov_compare_2020[, custom_region:=ifelse(who_region_subregion %in% c("EMRO", "AF
                                          "AFRO-S & EMRO", who_region_subregion)]
 cov_compare_2020[, reduction_label:= paste0(as.numeric(gsub("ITN_C0.00_R(.*)_V2", "\\1", scenario))*100, "%")]
 
-ggplot(cov_compare_2020[reduction_label %in% c("100%", "25%")], aes(x=scenario_type, y=itn_use,
-                             color=custom_region,
+cov_compare_2020 <- merge(cov_compare_2020, for_panels)
+cov_compare_2020[, last_mass_campaign:=as.character(last_mass_campaign)]
+cov_compare_2020[last_mass_campaign=="2020", last_mass_campaign:="2020 (Planned)"]
+
+ggplot(cov_compare_2020[reduction_label %in% c("100%")], aes(x=scenario_type, y=itn_use,
+                             color=last_mass_campaign,
                              group=interaction(iso3, reduction_label))) +
-  geom_line(aes(linetype=reduction_label)) +
+  geom_line() +
   geom_text(data=cov_compare_2020[scenario_type=="Baseline"], aes(label=iso3),
             x=0.9) +
-  guides(color = FALSE, linetype=guide_legend("% Reduction\nin Routine Capacity")) + 
-  facet_grid(.~custom_region) +
+  geom_text(data=cov_compare_2020[scenario_type=="Baseline" & 
+                                    reduction_label %in% c("100%")], aes(label=iso3),
+            x=2.1) +
+  guides(color = FALSE # , linetype=guide_legend("% Reduction\nin Routine Capacity")
+         ) + 
+  facet_grid(.~last_mass_campaign) +
   theme_light() + 
   labs(x="",
        y="ITN Coverage") +
+  scale_x_discrete(expand=c(0.1, 0.1)) + 
   theme(axis.text.x = element_text(angle=45, hjust=1))
 
 
