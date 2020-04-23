@@ -166,7 +166,7 @@ ggplot(cov_compare_2020[reduction_label %in% c("100%")], aes(x=scenario_type, y=
   geom_line() +
   geom_text(data=cov_compare_2020[scenario_type=="Baseline"], aes(label=iso3),
             x=0.9) +
-  geom_text(data=cov_compare_2020[scenario_type=="Baseline" & 
+  geom_text(data=cov_compare_2020[scenario_type!="Baseline" & 
                                     reduction_label %in% c("100%")], aes(label=iso3),
             x=2.1) +
   guides(color = FALSE # , linetype=guide_legend("% Reduction\nin Routine Capacity")

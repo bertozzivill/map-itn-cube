@@ -34,7 +34,33 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   survey_data <- fread(file.path(main_indir, "01_survey_data.csv")) # for subsetting predicted cells
   
   # load inla outputs and only keep the relevant parts
-  load(file.path(main_indir, "03_inla_outputs_for_prediction.Rdata"))
+  # For newer regression runs, there is a small .rdata saved with just the information we need. For older runs, we need to extract it explicitly. 
+  
+  for_prediction_fname <- file.path(main_indir, "03_inla_outputs_for_prediction.Rdata")
+  
+  if (file.exists(for_prediction_fname)){
+    load(for_prediction_fname)
+  }else{
+    print("loading from full inla output")
+    load(file.path(main_indir, "03_inla_outputs.Rdata"))
+    
+    inla_outputs_for_prediction <- lapply(names(inla_outputs), function(this_output){
+      these_outputs <- inla_outputs[[this_output]]
+      
+      model_fixed <- these_outputs[["model_output"]]$summary.fixed
+      model_random <- these_outputs[["model_output"]]$summary.random$field
+      
+      new_outputs <- list(fixed=model_fixed,
+                          random=model_random,
+                          spatial_mesh=these_outputs[["spatial_mesh"]],
+                          temporal_mesh=these_outputs[["temporal_mesh"]],
+                          ihs_theta=these_outputs[["theta"]]
+      )
+      return(new_outputs)
+    })
+    names(inla_outputs_for_prediction) <- names(inla_outputs)
+    rm(inla_outputs)
+  }
   
   print("inla load:")
   print(mem_used())
@@ -53,11 +79,13 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   print("annual")
   thisyear_covs <- fread(annual_cov_dir)
   thisyear_covs <- thisyear_covs[year %in% this_year]
+  population <- thisyear_covs[, list(year, cellnumber, pop=Population)]
   thisyear_covs <- merge(thisyear_covs, static_covs, by="cellnumber", all=T)
   rm(static_covs)
   print("dynamic")
   thisyear_covs <- merge(thisyear_covs, fread(dynamic_cov_dir),
                          by=c("cellnumber", "year"), all=T)
+  
   print("splitting")
   thisyear_covs <- split(thisyear_covs, by="month")
   
@@ -102,102 +130,109 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   ## Create INLA Prediction objects  ## ---------------------------------------------------------
   
   print("creating INLA prediction objects")
-  INLA:::inla.dynload.workaround() 
+  INLA:::inla.dynload.workaround()
   
   ## Predict output variables  ## ---------------------------------------------------------
+
+  # main prediction, by month
+  these_predictions <- rbindlist(lapply(1:length(inla_outputs_for_prediction), function(idx){
+    this_name <- names(inla_outputs_for_prediction)[[idx]]
+    predictions_by_month <- lapply(thisyear_covs, function(these_covs){
+      this_month <- unique(these_covs$month)
+      print(paste("Predicting", this_name, "for month", this_month))
+      this_month_pred <- predict_inla(inla_outputs_for_prediction[[idx]], covs=these_covs) # NA's where covariates are NA
+      this_month_pred[, month:= this_month]
+      return(this_month_pred)
+    })
+    predictions_by_month <- rbindlist(predictions_by_month)
+    predictions_by_month[, metric:=ifelse(this_name=="percapita_net_dev", this_name, paste0("emp_", this_name))]
+  })
+  )
   
-  ncores <- detectCores()
-  print(paste("--> Machine has", ncores, "cores available"))
-  dopar_core_count <- min(as.integer(floor(ncores/2)), length(thisyear_covs))
-  print(paste("Splitting into", dopar_core_count, "cores"))
-  registerDoParallel(dopar_core_count)
-
-  formatted_predictions <- foreach(these_covs=thisyear_covs, .combine=rbind) %dopar%{
-    this_month <- unique(these_covs$month)
-    print(paste("Predicting for month", this_month))
-    
-    these_predictions <- lapply(inla_outputs_for_prediction, predict_inla, covs=these_covs) # NA's where covariates are NA
-    
-    these_predictions <- rbindlist(lapply(1:length(these_predictions), function(idx){
-      this_name <- names(these_predictions)[[idx]]
-      new_name <- ifelse(this_name=="percapita_net_dev", this_name, paste0("emp_", this_name))
-      these_predictions[[idx]][, metric:=new_name]
-    }))
-    
-    these_predictions[, year:=this_year]
-    these_predictions[, month:=this_month] 
-    these_predictions  <- merge(these_predictions, prediction_cells, by="cellnumber", all=T) # NA in cells that weren't included in prediction
-    
-    # transform
-    these_predictions <- dcast.data.table(these_predictions, cellnumber + iso3 +  year + month ~ metric, value.var = "final_prediction")
-    these_predictions <- merge(these_predictions, stock_and_flow, by=c("iso3", "year", "month"), all.x=T)
-    
-    ## Metric-specific transformations
-    these_predictions  <- these_predictions[, list(iso3, year, month, time, cellnumber,
-                                                        nat_access,
-                                                        access = plogis(emp_nat_access + emp_access_dev),
-                                                        use = plogis(emp_nat_access + emp_access_dev - emp_use_gap),
-                                                        nat_percapita_nets,
-                                                        percapita_nets = pmax(0, nat_percapita_nets + percapita_net_dev)
-    )]
-    these_predictions[, access_dev:= access-nat_access]
-    these_predictions[, use_gap:=access-use]
-    these_predictions[, percapita_net_dev:=percapita_nets - nat_percapita_nets]
-    
-    ## Find means over country and continent
-    these_predictions <- merge(these_predictions, unique(these_covs[, list(cellnumber, pop=Population)]), by="cellnumber", all.x=T)
-    
-    # set national values to NA for consistency with remainder of dataset
-    these_predictions[is.na(pop), nat_access:=NA]
-    these_predictions[is.na(pop), nat_percapita_nets:=NA]
-    
-    country_level_predictions <- these_predictions[, list(nat_access=weighted.mean(nat_access, pop, na.rm=T),
-                                                   access = weighted.mean(access, pop, na.rm=T),
-                                                   access_dev = weighted.mean(access_dev, pop, na.rm=T),
-                                                   use = weighted.mean(use, pop, na.rm=T),
-                                                   use_gap = weighted.mean(use_gap, pop, na.rm=T),
-                                                   nat_percapita_nets= weighted.mean(nat_percapita_nets, pop, na.rm=T),
-                                                   percapita_nets = weighted.mean(percapita_nets, pop, na.rm=T),
-                                                   percapita_net_dev = weighted.mean(percapita_net_dev, pop, na.rm=T),
-                                                   pop=sum(pop, na.rm=T)
-    ),
-    by=list(iso3, year, month, time)
-    ]
-    country_level_predictions <- country_level_predictions[iso3 %in% unique(stock_and_flow$iso3)]
-
-    continent_level_predictions <- these_predictions[, list(time=mean(time, na.rm=T),
-                                                            nat_access=weighted.mean(nat_access, pop, na.rm=T),
-                                                                access = weighted.mean(access, pop, na.rm=T),
-                                                                access_dev = weighted.mean(access_dev, pop, na.rm=T),
-                                                                use = weighted.mean(use, pop, na.rm=T),
-                                                                use_gap = weighted.mean(use_gap, pop, na.rm=T),
-                                                                nat_percapita_nets= weighted.mean(nat_percapita_nets, pop, na.rm=T),
-                                                                percapita_nets = weighted.mean(percapita_nets, pop, na.rm=T),
-                                                                percapita_net_dev = weighted.mean(percapita_net_dev, pop, na.rm=T),
-                                                                pop=sum(pop, na.rm=T)
-    ),
-    by=list(year, month)
-    ]
-    continent_level_predictions[, iso3:="AFR"]
-    country_level_predictions <- rbind(continent_level_predictions, country_level_predictions)
-    write.csv(country_level_predictions, file.path(out_dir, "aggregated", paste0("aggregated_predictions_", this_year, "_", str_pad(this_month, 2, pad="0"),  ".csv")), row.names=F)
-
-    return(these_predictions)
-  }
+  these_predictions[, year:=this_year]
+  these_predictions  <- merge(these_predictions, prediction_cells, by="cellnumber", all=T)
+  
+  # transform
+  these_predictions <- dcast.data.table(these_predictions, cellnumber + iso3 +  year + month ~ metric, value.var = "final_prediction")
+  these_predictions <- merge(these_predictions, stock_and_flow, by=c("iso3", "year", "month"), all.x=T)
+  
+  ## Metric-specific transformations
+  these_predictions  <- these_predictions[, list(iso3, year, month, time, cellnumber,
+                                                 nat_access,
+                                                 access = plogis(emp_nat_access + emp_access_dev),
+                                                 use = plogis(emp_nat_access + emp_access_dev - emp_use_gap),
+                                                 nat_percapita_nets,
+                                                 percapita_nets = pmax(0, nat_percapita_nets + percapita_net_dev)
+  )]
+  these_predictions[, access_dev:= access-nat_access]
+  these_predictions[, use_gap:=access-use]
+  these_predictions[, percapita_net_dev:=percapita_nets - nat_percapita_nets]
+  
+  ## Find means over country and continent
+  these_predictions <- merge(these_predictions, population, by=c("year", "cellnumber"), all.x=T)
+  
+  # set national values to NA for consistency with remainder of dataset
+  these_predictions[is.na(pop), nat_access:=NA]
+  these_predictions[is.na(pop), nat_percapita_nets:=NA]
+  
+  country_level_predictions <- these_predictions[, list(nat_access=weighted.mean(nat_access, pop, na.rm=T),
+                                                        access = weighted.mean(access, pop, na.rm=T),
+                                                        access_dev = weighted.mean(access_dev, pop, na.rm=T),
+                                                        use = weighted.mean(use, pop, na.rm=T),
+                                                        use_gap = weighted.mean(use_gap, pop, na.rm=T),
+                                                        nat_percapita_nets= weighted.mean(nat_percapita_nets, pop, na.rm=T),
+                                                        percapita_nets = weighted.mean(percapita_nets, pop, na.rm=T),
+                                                        percapita_net_dev = weighted.mean(percapita_net_dev, pop, na.rm=T),
+                                                        pop=sum(pop, na.rm=T)
+  ),
+  by=list(iso3, year, month, time)
+  ]
+  country_level_predictions <- country_level_predictions[iso3 %in% unique(stock_and_flow$iso3)]
+  
+  continent_level_predictions <- these_predictions[, list(time=mean(time, na.rm=T),
+                                                          nat_access=weighted.mean(nat_access, pop, na.rm=T),
+                                                          access = weighted.mean(access, pop, na.rm=T),
+                                                          access_dev = weighted.mean(access_dev, pop, na.rm=T),
+                                                          use = weighted.mean(use, pop, na.rm=T),
+                                                          use_gap = weighted.mean(use_gap, pop, na.rm=T),
+                                                          nat_percapita_nets= weighted.mean(nat_percapita_nets, pop, na.rm=T),
+                                                          percapita_nets = weighted.mean(percapita_nets, pop, na.rm=T),
+                                                          percapita_net_dev = weighted.mean(percapita_net_dev, pop, na.rm=T),
+                                                          pop=sum(pop, na.rm=T)
+  ),
+  by=list(year, month)
+  ]
+  continent_level_predictions[, iso3:="AFR"]
+  country_level_predictions <- rbind(continent_level_predictions, country_level_predictions)
+  country_level_predictions <- country_level_predictions[, order(iso3, year, month)]
+  write.csv(country_level_predictions, file.path(out_dir, "aggregated", paste0("aggregated_predictions_", this_year, ".csv")), row.names=F)
+  
+  # ncores <- detectCores()
+  # print(paste("--> Machine has", ncores, "cores available"))
+  # dopar_core_count <- min(as.integer(floor(ncores/2)), length(thisyear_covs))
+  # print(paste("Splitting into", dopar_core_count, "cores"))
+  # registerDoParallel(dopar_core_count)
+  # 
+  # formatted_predictions <- foreach(these_covs=thisyear_covs, .combine=rbind) %dopar%{
+  #   this_month <- unique(these_covs$month)
+  #   print(paste("Predicting for month", this_month))
+  #   
+  #   
+  # }
   
   print("Prediction and transformation memory:")
   print(mem_used())
   
   rm(thisyear_covs, inla_outputs_for_prediction)
   
-  for_data_comparison <- formatted_predictions[cellnumber %in% unique(survey_data$cellnumber)]
+  for_data_comparison <- these_predictions[cellnumber %in% unique(survey_data$cellnumber)]
   write.csv(for_data_comparison, file.path(out_dir, paste0("data_predictions_wide_", this_year, ".csv")), row.names=F)
   rm(for_data_comparison)
   
   print("Predictions and transformations complete.")
   
   print("Finding annual means and converting to raster")
-  annual_predictions <- formatted_predictions[, list(nat_access=mean(nat_access, na.rm=F),
+  annual_predictions <- these_predictions[, list(nat_access=mean(nat_access, na.rm=F),
                                                  access = mean(access, na.rm=F),
                                                  access_dev = mean(access_dev, na.rm=F),
                                                  use = mean(use, na.rm=F),
@@ -251,7 +286,7 @@ if (Sys.getenv("run_individually")!=""){
   if(Sys.getenv("input_dir")=="") {
     this_year <- 2021
     input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
-    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200420_BMGF_ITN_C1.00_R1.00_V2_test_new_prediction/"
+    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200418_BMGF_ITN_C1.00_R1.00_V2/"
     indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2/for_cube"
     main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200420_BMGF_ITN_C1.00_R1.00_V2_test_new_prediction/"
     static_cov_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/20200401/static_covariates.csv"
@@ -272,7 +307,7 @@ if (Sys.getenv("run_individually")!=""){
   
   
   predict_rasters(input_dir, indicators_indir, main_indir, static_cov_dir, annual_cov_dir, dynamic_cov_dir, main_outdir, func_dir, this_year=this_year)
-  # prof <- lineprof(predict_rasters(input_dir, indicators_indir, main_indir, cov_dir, main_outdir, func_dir, this_year=this_year))
+  # prof <- lineprof(predict_rasters(input_dir, indicators_indir, main_indir, static_cov_dir, annual_cov_dir, dynamic_cov_dir, main_outdir, func_dir, this_year=this_year))
   
 }
 

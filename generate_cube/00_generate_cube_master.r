@@ -27,7 +27,7 @@ package_load(c("zoo","raster","VGAM", "doParallel", "data.table", "lubridate", "
                "rgdal", "INLA", "RColorBrewer", "cvTools", "boot", "stringr", "dismo", "gbm", "pryr", "survey"))
 
 # current dsub:
-# dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-highmem-64 --disk-size 400 --boot-disk-size 50 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20200401 indicators_indir=gs://map_users/amelia/itn/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2/for_cube survey_indir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20200408 func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input CODE=gs://map_users/amelia/itn/code/generate_cube/00_generate_cube_master.r --output-recursive main_dir=gs://map_users/amelia/itn/itn_cube/results/20200420_BMGF_ITN_C1.00_R1.00_V2_test_new_prediction --command 'Rscript ${CODE}'
+# dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-highmem-64 --disk-size 400 --boot-disk-size 50 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20200401 indicators_indir=gs://map_users/amelia/itn/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2/for_cube survey_indir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20200408 func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input CODE=gs://map_users/amelia/itn/code/generate_cube/00_generate_cube_master.r --output-recursive main_dir=gs://map_users/amelia/itn/itn_cube/results/20200422_BMGF_ITN_C1.00_R1.00_V2_access_dev_uncertainty --command 'Rscript ${CODE}'
 
 ##  Environment Prep  ------------------------------------------------------------
 input_dir <- Sys.getenv("input_dir")
@@ -41,7 +41,7 @@ indicators_indir <- Sys.getenv("indicators_indir")
 start_year <- 2000
 end_year <- 2021
 
-save_uncertainty <- F # set to TRUE when you want the ability to pull posterior samples from INLA
+save_uncertainty <- T # set to TRUE when you want the ability to pull posterior samples from INLA
 
 ## Prep Data ## ------------------------------------------------------------
 print("STEP 1: Preparing input data")
@@ -81,9 +81,9 @@ time_passed(step_3_tic, step_3_toc)
 print("Stepwise times:")
 print("Step 1: Input Data Prep")
 time_passed(step_1_tic, step_1_toc)
-print("Step 2: Input Data Prep")
+print("Step 2: Preparing Covariates")
 time_passed(step_2_tic, step_2_toc)
-print("Step 3: Input Data Prep")
+print("Step 3: Running Regressions")
 time_passed(step_3_tic, step_3_toc)
 # print("Step 4: Input Data Prep")
 # time_passed(step_4_tic, step_4_toc)
