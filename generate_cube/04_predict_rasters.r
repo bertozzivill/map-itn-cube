@@ -149,6 +149,8 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   })
   )
   
+  rm(thisyear_covs, inla_outputs_for_prediction)
+  
   these_predictions[, year:=this_year]
   these_predictions  <- merge(these_predictions, prediction_cells, by="cellnumber", all=T)
   
@@ -204,7 +206,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   ]
   continent_level_predictions[, iso3:="AFR"]
   country_level_predictions <- rbind(continent_level_predictions, country_level_predictions)
-  country_level_predictions <- country_level_predictions[, order(iso3, year, month)]
+  country_level_predictions <- country_level_predictions[order(iso3, year, month)]
   write.csv(country_level_predictions, file.path(out_dir, "aggregated", paste0("aggregated_predictions_", this_year, ".csv")), row.names=F)
   
   # ncores <- detectCores()
@@ -222,8 +224,6 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   
   print("Prediction and transformation memory:")
   print(mem_used())
-  
-  rm(thisyear_covs, inla_outputs_for_prediction)
   
   for_data_comparison <- these_predictions[cellnumber %in% unique(survey_data$cellnumber)]
   write.csv(for_data_comparison, file.path(out_dir, paste0("data_predictions_wide_", this_year, ".csv")), row.names=F)

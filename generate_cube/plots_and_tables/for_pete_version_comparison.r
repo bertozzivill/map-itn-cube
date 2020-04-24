@@ -81,11 +81,13 @@ survey_data <- fread(file.path(main_dir, scenario_names[[1]], "01_survey_summary
 
 
 all_scenarios <- rbindlist(lapply(names(scenario_names), function(this_name){
-  estimates <- fread(file.path(main_dir, scenario_names[[this_name]], "04_predictions", "national_time_series_2000_2021.csv"))
-  estimates <- estimates[iso3 %in% unique(stock_and_flow$iso3)]
-  estimates <- merge(estimates, time_map, all.x=T)
+  fnames <- list.files(file.path(main_dir, scenario_names[[this_name]], "04_predictions", "aggregated"), full.names = T)
+  estimates <- rbindlist(lapply(fnames, fread))
   estimates[, scenario:=this_name]
 }))
+
+all_scenarios <- melt(all_scenarios, id.vars=c("scenario", "iso3", "year", "month", "time", "pop"),
+                      variable.name="type")
 
 all_scenarios_quarterly <- copy(all_scenarios)
 all_scenarios_quarterly[, quarter:=floor((month-1)/3)+1]
@@ -97,7 +99,7 @@ all_scenarios_annual <- all_scenarios[, list(value=mean(value)),
                                     by=list(scenario,iso3, type, year)]
 all_scenarios_annual[, time:=year]
 
-annual_comparison_plot <- ggplot(all_scenarios_annual[type=="use" & year>=2015 & year<2021], aes(x=time))+
+annual_comparison_plot <- ggplot(all_scenarios_annual[type=="use" & year>2000 &  year<2021], aes(x=time))+
                                               geom_line(aes(color=scenario, y=value), size=1) +
                                               # geom_linerange(data=survey_data, aes(x=date, ymin=use_mean-1.96*use_se, ymax=use_mean+1.96*use_se)) + 
                                               # geom_point(data=survey_data, aes(x=date, y=use_mean)) +
@@ -136,7 +138,7 @@ write.csv(for_noor_all, file=file.path(comparison_dir, "itn_coverage_by_scenario
 for_regions <- fread(pop_fname)
 for_panels <- fread(file.path(comparison_dir, "manual_mass_campaign_categories.csv"))
 
-cov_compare_2020 <- all_scenarios_annual[year==2020 & type=="use"]
+cov_compare_2020 <- all_scenarios_annual[type=="use"]
 baseline_name <- names(scenario_names)[[1]]
 
 cov_compare_2020 <- merge(cov_compare_2020[!scenario %in% baseline_name, 
@@ -147,7 +149,7 @@ cov_compare_2020 <- merge(cov_compare_2020[!scenario %in% baseline_name,
 cov_compare_2020 <- melt(cov_compare_2020, id.vars=c("type", "year", "scenario", "iso3"),
                          variable.name="scenario_type", value.name="itn_use")
 cov_compare_2020[, scenario_type:=factor(scenario_type, levels=c("baseline", "reduced"),
-                 labels=c("Baseline", "Routine"))]
+                 labels=c("Routine + Mass", "Routine Only"))]
 
 for_regions <- unique(for_regions[iso3 %in% unique(cov_compare_2020$iso3),
                                   list(iso3, who_region, who_region_subregion)])
@@ -160,13 +162,15 @@ cov_compare_2020 <- merge(cov_compare_2020, for_panels)
 cov_compare_2020[, last_mass_campaign:=as.character(last_mass_campaign)]
 cov_compare_2020[last_mass_campaign=="2020", last_mass_campaign:="2020 (Planned)"]
 
-ggplot(cov_compare_2020[reduction_label %in% c("100%")], aes(x=scenario_type, y=itn_use,
+
+for_plot <- cov_compare_2020[reduction_label %in% c("100%") & year==2020]
+ggplot(for_plot, aes(x=scenario_type, y=itn_use,
                              color=last_mass_campaign,
                              group=interaction(iso3, reduction_label))) +
   geom_line() +
-  geom_text(data=cov_compare_2020[scenario_type=="Baseline"], aes(label=iso3),
+  geom_text(data=for_plot[scenario_type=="Routine + Mass"], aes(label=iso3),
             x=0.9) +
-  geom_text(data=cov_compare_2020[scenario_type!="Baseline" & 
+  geom_text(data=for_plot[scenario_type!="Routine + Mass" & 
                                     reduction_label %in% c("100%")], aes(label=iso3),
             x=2.1) +
   guides(color = FALSE # , linetype=guide_legend("% Reduction\nin Routine Capacity")
@@ -174,9 +178,27 @@ ggplot(cov_compare_2020[reduction_label %in% c("100%")], aes(x=scenario_type, y=
   facet_grid(.~last_mass_campaign) +
   theme_light() + 
   labs(x="",
-       y="ITN Coverage") +
+       y="2020 ITN Coverage") +
   scale_x_discrete(expand=c(0.1, 0.1)) + 
   theme(axis.text.x = element_text(angle=45, hjust=1))
+
+
+for_plot <- cov_compare_2020[reduction_label %in% c("100%") & year %in% 2019:2020]
+ggplot(for_plot, aes(x=year, y=itn_use,
+                     color=last_mass_campaign,
+                     group=interaction(iso3, reduction_label))) +
+  geom_line() +
+  # geom_text(data=for_plot[scenario_type=="Routine + Mass"], aes(label=iso3), x=0.9) +
+  # geom_text(data=for_plot[scenario_type!="Routine + Mass" &  reduction_label %in% c("100%")], aes(label=iso3),  x=2.1) +
+  guides(color = FALSE # , linetype=guide_legend("% Reduction\nin Routine Capacity")
+  ) + 
+  facet_grid(.~last_mass_campaign) +
+  theme_light() + 
+  labs(x="",
+       y="2020 ITN Coverage") +
+  # scale_x_discrete(expand=c(0.1, 0.1)) + 
+  theme(axis.text.x = element_text(angle=45, hjust=1))
+
 
 
 # append to MAP comparison spreadsheet
