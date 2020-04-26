@@ -12,6 +12,7 @@ library(MapSuite)
 library(raster)
 library(rasterVis)
 library(gridExtra)
+library(wesanderson)
 
 rm(list=ls())
 
@@ -149,7 +150,7 @@ cov_compare_2020 <- merge(cov_compare_2020[!scenario %in% baseline_name,
 cov_compare_2020 <- melt(cov_compare_2020, id.vars=c("type", "year", "scenario", "iso3"),
                          variable.name="scenario_type", value.name="itn_use")
 cov_compare_2020[, scenario_type:=factor(scenario_type, levels=c("baseline", "reduced"),
-                 labels=c("Routine + Mass", "Routine Only"))]
+                 labels=c("BAU", "Routine"))]
 
 for_regions <- unique(for_regions[iso3 %in% unique(cov_compare_2020$iso3),
                                   list(iso3, who_region, who_region_subregion)])
@@ -163,39 +164,41 @@ cov_compare_2020[, last_mass_campaign:=as.character(last_mass_campaign)]
 cov_compare_2020[last_mass_campaign=="2020", last_mass_campaign:="2020 (Planned)"]
 
 
-for_plot <- cov_compare_2020[reduction_label %in% c("100%") & year==2020]
-ggplot(for_plot, aes(x=scenario_type, y=itn_use,
-                             color=last_mass_campaign,
-                             group=interaction(iso3, reduction_label))) +
-  geom_line() +
-  geom_text(data=for_plot[scenario_type=="Routine + Mass"], aes(label=iso3),
-            x=0.9) +
-  geom_text(data=for_plot[scenario_type!="Routine + Mass" & 
-                                    reduction_label %in% c("100%")], aes(label=iso3),
-            x=2.1) +
-  guides(color = FALSE # , linetype=guide_legend("% Reduction\nin Routine Capacity")
-         ) + 
-  facet_grid(.~last_mass_campaign) +
-  theme_light() + 
-  labs(x="",
-       y="2020 ITN Coverage") +
-  scale_x_discrete(expand=c(0.1, 0.1)) + 
-  theme(axis.text.x = element_text(angle=45, hjust=1))
+for_plot <- cov_compare_2020[reduction_label %in% c("75%") & year==2020]
 
+pdf(file.path(comparison_dir, "for_paper_lineplots.pdf"), width=12, height=8)
+lineplots <- 
+  ggplot(for_plot, aes(x=scenario_type, y=itn_use,
+                             color=custom_region,
+                             group=interaction(iso3, reduction_label))) +
+                geom_line() +
+                geom_text(data=for_plot[scenario_type=="BAU"], aes(label=iso3),
+                          x=0.9) +
+                geom_text(data=for_plot[scenario_type!="BAU"], aes(label=iso3),
+                          x=2.1) +
+                # guides(color = FALSE # , linetype=guide_legend("% Reduction\nin Routine Capacity")) + 
+                scale_color_manual(values=wes_palette(n=4, name="Cavalcanti1")) + 
+                facet_grid(.~last_mass_campaign) +
+                theme_light() + 
+                labs(x="",
+                     y="2020 ITN Coverage") 
+                # scale_x_discrete(expand=c(0.1, 0.1)) + 
+                # theme(axis.text.x = element_text(angle=45, hjust=1))
+print(lineplots)
+graphics.off()
 
 for_plot <- cov_compare_2020[reduction_label %in% c("100%") & year %in% 2019:2020]
 ggplot(for_plot, aes(x=year, y=itn_use,
-                     color=last_mass_campaign,
-                     group=interaction(iso3, reduction_label))) +
+                     color=scenario_type,
+                     group=interaction(iso3, scenario_type))) +
   geom_line() +
   # geom_text(data=for_plot[scenario_type=="Routine + Mass"], aes(label=iso3), x=0.9) +
   # geom_text(data=for_plot[scenario_type!="Routine + Mass" &  reduction_label %in% c("100%")], aes(label=iso3),  x=2.1) +
-  guides(color = FALSE # , linetype=guide_legend("% Reduction\nin Routine Capacity")
-  ) + 
+  # guides(color = FALSE # , linetype=guide_legend("% Reduction\nin Routine Capacity")) + 
   facet_grid(.~last_mass_campaign) +
   theme_light() + 
   labs(x="",
-       y="2020 ITN Coverage") +
+       y="ITN Coverage") +
   # scale_x_discrete(expand=c(0.1, 0.1)) + 
   theme(axis.text.x = element_text(angle=45, hjust=1))
 
