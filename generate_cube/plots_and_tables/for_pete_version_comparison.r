@@ -164,9 +164,10 @@ cov_compare_2020[, last_mass_campaign:=as.character(last_mass_campaign)]
 cov_compare_2020[last_mass_campaign=="2020", last_mass_campaign:="2020 (Planned)"]
 
 
-for_plot <- cov_compare_2020[reduction_label %in% c("75%") & year==2020]
+for_plot <- cov_compare_2020[reduction_label %in% c("25%") & year==2020 & last_mass_campaign=="2020 (Planned)"]
 
-pdf(file.path(comparison_dir, "for_paper_lineplots.pdf"), width=12, height=8)
+
+pdf(file.path(comparison_dir, "for_paper_lineplots.pdf"), width=6, height=8)
 lineplots <- 
   ggplot(for_plot, aes(x=scenario_type, y=itn_use,
                              color=custom_region,
@@ -176,9 +177,10 @@ lineplots <-
                           x=0.9) +
                 geom_text(data=for_plot[scenario_type!="BAU"], aes(label=iso3),
                           x=2.1) +
-                # guides(color = FALSE # , linetype=guide_legend("% Reduction\nin Routine Capacity")) + 
+                guides(color = FALSE # , linetype=guide_legend("% Reduction\nin Routine Capacity")
+                       ) + 
                 scale_color_manual(values=wes_palette(n=4, name="Cavalcanti1")) + 
-                facet_grid(.~last_mass_campaign) +
+                # facet_grid(.~custom_region) +
                 theme_light() + 
                 labs(x="",
                      y="2020 ITN Coverage") 
