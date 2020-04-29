@@ -164,7 +164,7 @@ cov_compare_2020[, last_mass_campaign:=as.character(last_mass_campaign)]
 cov_compare_2020[last_mass_campaign=="2020", last_mass_campaign:="2020 (Planned)"]
 
 
-for_plot <- cov_compare_2020[reduction_label %in% c("25%") & year==2020 & last_mass_campaign=="2020 (Planned)"]
+for_plot <- cov_compare_2020[reduction_label %in% c("100%") & year==2020 & last_mass_campaign=="2020 (Planned)"]
 
 
 pdf(file.path(comparison_dir, "for_paper_lineplots.pdf"), width=6, height=8)
