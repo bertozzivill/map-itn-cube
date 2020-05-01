@@ -65,6 +65,16 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   print("inla load:")
   print(mem_used())
   
+  # determine how many covariate matrices need to be uniquely saved
+  inla_cov_names <- lapply(inla_outputs_for_prediction, function(this_model){
+    return(rownames(this_model$fixed))
+  })
+  find_overlap <- Venn(inla_cov_names)
+  communal_covs <- overlap(find_overlap)
+  all_inla_cov_names <- unite(find_overlap)
+  save_covs_separately <- ifelse(length(communal_covs)==length(all_inla_cov_names), F, T)
+  rm(inla_cov_names, communal_covs)
+  
   # load name maps and stock and flow outputs
   iso_gaul_map<-fread(file.path(input_dir, "general/iso_gaul_map.csv"))
   setnames(iso_gaul_map, c("GAUL_CODE", "COUNTRY_ID", "NAME"), c("gaul", "iso3", "country"))
@@ -86,9 +96,26 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   thisyear_covs <- merge(thisyear_covs, fread(dynamic_cov_dir),
                          by=c("cellnumber", "year"), all=T)
   
+  thisyear_covs[, "Intercept":=1]
   print("splitting")
   thisyear_covs <- split(thisyear_covs, by="month")
   
+  # convert to simplified matrices for prediction
+  if (save_covs_separately){
+    stop("Different regressions have different covariates! You have to come up with a way to save their prediction matrices separately")
+  }else{
+    print("converting to matrix for prediction")
+    # in case months get out of order somehow
+    pred_cov_names <- unlist(lapply(thisyear_covs, function(this_df){
+      return(unique(this_df$month))
+    }), use.names=F)
+    
+    thisyear_covs <- lapply(thisyear_covs, function(this_df){
+      return(as.matrix(this_df[, all_inla_cov_names, with=F]))
+    })
+  }
+  
+
   print("covariate load:")
   print(mem_used())
   
@@ -134,6 +161,33 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   
   ## Predict output variables  ## ---------------------------------------------------------
 
+  predict_fixed <- function(covs, fe){
+    return(data.table(fixed= covs %*% fe))
+  }
+  
+  idx <- 1
+  this_name <- names(inla_outputs_for_prediction)[[idx]]
+  this_model <- inla_outputs_for_prediction[[idx]]
+  
+  fixed_effects <- this_model[["fixed"]]
+  random_effects <- this_model[["random"]]
+  
+  base_predictions <- copy(prediction_cells)
+  base_predictions[, random:= drop(this_model[["A_matrix"]] %*% random_effects$mean)]
+  
+  these_predictions <- lapply(thisyear_covs, predict_fixed, fe=fixed_effects$mean)
+  these_predictions <- rbindlist(lapply(names(these_predictions), function(month_idx){
+    named_preds <- cbind(base_predictions, these_predictions[[month_idx]])
+    named_preds[, month:=month_idx]
+    return(named_preds)
+  } ))
+  setnames(these_predictions, "fixed.V1", "fixed")
+  
+  these_predictions[, full:= fixed + random]
+  these_predictions[, final_prediction := inv_ihs(full, theta=this_model[["ihs_theta"]])] 
+  these_predictions[, metric:=ifelse(this_name=="percapita_net_dev", this_name, paste0("emp_", this_name))]
+  
+  
   # main prediction, by month
   these_predictions <- rbindlist(lapply(1:length(inla_outputs_for_prediction), function(idx){
     this_name <- names(inla_outputs_for_prediction)[[idx]]
@@ -281,18 +335,29 @@ if (Sys.getenv("run_individually")!=""){
     lapply(package_list, library, character.only=T)
   }
   
-  package_load(c("zoo", "VGAM", "raster", "doParallel", "data.table", "rgdal", "INLA", "RColorBrewer", "cvTools", "boot", "stringr", "dismo", "gbm", "pryr"))
+  package_load(c("zoo", "VGAM", "raster", "doParallel", "data.table", "rgdal", "INLA", "RColorBrewer", "cvTools", "boot", "stringr", "dismo", "gbm", "pryr", "RVenn"))
   
   if(Sys.getenv("input_dir")=="") {
+    # this_year <- 2021
+    # input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
+    # main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200420_BMGF_ITN_C1.00_R1.00_V2_test_new_prediction/"
+    # indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2/for_cube"
+    # main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200430_BMGF_ITN_C1.00_R1.00_V2_test_uncertainty_prop/"
+    # static_cov_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/20200401/static_covariates.csv"
+    # annual_cov_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/20200401/annual_covariates.csv"
+    # dynamic_cov_dir <- paste0("/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/20200401/dynamic_covariates/dynamic_", this_year, ".csv")
+    # func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
+    
     this_year <- 2021
-    input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
-    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200418_BMGF_ITN_C1.00_R1.00_V2/"
-    indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2/for_cube"
-    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200420_BMGF_ITN_C1.00_R1.00_V2_test_new_prediction/"
-    static_cov_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/20200401/static_covariates.csv"
-    annual_cov_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/20200401/annual_covariates.csv"
-    dynamic_cov_dir <- paste0("/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/20200401/dynamic_covariates/dynamic_", this_year, ".csv")
+    input_dir <- "~/Desktop/cube_temp/"
+    main_indir <- "~/Desktop/cube_temp/cube_20200420_BMGF_ITN_C1.00_R1.00_V2_test_new_prediction/"
+    indicators_indir <- "~/Desktop/cube_temp/stockflow_20200418_BMGF_ITN_C1.00_R1.00_V2/for_cube"
+    main_outdir <- "~/Desktop/cube_temp/20200430_BMGF_ITN_C1.00_R1.00_V2_test_uncertainty_prop/"
+    static_cov_dir <- "~/Desktop/cube_temp/covariates/20200401/static_covariates.csv"
+    annual_cov_dir <- "~/Desktop/cube_temp/covariates/20200401/annual_covariates.csv"
+    dynamic_cov_dir <- paste0("~/Desktop/cube_temp/covariates/20200401/dynamic_covariates/dynamic_", this_year, ".csv")
     func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
+    
   } else {
     this_year <- commandArgs(trailingOnly=TRUE)[1]
     input_dir <- Sys.getenv("input_dir")

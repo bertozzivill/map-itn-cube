@@ -169,22 +169,7 @@ run_inla <- function(data, outcome_var, cov_vars, start_year, end_year, temporal
   
 }
 
-predict_inla <- function(model, covs){
-  fixed_effects <- model[["fixed"]]
-  random_effects <- model[["random"]]
-  predicted_random <- drop(model[["A_matrix"]] %*% random_effects$mean)
 
-  covs[, "Intercept":=1]
-  predictions <- data.table(cellnumber=covs$cellnumber)
-  predictions[, fixed:= as.matrix(covs[, rownames(fixed_effects), with=F]) %*% fixed_effects$mean]
-  predictions[, random:= predicted_random]
-  predictions[, full:= fixed + random]
-  predictions[, final_prediction := inv_ihs(full, theta=model[["ihs_theta"]])] # TODO: confirm the inverse ihs function is correct
-  
-  # predictions <- merge(predictions, prediction_cells[, list(cellnumber=row_id, iso3)], by="cellnumber", all=T)
-  return(predictions)
-  
-}
 
 
 #### For aggregating rasters to national values
