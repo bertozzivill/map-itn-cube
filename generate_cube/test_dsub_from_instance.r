@@ -13,15 +13,24 @@ rm(list=ls())
 
 
 years <- 2000:2021
-orig_labels <- c( "20200418_BMGF_ITN_C1.00_R1.00_V2",
+orig_cube_labels <- c( "20200418_BMGF_ITN_C1.00_R1.00_V2",
                   "20200418_BMGF_ITN_C0.00_R1.00_V2",
                   "20200418_BMGF_ITN_C0.00_R0.75_V2",
                   "20200418_BMGF_ITN_C0.00_R0.50_V2",
                   "20200418_BMGF_ITN_C0.00_R0.25_V2")
+orig_stockflow_labels <- orig_cube_labels
 
-suffix <- "_new_prediction"
-to_submit <- data.table(expand.grid(years, orig_labels))
-names(to_submit) <- c("year", "label")
+years <- 2021
+orig_cube_labels <- c("20200420_BMGF_ITN_C1.00_R1.00_V2_test_new_prediction")
+orig_stockflow_labels <- c("20200418_BMGF_ITN_C1.00_R1.00_V2")
+
+stockflow_map <- data.table(cube_label=orig_cube_labels,
+                            stockflow_label=orig_stockflow_labels)
+
+suffix <- "_updated"
+to_submit <- data.table(expand.grid(years, orig_cube_labels))
+names(to_submit) <- c("year", "cube_label")
+to_submit <- merge(to_submit, stockflow_map)
 
 func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
 
@@ -60,9 +69,9 @@ for (idx in 1:nrow(to_submit)){
   
   print(paste("submitting for scenario", these_inputs$label, "and year", this_year))
   
-  stockflow_label <- these_inputs$label
-  cube_indir_label <- these_inputs$label
-  cube_outdir_label <- paste0(these_inputs$label, suffix)
+  stockflow_label <- these_inputs$stockflow_label
+  cube_indir_label <- these_inputs$cube_label
+  cube_outdir_label <- paste0(these_inputs$cube_label, suffix)
   
   output_dir_str <- paste("--output-recursive", paste0("main_outdir=", core_dir, "results/", cube_outdir_label))
   
@@ -85,6 +94,7 @@ for (idx in 1:nrow(to_submit)){
   
   full_dsub_str <- paste(dsub_str, label_str, machine_str, disk_str, boot_disk_str, logging_str, input_str, input_dir_str, output_dir_str, final_str)
   
+  # print(full_dsub_str)
   system(full_dsub_str, wait=F)
   Sys.sleep(1)
   

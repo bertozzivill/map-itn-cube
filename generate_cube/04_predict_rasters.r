@@ -11,7 +11,7 @@
 ## 
 ##############################################################################################################
 
-predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_dir, annual_cov_dir, dynamic_cov_dir, main_outdir, func_dir, this_year){
+predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_dir, annual_cov_dir, dynamic_cov_dir, main_outdir, func_dir, this_year, testing=F){
   
   this_year <- as.integer(this_year)
   print(paste("predicting for year", this_year))
@@ -54,7 +54,8 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
                           random=model_random,
                           spatial_mesh=these_outputs[["spatial_mesh"]],
                           temporal_mesh=these_outputs[["temporal_mesh"]],
-                          ihs_theta=these_outputs[["theta"]]
+                          ihs_theta=these_outputs[["theta"]],
+                          output_var=this_output
       )
       return(new_outputs)
     })
@@ -66,14 +67,17 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   print(mem_used())
   
   # determine how many covariate matrices need to be uniquely saved
-  inla_cov_names <- lapply(inla_outputs_for_prediction, function(this_model){
-    return(rownames(this_model$fixed))
-  })
-  find_overlap <- Venn(inla_cov_names)
-  communal_covs <- overlap(find_overlap)
-  all_inla_cov_names <- unite(find_overlap)
-  save_covs_separately <- ifelse(length(communal_covs)==length(all_inla_cov_names), F, T)
-  rm(inla_cov_names, communal_covs)
+  # TEMP: don't invoke b/c the cluster doesn't like RVenn
+  # inla_cov_names <- lapply(inla_outputs_for_prediction, function(this_model){
+  #   return(rownames(this_model$fixed))
+  # })
+  # find_overlap <- Venn(inla_cov_names)
+  # communal_covs <- overlap(find_overlap)
+  # all_inla_cov_names <- unite(find_overlap)
+  # save_covs_separately <- ifelse(length(communal_covs)==length(all_inla_cov_names), F, T)
+  # rm(inla_cov_names, communal_covs)
+  save_covs_separately <- F
+  all_inla_cov_names <- rownames(inla_outputs_for_prediction[[1]]$fixed)
   
   # load name maps and stock and flow outputs
   iso_gaul_map<-fread(file.path(input_dir, "general/iso_gaul_map.csv"))
@@ -99,6 +103,10 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   thisyear_covs[, "Intercept":=1]
   print("splitting")
   thisyear_covs <- split(thisyear_covs, by="month")
+  
+  if (testing){
+    thisyear_covs <- thisyear_covs[1:2]
+  }
   
   # convert to simplified matrices for prediction
   if (save_covs_separately){
@@ -131,6 +139,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   prediction_xyz <- ll_to_xyz(prediction_cells)
   prediction_cells <- merge(prediction_cells, iso_gaul_map, by="gaul", all.x=T)
   setnames(prediction_cells, "row_id", "cellnumber")
+  prediction_cells <- prediction_cells[order(cellnumber)]
   
   # make A_matrix for each output variable
   print("A_matrix")
@@ -148,6 +157,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
       )
     }
     inla_outputs_for_prediction[[output_var]][["A_matrix"]] <- A_matrix
+
   }
   rm(A_matrix, temporal_mesh, output_var)
   
@@ -165,73 +175,59 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
     return(data.table(fixed= covs %*% fe))
   }
   
-  idx <- 1
-  this_name <- names(inla_outputs_for_prediction)[[idx]]
-  this_model <- inla_outputs_for_prediction[[idx]]
+  predict_by_model <- function(this_model, covs, base_predictions){
+    fixed_effects <- this_model[["fixed"]]
+    random_effects <- this_model[["random"]]
+    
+    base_predictions[, random:= drop(this_model[["A_matrix"]] %*% random_effects$mean)]
   
-  fixed_effects <- this_model[["fixed"]]
-  random_effects <- this_model[["random"]]
+    these_predictions <- lapply(covs, predict_fixed, fe=fixed_effects$mean)
+    these_predictions <- rbindlist(lapply(names(these_predictions), function(month_idx){
+      named_preds <- cbind(base_predictions, these_predictions[[month_idx]])
+      named_preds[, month:=as.integer(month_idx)]
+      return(named_preds)
+    } ))
+    setnames(these_predictions, "fixed.V1", "fixed")
+    
+    these_predictions[, full:= fixed + random]
+    these_predictions[, final_prediction := inv_ihs(full, theta=this_model[["ihs_theta"]])] 
+    this_name <- this_model[["output_var"]]
+    these_predictions[, metric:=ifelse(this_name=="percapita_net_dev", this_name, paste0("emp_", this_name))]
+    return(these_predictions)
+  }
   
-  base_predictions <- copy(prediction_cells)
-  base_predictions[, random:= drop(this_model[["A_matrix"]] %*% random_effects$mean)]
-  
-  these_predictions <- lapply(thisyear_covs, predict_fixed, fe=fixed_effects$mean)
-  these_predictions <- rbindlist(lapply(names(these_predictions), function(month_idx){
-    named_preds <- cbind(base_predictions, these_predictions[[month_idx]])
-    named_preds[, month:=month_idx]
-    return(named_preds)
-  } ))
-  setnames(these_predictions, "fixed.V1", "fixed")
-  
-  these_predictions[, full:= fixed + random]
-  these_predictions[, final_prediction := inv_ihs(full, theta=this_model[["ihs_theta"]])] 
-  these_predictions[, metric:=ifelse(this_name=="percapita_net_dev", this_name, paste0("emp_", this_name))]
-  
-  
-  # main prediction, by month
-  these_predictions <- rbindlist(lapply(1:length(inla_outputs_for_prediction), function(idx){
-    this_name <- names(inla_outputs_for_prediction)[[idx]]
-    predictions_by_month <- lapply(thisyear_covs, function(these_covs){
-      this_month <- unique(these_covs$month)
-      print(paste("Predicting", this_name, "for month", this_month))
-      this_month_pred <- predict_inla(inla_outputs_for_prediction[[idx]], covs=these_covs) # NA's where covariates are NA
-      this_month_pred[, month:= this_month]
-      return(this_month_pred)
-    })
-    predictions_by_month <- rbindlist(predictions_by_month)
-    predictions_by_month[, metric:=ifelse(this_name=="percapita_net_dev", this_name, paste0("emp_", this_name))]
-  })
-  )
-  
+  full_predictions <- rbindlist(lapply(inla_outputs_for_prediction, predict_by_model,
+                             covs=thisyear_covs, 
+                             base_predictions = prediction_cells))
+
   rm(thisyear_covs, inla_outputs_for_prediction)
   
-  these_predictions[, year:=this_year]
-  these_predictions  <- merge(these_predictions, prediction_cells, by="cellnumber", all=T)
+  full_predictions[, year:=this_year]
   
   # transform
-  these_predictions <- dcast.data.table(these_predictions, cellnumber + iso3 +  year + month ~ metric, value.var = "final_prediction")
-  these_predictions <- merge(these_predictions, stock_and_flow, by=c("iso3", "year", "month"), all.x=T)
+  full_predictions <- dcast.data.table(full_predictions, cellnumber + iso3 +  year + month ~ metric, value.var = "final_prediction")
+  full_predictions <- merge(full_predictions, stock_and_flow, by=c("iso3", "year", "month"), all.x=T)
   
   ## Metric-specific transformations
-  these_predictions  <- these_predictions[, list(iso3, year, month, time, cellnumber,
+  full_predictions  <- full_predictions[, list(iso3, year, month, time, cellnumber,
                                                  nat_access,
                                                  access = plogis(emp_nat_access + emp_access_dev),
                                                  use = plogis(emp_nat_access + emp_access_dev - emp_use_gap),
                                                  nat_percapita_nets,
                                                  percapita_nets = pmax(0, nat_percapita_nets + percapita_net_dev)
   )]
-  these_predictions[, access_dev:= access-nat_access]
-  these_predictions[, use_gap:=access-use]
-  these_predictions[, percapita_net_dev:=percapita_nets - nat_percapita_nets]
+  full_predictions[, access_dev:= access-nat_access]
+  full_predictions[, use_gap:=access-use]
+  full_predictions[, percapita_net_dev:=percapita_nets - nat_percapita_nets]
   
   ## Find means over country and continent
-  these_predictions <- merge(these_predictions, population, by=c("year", "cellnumber"), all.x=T)
+  full_predictions <- merge(full_predictions, population, by=c("year", "cellnumber"), all.x=T)
   
   # set national values to NA for consistency with remainder of dataset
-  these_predictions[is.na(pop), nat_access:=NA]
-  these_predictions[is.na(pop), nat_percapita_nets:=NA]
+  full_predictions[is.na(pop), nat_access:=NA]
+  full_predictions[is.na(pop), nat_percapita_nets:=NA]
   
-  country_level_predictions <- these_predictions[, list(nat_access=weighted.mean(nat_access, pop, na.rm=T),
+  country_level_predictions <- full_predictions[, list(nat_access=weighted.mean(nat_access, pop, na.rm=T),
                                                         access = weighted.mean(access, pop, na.rm=T),
                                                         access_dev = weighted.mean(access_dev, pop, na.rm=T),
                                                         use = weighted.mean(use, pop, na.rm=T),
@@ -245,7 +241,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   ]
   country_level_predictions <- country_level_predictions[iso3 %in% unique(stock_and_flow$iso3)]
   
-  continent_level_predictions <- these_predictions[, list(time=mean(time, na.rm=T),
+  continent_level_predictions <- full_predictions[, list(time=mean(time, na.rm=T),
                                                           nat_access=weighted.mean(nat_access, pop, na.rm=T),
                                                           access = weighted.mean(access, pop, na.rm=T),
                                                           access_dev = weighted.mean(access_dev, pop, na.rm=T),
@@ -279,14 +275,14 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   print("Prediction and transformation memory:")
   print(mem_used())
   
-  for_data_comparison <- these_predictions[cellnumber %in% unique(survey_data$cellnumber)]
+  for_data_comparison <- full_predictions[cellnumber %in% unique(survey_data$cellnumber)]
   write.csv(for_data_comparison, file.path(out_dir, paste0("data_predictions_wide_", this_year, ".csv")), row.names=F)
   rm(for_data_comparison)
   
   print("Predictions and transformations complete.")
   
   print("Finding annual means and converting to raster")
-  annual_predictions <- these_predictions[, list(nat_access=mean(nat_access, na.rm=F),
+  annual_predictions <- full_predictions[, list(nat_access=mean(nat_access, na.rm=F),
                                                  access = mean(access, na.rm=F),
                                                  access_dev = mean(access_dev, na.rm=F),
                                                  use = mean(use, na.rm=F),
@@ -326,7 +322,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
 
 if (Sys.getenv("run_individually")!=""){
   
-# dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-geospatial  --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-4 --disk-size 400 --boot-disk-size 50 --logging gs://map_users/amelia/itn/itn_cube/logs  --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data  indicators_indir=gs://map_users/amelia/itn/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2/for_cube  main_indir=gs://map_users/amelia/itn/itn_cube/results/20200420_BMGF_ITN_C1.00_R1.00_V2_test_new_prediction/ func_dir=gs://map_users/amelia/itn/code/generate_cube/   --input static_cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20200401/static_covariates.csv  annual_cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20200401/annual_covariates.csv  dynamic_cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20200401/dynamic_covariates/dynamic_${this_year}.csv  run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/04_predict_rasters.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20200420_BMGF_ITN_C1.00_R1.00_V2_test_new_prediction/ --command 'Rscript ${CODE} ${this_year}'  --tasks gs://map_users/amelia/itn/code/generate_cube/for_gcloud/batch_year_list.tsv
+# dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-geospatial  --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-4 --disk-size 400 --boot-disk-size 50 --logging gs://map_users/amelia/itn/itn_cube/logs  --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data  indicators_indir=gs://map_users/amelia/itn/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2/for_cube  main_indir=gs://map_users/amelia/itn/itn_cube/results/20200420_BMGF_ITN_C1.00_R1.00_V2_test_new_prediction/ func_dir=gs://map_users/amelia/itn/code/generate_cube/   --input static_cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20200401/static_covariates.csv  annual_cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20200401/annual_covariates.csv  dynamic_cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20200401/dynamic_covariates/dynamic_${this_year}.csv  run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/04_predict_rasters.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20200501_BMGF_ITN_C1.00_R1.00_V2_test_newer_prediction/ --command 'Rscript ${CODE} ${this_year}'  --tasks gs://map_users/amelia/itn/code/generate_cube/for_gcloud/batch_year_list.tsv
   
   package_load <- function(package_list){
     # package installation/loading
@@ -335,28 +331,29 @@ if (Sys.getenv("run_individually")!=""){
     lapply(package_list, library, character.only=T)
   }
   
-  package_load(c("zoo", "VGAM", "raster", "doParallel", "data.table", "rgdal", "INLA", "RColorBrewer", "cvTools", "boot", "stringr", "dismo", "gbm", "pryr", "RVenn"))
+  package_load(c("zoo", "VGAM", "raster", "doParallel", "data.table", "rgdal", "INLA", "RColorBrewer", "cvTools", "boot", "stringr", "dismo", "gbm", "pryr"))
   
   if(Sys.getenv("input_dir")=="") {
-    # this_year <- 2021
-    # input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
-    # main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200420_BMGF_ITN_C1.00_R1.00_V2_test_new_prediction/"
-    # indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2/for_cube"
-    # main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200430_BMGF_ITN_C1.00_R1.00_V2_test_uncertainty_prop/"
-    # static_cov_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/20200401/static_covariates.csv"
-    # annual_cov_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/20200401/annual_covariates.csv"
-    # dynamic_cov_dir <- paste0("/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/20200401/dynamic_covariates/dynamic_", this_year, ".csv")
-    # func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
-    
     this_year <- 2021
-    input_dir <- "~/Desktop/cube_temp/"
-    main_indir <- "~/Desktop/cube_temp/cube_20200420_BMGF_ITN_C1.00_R1.00_V2_test_new_prediction/"
-    indicators_indir <- "~/Desktop/cube_temp/stockflow_20200418_BMGF_ITN_C1.00_R1.00_V2/for_cube"
-    main_outdir <- "~/Desktop/cube_temp/20200430_BMGF_ITN_C1.00_R1.00_V2_test_uncertainty_prop/"
-    static_cov_dir <- "~/Desktop/cube_temp/covariates/20200401/static_covariates.csv"
-    annual_cov_dir <- "~/Desktop/cube_temp/covariates/20200401/annual_covariates.csv"
-    dynamic_cov_dir <- paste0("~/Desktop/cube_temp/covariates/20200401/dynamic_covariates/dynamic_", this_year, ".csv")
+    input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
+    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200420_BMGF_ITN_C1.00_R1.00_V2_test_new_prediction/"
+    indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2/for_cube"
+    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200430_BMGF_ITN_C1.00_R1.00_V2_test_uncertainty_prop/"
+    static_cov_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/20200401/static_covariates.csv"
+    annual_cov_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/20200401/annual_covariates.csv"
+    dynamic_cov_dir <- paste0("/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/20200401/dynamic_covariates/dynamic_", this_year, ".csv")
     func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
+    testing <- T
+    
+    # this_year <- 2021
+    # input_dir <- "~/Desktop/cube_temp/"
+    # main_indir <- "~/Desktop/cube_temp/cube_20200420_BMGF_ITN_C1.00_R1.00_V2_test_new_prediction/"
+    # indicators_indir <- "~/Desktop/cube_temp/stockflow_20200418_BMGF_ITN_C1.00_R1.00_V2/for_cube"
+    # main_outdir <- "~/Desktop/cube_temp/20200430_BMGF_ITN_C1.00_R1.00_V2_test_uncertainty_prop/"
+    # static_cov_dir <- "~/Desktop/cube_temp/covariates/20200401/static_covariates.csv"
+    # annual_cov_dir <- "~/Desktop/cube_temp/covariates/20200401/annual_covariates.csv"
+    # dynamic_cov_dir <- paste0("~/Desktop/cube_temp/covariates/20200401/dynamic_covariates/dynamic_", this_year, ".csv")
+    # func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
     
   } else {
     this_year <- commandArgs(trailingOnly=TRUE)[1]
@@ -368,10 +365,11 @@ if (Sys.getenv("run_individually")!=""){
     annual_cov_dir <- Sys.getenv("annual_cov_dir")
     dynamic_cov_dir <- Sys.getenv("dynamic_cov_dir")
     func_dir <- Sys.getenv("func_dir") # code directory for function scripts
+    testing <- F
   }
   
   
-  predict_rasters(input_dir, indicators_indir, main_indir, static_cov_dir, annual_cov_dir, dynamic_cov_dir, main_outdir, func_dir, this_year=this_year)
+  predict_rasters(input_dir, indicators_indir, main_indir, static_cov_dir, annual_cov_dir, dynamic_cov_dir, main_outdir, func_dir, this_year=this_year, testing=testing)
   # prof <- lineprof(predict_rasters(input_dir, indicators_indir, main_indir, static_cov_dir, annual_cov_dir, dynamic_cov_dir, main_outdir, func_dir, this_year=this_year))
   
 }
