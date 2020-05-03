@@ -23,10 +23,10 @@ rm(list=ls())
 years <- 2000:2019
 years_for_rel_gain <- c(2015, 2019)
 
-cube_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200412_BMGF_ITN_C0.00_R0.00/04_predictions"
-stockflow_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200412_BMGF_ITN_C0.00_R0.00"
+cube_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200418_BMGF_ITN_C1.00_R1.00_V2/04_predictions"
+stockflow_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2"
 survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200408"
-nmcp_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020/20200409/ITN_C1.00_R1.00/prepped_llins_20200409.csv"
+nmcp_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020/20200418/ITN_C1.00_R1.00/prepped_llins_20200418.csv"
 data_fname <- "../02_data_covariates.csv"
 
 shape_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/shapefiles/"
@@ -81,10 +81,10 @@ survey_panel <- ggplot(survey_summary, aes(x=main_year, y=country)) +
 
 ## Plot NMCP data with missings
 nmcp_data <- fread(nmcp_indir)
-nmcp_plot <- ggplot(nmcp_data[year<2021], aes(x=year, y=filled_llins)) +
+nmcp_plot <- ggplot(nmcp_data[year<2021], aes(x=year, y=llins)) +
                     # geom_line(aes(y=manu_llins), color="blue") + 
                     geom_line() + 
-                    geom_point(aes(color=source, shape=was_na), size=2) +
+                    geom_point(aes(color=source), size=2) +
                     scale_shape_manual(values=c(16,1)) + 
                     facet_wrap(~ISO3, scales="free_y") +
                     theme(axis.text.x = element_text(angle = 45, hjust=1)) +
@@ -182,8 +182,10 @@ npc_time_series_plot <- ggplot(accesss_npc, aes(x=time, y=nat_percapita_nets)) +
 ############ ----------------------------------------------------------------------------------------------------------------------
 
 # access and use line plots
-cube_nat_level <- fread(file.path(cube_indir, "national_time_series.csv"))
-cube_nat_level <- cube_nat_level[iso3 %in% unique(nets_in_houses_all$iso3)]
+cube_nat_level <- rbindlist(lapply(list.files(file.path(cube_indir, "aggregated"), full.names = T), fread))
+cube_nat_level <- melt(cube_nat_level, id.vars = c("iso3", "year", "month", "time", "pop"), variable.name="type")
+
+cube_nat_level <- cube_nat_level[iso3 %in% c(unique(nets_in_houses_all$iso3), "AFR")]
 cube_nat_level[, time:=year + (month-1)/12]
  
 cube_nat_level[, quarter:=floor((month-1)/3)+1]
@@ -304,68 +306,6 @@ rel_gain_plots <- lapply(years_for_rel_gain, function(this_year){
 
 
 
-############ ----------------------------------------------------------------------------------------------------------------------
-## COVID scenarios  ----------------------------------------------------------------------------------------------------------------------
-############ ----------------------------------------------------------------------------------------------------------------------
-
-# use comparative time series for 2018+
-
-version_names <- c(ITN_C0.00_R0.00="20200412_BMGF_ITN_C0.00_R0.00",
-                   ITN_C0.00_R0.25="20200409_BMGF_ITN_C0.00_R0.25",
-                   ITN_C0.00_R0.50="20200409_BMGF_ITN_C0.00_R0.50",
-                   ITN_C0.00_R0.75="20200409_BMGF_ITN_C0.00_R0.75",
-                   ITN_C1.00_R1.00="20200409_BMGF_ITN_C1.00_R1.00")
-
-all_versions <- rbindlist(lapply(names(version_names), function(this_name){
-  estimates <- fread(file.path(cube_indir, "../..", version_names[[this_name]], "04_predictions", "national_time_series.csv"))
-  estimates <- estimates[iso3 %in% unique(nets_in_houses_all$iso3)]
-  estimates[, time:=year + (month-1)/12]
-  estimates[, version:=this_name]
-}))
-
-all_versions_quarterly <- copy(all_versions)
-all_versions_quarterly[, quarter:=floor((month-1)/3)+1]
-all_versions_quarterly <- all_versions_quarterly[, list(value=mean(value),
-                                                        time=mean(time)), 
-                                                 by=list(version,iso3, type, year, quarter)]
-
-all_versions_annual <- all_versions[, list(value=mean(value)), 
-                                    by=list(version,iso3, type, year)]
-all_versions_annual[, time:=year]
-
-covid_compare_plot <- ggplot(all_versions_quarterly[year>2007 &  type=="use"], aes(x=time, y=value)) + 
-  # geom_vline(xintercept=2020) + 
-  geom_line(aes(color=version)) +
-  facet_wrap(~iso3) +
-  theme(legend.position = "bottom",
-        axis.text.x = element_text(angle=45, hjust=1)) + 
-  labs(title="COVID Scenario Comparison: ITN Use",
-       x="",
-       y="ITN Use") 
-
-percent_diff <- dcast.data.table(all_versions_annual, type + iso3 + year ~ version, value.var = "value")
-percent_diff <- melt(percent_diff, id.vars = c("type", "iso3", "year", "ITN_C1.00_R1.00"), variable.name="scenario")
-percent_diff[, perc_ratio:=value/ITN_C1.00_R1.00*100]
-percent_diff[, perc_reduction:=100-perc_ratio]
-percent_diff[, absolute_reduction:= (ITN_C1.00_R1.00-value)*100]
-
-this_percent_diff <- percent_diff[year==2020 & type=="use" & scenario=="ITN_C0.00_R0.00"]
-descending_order <- this_percent_diff[order(perc_reduction, decreasing=T)]$iso3
-this_percent_diff[, fact_iso3:= factor(iso3, levels = descending_order)]
-this_percent_diff[perc_reduction<0, perc_reduction:=0]
-this_percent_diff[absolute_reduction<0, absolute_reduction:=0]
-
-covid_barplot <- ggplot(this_percent_diff, aes(x=fact_iso3, y=perc_reduction)) + 
-                      # geom_point()
-                      geom_bar(aes(fill=absolute_reduction), stat="identity") +
-                      scale_fill_distiller(name="Absolute\nReduction", palette="YlGnBu", direction=1) + 
-                      # geom_hline(yintercept=3) + 
-                      theme(axis.text.x = element_text(angle=65, hjust=1),
-                            axis.ticks.x = element_blank()) +
-                      labs(x="",
-                           y="Percent Reduction",
-                           title="2020 Reduction in Use from Best to Worst-Case Scenario")
-
 
 ############ ----------------------------------------------------------------------------------------------------------------------
 ## Bring it all together  ----------------------------------------------------------------------------------------------------------------------
@@ -378,8 +318,6 @@ pdf(file.path(out_dir, "results_plots.pdf"), width=14, height=8)
   for (this_plot in rel_gain_plots){
     grid.arrange(this_plot)
   }
-  print(covid_compare_plot)
-  print(covid_barplot)
 graphics.off()
 
 pdf(file.path(out_dir, "methods_and_supplement_plots.pdf"), width=14, height=8)
