@@ -79,7 +79,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   save_covs_separately <- F
   all_inla_cov_names <- rownames(inla_outputs_for_prediction[[1]]$fixed)
   
-  # load name maps and stock and flow outputs
+  # load name maps 
   iso_gaul_map<-fread(file.path(input_dir, "general/iso_gaul_map.csv"))
   setnames(iso_gaul_map, c("GAUL_CODE", "COUNTRY_ID", "NAME"), c("gaul", "iso3", "country"))
   
@@ -344,16 +344,6 @@ if (Sys.getenv("run_individually")!=""){
     dynamic_cov_dir <- paste0("/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/20200401/dynamic_covariates/dynamic_", this_year, ".csv")
     func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
     testing <- T
-    
-    # this_year <- 2021
-    # input_dir <- "~/Desktop/cube_temp/"
-    # main_indir <- "~/Desktop/cube_temp/cube_20200420_BMGF_ITN_C1.00_R1.00_V2_test_new_prediction/"
-    # indicators_indir <- "~/Desktop/cube_temp/stockflow_20200418_BMGF_ITN_C1.00_R1.00_V2/for_cube"
-    # main_outdir <- "~/Desktop/cube_temp/20200430_BMGF_ITN_C1.00_R1.00_V2_test_uncertainty_prop/"
-    # static_cov_dir <- "~/Desktop/cube_temp/covariates/20200401/static_covariates.csv"
-    # annual_cov_dir <- "~/Desktop/cube_temp/covariates/20200401/annual_covariates.csv"
-    # dynamic_cov_dir <- paste0("~/Desktop/cube_temp/covariates/20200401/dynamic_covariates/dynamic_", this_year, ".csv")
-    # func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
     
   } else {
     this_year <- commandArgs(trailingOnly=TRUE)[1]

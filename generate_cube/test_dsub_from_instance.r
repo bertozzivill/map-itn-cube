@@ -20,14 +20,14 @@ orig_cube_labels <- c( "20200418_BMGF_ITN_C1.00_R1.00_V2",
                   "20200418_BMGF_ITN_C0.00_R0.25_V2")
 orig_stockflow_labels <- orig_cube_labels
 
-years <- 2021
-orig_cube_labels <- c("20200420_BMGF_ITN_C1.00_R1.00_V2_test_new_prediction")
-orig_stockflow_labels <- c("20200418_BMGF_ITN_C1.00_R1.00_V2")
+years <- 2000:2021
+orig_cube_labels <- c("20200507_BMGF_ITN_C0.00_R0.00_V2")
+orig_stockflow_labels <- c("20200507_BMGF_ITN_C0.00_R0.00_V2")
 
 stockflow_map <- data.table(cube_label=orig_cube_labels,
                             stockflow_label=orig_stockflow_labels)
 
-suffix <- "_updated"
+suffix <- ""
 to_submit <- data.table(expand.grid(years, orig_cube_labels))
 names(to_submit) <- c("year", "cube_label")
 to_submit <- merge(to_submit, stockflow_map)

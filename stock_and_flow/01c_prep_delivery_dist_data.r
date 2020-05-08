@@ -15,7 +15,7 @@ sf_countries <- fread(file.path(code_dir, "for_gcloud", "batch_country_list.tsv"
 names(sf_countries) <- "ISO3"
 
 main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020"
-date <- "20200418"
+date <- "20200507"
 
 in_dir <- file.path(main_dir, date, "inputs")
 out_dir <- file.path(main_dir, date)
@@ -94,7 +94,7 @@ new_distributions[is.na(llins), llins:=0]
 # 2016-2019: Append pre-formatted nmcp/alma/pmi blend
 ####
 
-new_distributions <- rbind(new_distributions, combined_2016_2020[year<2020, list(ISO3=iso3, year, llins=llin_nmcp_alma_pmi, source="custom")])
+new_distributions <- rbind(new_distributions, combined_2016_2020[year<2020, list(ISO3=iso3, year, llins=llin_nmcp_alma_pmi, source)])
 
 #### 
 #2021: set all distributions to zero
@@ -122,7 +122,7 @@ all_scenarios <- lapply(1:nrow(counterfactual_key), function(counterfactual_idx)
   dir.create(this_out_dir, showWarnings = F)
   
   if (this_counterfactual$mass_mult>0){
-    to_append_2020 <- combined_2016_2020[year==2020, list(ISO3=iso3, year, llins=llin_nmcp_alma_pmi, source="custom")]
+    to_append_2020 <- combined_2016_2020[year==2020, list(ISO3=iso3, year, llins=llin_nmcp_alma_pmi, source)]
   }else{
     to_append_2020 <- routine_2020[, list(ISO3=iso3, year, llins=routine_llin, source="custom")]
     to_append_2020[, llins := as.integer(round(llins*this_counterfactual$routine_mult))]
