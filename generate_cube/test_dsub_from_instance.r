@@ -20,9 +20,9 @@ orig_cube_labels <- c( "20200418_BMGF_ITN_C1.00_R1.00_V2",
                   "20200418_BMGF_ITN_C0.00_R0.25_V2")
 orig_stockflow_labels <- orig_cube_labels
 
-years <- 2000:2021
-orig_cube_labels <- c("20200507_BMGF_ITN_C0.00_R0.00_V2")
-orig_stockflow_labels <- c("20200507_BMGF_ITN_C0.00_R0.00_V2")
+years <- 2000:2019
+orig_cube_labels <- c("20200515_thru_2019")
+orig_stockflow_labels <- c("20200418_BMGF_ITN_C1.00_R1.00_V2")
 
 stockflow_map <- data.table(cube_label=orig_cube_labels,
                             stockflow_label=orig_stockflow_labels)
@@ -51,7 +51,7 @@ stockflow_dir <- "gs://map_users/amelia/itn/stock_and_flow/results/"
 core_dir <- "gs://map_users/amelia/itn/itn_cube/"
 
 # machine options
-dsub_str <- "dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-geospatial --regions europe-west1"
+dsub_str <- "dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-itn-spatial --regions europe-west1"
 label_str <- paste("--label", label)
 machine_str <- paste("--machine-type", machine_type)
 disk_str <- paste("--disk-size", disk_size)

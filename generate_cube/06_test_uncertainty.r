@@ -30,12 +30,24 @@ sample_posterior <- function(main_indir, main_outdir, save_uncertainty=T, nsamp=
     print("selecting these outputs")
     model_out <- inla_outputs[[1]][["model_output"]]
     
+    print("Model:")
+    print(model_out)
+    
+    
     to_extract_names <- c(rownames(model_out$summary.fixed), "field")
     to_extract_vals <- as.list(rep(0, length(to_extract_names)))
     names(to_extract_vals) <- to_extract_names
+    print("Names to Extract:")
+    print(to_extract_vals)
     
-    print("finding raw posterior samples")
+    print(paste("finding", nsamp, "raw posterior samples"))
+    INLA:::inla.dynload.workaround()
+    tic <- Sys.time()
     raw_samples <- inla.posterior.sample(nsamp, model_out, selection = to_extract_vals)
+    toc <- Sys.time()
+    print("Raw posterior samples found!")
+    elapsed <- toc-tic
+    print(paste("--> Time Elapsed: ", elapsed, units(elapsed)))
     
     print("formatting samples")
     formatted_samples<-lapply(1:length(raw_samples), function(samp_idx){
@@ -104,12 +116,14 @@ sample_posterior <- function(main_indir, main_outdir, save_uncertainty=T, nsamp=
 
 if (Sys.getenv("run_individually")!=""){
   
-  # dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-64 --disk-size 400 --boot-disk-size 50 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive  main_indir=gs://map_users/amelia/itn/itn_cube/results/20200501_BMGF_ITN_C1.00_R1.00_V2_with_uncertainty/ --input run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/06_test_uncertainty.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20200501_BMGF_ITN_C1.00_R1.00_V2_with_uncertainty/ --command 'Rscript ${CODE}'
+  # dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-itn-spatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-16 --disk-size 400 --boot-disk-size 50 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive  main_indir=gs://map_users/amelia/itn/itn_cube/results/20200422_BMGF_ITN_C1.00_R1.00_V2_access_dev_uncertainty/ --input run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/06_test_uncertainty.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20200422_BMGF_ITN_C1.00_R1.00_V2_access_dev_uncertainty/ --command 'Rscript ${CODE}'
   
   
   package_load <- function(package_list){
     # package installation/loading
     new_packages <- package_list[!(package_list %in% installed.packages()[,"Package"])]
+    print("installing the following packages:")
+    print(new_packages)
     if(length(new_packages)) install.packages(new_packages)
     lapply(package_list, library, character.only=T)
   }
@@ -118,8 +132,8 @@ if (Sys.getenv("run_individually")!=""){
   
   if(Sys.getenv("main_indir")=="") {
     input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
-    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200404_ToT_no_excess_stock/"
-    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200404_ToT_no_excess_stock/"
+    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200422_BMGF_ITN_C1.00_R1.00_V2_access_dev_uncertainty/"
+    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200422_BMGF_ITN_C1.00_R1.00_V2_access_dev_uncertainty/"
     func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
   } else {
     main_indir <- Sys.getenv("main_indir")
@@ -127,7 +141,7 @@ if (Sys.getenv("run_individually")!=""){
     save_uncertainty <- T
   }
   
-  sample_posterior(main_indir, main_outdir, save_uncertainty=T, nsamp=100)
+  sample_posterior(main_indir, main_outdir, save_uncertainty=T, nsamp=1)
   
 }
 

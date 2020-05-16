@@ -27,7 +27,7 @@ pop_dir <- "gs://gbd2020/Populations/Output_Pop_Unmasked"
 cov_outlabel <- "20200401"
 
 # machine options
-dsub_str <- "dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-geospatial --regions europe-west1"
+dsub_str <- "dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-itn-spatial --regions europe-west1"
 label_str <- paste("--label", label)
 machine_str <- paste("--machine-type", machine_type)
 disk_str <- paste("--disk-size", disk_size)

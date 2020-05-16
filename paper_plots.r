@@ -26,7 +26,7 @@ years_for_rel_gain <- c(2015, 2019)
 cube_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200418_BMGF_ITN_C1.00_R1.00_V2/04_predictions"
 stockflow_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2"
 survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200408"
-nmcp_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020/20200418/ITN_C1.00_R1.00/prepped_llins_20200418.csv"
+nmcp_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020/20200507/ITN_C0.00_R0.00/prepped_llins_20200507.csv"
 data_fname <- "../02_data_covariates.csv"
 
 shape_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/shapefiles/"
@@ -187,11 +187,29 @@ cube_nat_level <- melt(cube_nat_level, id.vars = c("iso3", "year", "month", "tim
 
 cube_nat_level <- cube_nat_level[iso3 %in% c(unique(nets_in_houses_all$iso3), "AFR")]
 cube_nat_level[, time:=year + (month-1)/12]
- 
+
 cube_nat_level[, quarter:=floor((month-1)/3)+1]
-cube_nat_level_quarterly <- cube_nat_level[, list(value=mean(value),
-                                        time=mean(time)), 
+cube_nat_level_quarterly <- cube_nat_level[, list(time=mean(time),
+                                                  value=mean(value),
+                                                  pop=mean(pop)), 
                                   by=list(iso3, type, year, quarter)]
+
+cube_nat_level_annual <- cube_nat_level[, list(time=mean(time),
+                                                  value=mean(value),
+                                                  pop=mean(pop)), 
+                                           by=list(iso3, type, year)]
+
+continental_nets <- cube_nat_level_annual[iso3=="AFR" & type %in%  c("percapita_nets", "access", "use")]
+continental_nets[, value:=ifelse(type=="percapita_nets", (value*pop)/1000000, value*100)]
+continental_nets[, metric:= ifelse(type=="percapita_nets", "Net Count (Millions)", "Access and Use (%)")]
+continental_nets_plot <- ggplot(continental_nets[year<2020], aes(x=year, y=value, color=type)) + 
+                              geom_line() + 
+                              # geom_vline(xintercept=2019) +
+                              theme(legend.position = "none") +
+                              facet_grid(metric~., scales="free_y") +
+                              labs(title="Continent-level net count, access, and use, 2000-2019",
+                                   x="",
+                                   y="")
 
 access_use_timeseries <- ggplot(cube_nat_level_quarterly[type %in% c("access", "use") & year<=2019],
                                aes(x=time, y=value, color=type)) + 
@@ -228,6 +246,17 @@ acc_dev_timeseries <- ggplot(cube_nat_level_quarterly[type=="access_dev" & year<
                               labs(title="ITN Access Deviation by Country",
                                    x="Time",
                                    y="Access Deviation")
+
+# percapita net deviation line plot
+npc_dev_timeseries <- ggplot(cube_nat_level_quarterly[type=="percapita_nets" & year<=2019], aes(x=time, y=value)) + 
+  geom_line() + 
+  geom_point(data=cube_survey, aes(x=date, y=percapita_nets_mean)) + 
+  facet_wrap(.~iso3) + 
+  theme(legend.title = element_blank(),
+        axis.text.x = element_text(angle=45, hjust=1)) + 
+  labs(title="Nets-per-Capita Deviation by Country",
+       x="Time",
+       y="NPC Deviation")
 
 
 # main_colors <- wpal("seaside", noblack = T)
@@ -313,6 +342,7 @@ rel_gain_plots <- lapply(years_for_rel_gain, function(this_year){
 
 pdf(file.path(out_dir, "results_plots.pdf"), width=14, height=8)
   grid.arrange(sigmoid_plot, half_life_iso_plot, ncol=2, top="LLIN Retention Half-Lives")
+  print(continental_nets_plot)
   print(access_use_timeseries)
   print(use_plot)
   for (this_plot in rel_gain_plots){
