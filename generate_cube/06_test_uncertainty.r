@@ -43,7 +43,7 @@ sample_posterior <- function(main_indir, main_outdir, save_uncertainty=T, nsamp=
     print(paste("finding", nsamp, "raw posterior samples"))
     INLA:::inla.dynload.workaround()
     tic <- Sys.time()
-    raw_samples <- inla.posterior.sample(nsamp, model_out, selection = to_extract_vals)
+    raw_samples <- inla.posterior.sample(nsamp, model_out, selection = to_extract_vals, verbose = T)
     toc <- Sys.time()
     print("Raw posterior samples found!")
     elapsed <- toc-tic

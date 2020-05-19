@@ -165,9 +165,9 @@ stock_and_dist_plot <- ggplot(stock_all[model==stockflow_model_name &
        y="Net count")
 
 # nets per capita (be lazy and use means for now, will need to add uncertainty in agg code later)
-accesss_npc <- fread(file.path(stockflow_indir, "for_cube", "stock_and_flow_access_npc.csv"))
+access_npc <- fread(file.path(stockflow_indir, "for_cube", "stock_and_flow_access_npc.csv"))
 
-npc_time_series_plot <- ggplot(accesss_npc[year %in% years], aes(x=time, y=nat_percapita_nets)) + 
+npc_time_series_plot <- ggplot(access_npc[year %in% years], aes(x=time, y=nat_percapita_nets)) + 
   geom_line() + 
   facet_wrap(.~iso3) + 
   labs(title="Stock and Flow Nets Per Capita by Country",
@@ -177,6 +177,13 @@ npc_time_series_plot <- ggplot(accesss_npc[year %in% years], aes(x=time, y=nat_p
 ############ ----------------------------------------------------------------------------------------------------------------------
 ## ITN Cube  ----------------------------------------------------------------------------------------------------------------------
 ############ ----------------------------------------------------------------------------------------------------------------------
+
+cube_survey <- fread(file.path(cube_indir, "../01_survey_summary.csv"))
+cube_survey <- melt(cube_survey, id.vars = c("surveyid", "iso3", "date", "min_date", "max_date"), variable.name = "type")
+cube_survey[, metric:=ifelse(type %like% "_se", "se", "mean")]
+cube_survey[, type:=gsub("_se", "", type)]
+cube_survey[, type:=gsub("_mean", "", type)]
+cube_survey <- dcast.data.table(cube_survey, surveyid + iso3 + date + min_date + max_date + type ~ metric)
 
 # access and use line plots
 cube_nat_level <- rbindlist(lapply(list.files(file.path(cube_indir, "aggregated"), full.names = T), fread))
@@ -248,7 +255,7 @@ access_use_timeseries <- ggplot(cube_nat_level_annual[type %in% c("access", "use
                                 aes(x=time, y=par_adj_value*100, color=type)) + 
   geom_hline(yintercept = 80) + 
   geom_line(size=1) + 
-  geom_line(data=moving_avgs[type %in% c("access", "use")], aes(y=moving_avg_value*100), linetype="longdash") + 
+  # geom_point(data=cube_survey[type %in% c("access", "use")], aes(x=date, y=mean*100)) + 
   facet_wrap(.~iso3) + 
   theme(legend.title = element_blank(),
         axis.text.x = element_text(angle=45, hjust=1)) + 
@@ -270,12 +277,12 @@ net_crop_timeseries <- ggplot(cube_nat_level_quarterly[type %in% c("percapita_ne
 
 
 
-cube_survey <- fread(file.path(cube_indir, "../01_survey_summary.csv"))
+
 
 # use gap line plot
 use_gap_timeseries <- ggplot(cube_nat_level_quarterly[type=="use_gap" & year %in% years], aes(x=time, y=value)) + 
   geom_line() + 
-  geom_point(data=cube_survey, aes(x=date, y=use_gap_mean)) + 
+  geom_point(data=cube_survey[type=="use_gap"], aes(x=date, y=mean)) + 
   facet_wrap(.~iso3) + 
   theme(legend.title = element_blank(),
         axis.text.x = element_text(angle=45, hjust=1)) + 
@@ -286,7 +293,7 @@ use_gap_timeseries <- ggplot(cube_nat_level_quarterly[type=="use_gap" & year %in
 # access deviation line plot 
 acc_dev_timeseries <- ggplot(cube_nat_level_quarterly[type=="access_dev" & year %in% years], aes(x=time, y=value)) + 
   geom_line() + 
-  geom_point(data=cube_survey, aes(x=date, y=access_deviation_mean)) + 
+  geom_point(data=cube_survey[type=="access_deviation"], aes(x=date, y=mean)) + 
   facet_wrap(.~iso3) + 
   theme(legend.title = element_blank(),
         axis.text.x = element_text(angle=45, hjust=1)) + 
@@ -295,9 +302,9 @@ acc_dev_timeseries <- ggplot(cube_nat_level_quarterly[type=="access_dev" & year 
        y="Access Deviation")
 
 # percapita net deviation line plot
-npc_dev_timeseries <- ggplot(cube_nat_level_quarterly[type=="percapita_nets" & year %in% years], aes(x=time, y=value)) + 
+npc_dev_timeseries <- ggplot(cube_nat_level_quarterly[type=="percapita_net_dev" & year %in% years], aes(x=time, y=value)) + 
   geom_line() + 
-  geom_point(data=cube_survey, aes(x=date, y=percapita_nets_mean)) + 
+  geom_point(data=cube_survey[type=="percapita_net_deviation"], aes(x=date, y=mean)) + 
   facet_wrap(.~iso3) + 
   theme(legend.title = element_blank(),
         axis.text.x = element_text(angle=45, hjust=1)) + 
@@ -308,9 +315,8 @@ npc_dev_timeseries <- ggplot(cube_nat_level_quarterly[type=="percapita_nets" & y
 
 main_colors <- wpal("seaside", noblack = T)
 use_rate_colors <- c("#722503", "#AB0002", "#F2A378", "#F4CA7D", "#C8D79E", "#70A800")
-npc_colors <- c("#F2F4F4", wpal("diverging_tan_green_blue"), "#F2F4F4")
-npc_colors <- c( rev(pnw_palette("Shuksan", 60))[1:50], pnw_palette("Lake", 60)[10:59])
-
+npc_colors <- rev(pnw_palette("Mushroom", 30))
+  
 max_pixels <- 5e5
 Africa<-readOGR(file.path(shape_dir, "Africa.shp"))
 Africa <- gSimplify(Africa, tol=0.1, topologyPreserve=TRUE)
@@ -344,7 +350,7 @@ use_rate_plot <- levelplot(use_rate[[id_vals]],
   latticeExtra::layer(sp.polygons(Africa))
 
 npc_plot <- levelplot(npc_stack[[id_vals]],
-                      par.settings=rasterTheme(region= npc_colors), at= seq(0, 1, 0.025),
+                      par.settings=rasterTheme(region= npc_colors), at= seq(0, 0.95, 0.025),
                       xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(length(id_vals),1))  +
   latticeExtra::layer(sp.polygons(Africa))
 
