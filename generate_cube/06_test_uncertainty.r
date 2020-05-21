@@ -18,32 +18,27 @@ sample_posterior <- function(main_indir, main_outdir, save_uncertainty=T, nsamp=
   output_fname <- file.path(main_indir, "03_inla_outputs.Rdata")
   posterior_output_fname <- file.path(main_outdir, "03_inla_posterior_samples.Rdata")
   
-  print("loading regression outputs")
+  INLA:::inla.dynload.workaround()
+  print(inla(y~1,data=data.frame(y=0)))
+  
+  print("Loading regression outputs")
   load(output_fname)
   
   if (save_uncertainty){
     print("Extracting posterior draws")
+    
     # extract and save posterior samples
-    
-    
-    # test without dopar
-    print("selecting these outputs")
+    print("Selecting test outputs")
     model_out <- inla_outputs[[1]][["model_output"]]
-    
-    print("Model:")
-    print(model_out)
-    
     
     to_extract_names <- c(rownames(model_out$summary.fixed), "field")
     to_extract_vals <- as.list(rep(0, length(to_extract_names)))
     names(to_extract_vals) <- to_extract_names
-    print("Names to Extract:")
-    print(to_extract_vals)
     
-    print(paste("finding", nsamp, "raw posterior samples"))
-    INLA:::inla.dynload.workaround()
+    print(paste("Finding", nsamp, "raw posterior samples"))
+    
     tic <- Sys.time()
-    raw_samples <- inla.posterior.sample(nsamp, model_out, selection = to_extract_vals, verbose = T)
+    raw_samples <- inla.posterior.sample(nsamp, model_out, selection = to_extract_vals, verbose = T, num.threads = 4)
     toc <- Sys.time()
     print("Raw posterior samples found!")
     elapsed <- toc-tic
@@ -66,43 +61,6 @@ sample_posterior <- function(main_indir, main_outdir, save_uncertainty=T, nsamp=
     })
     
     print("samples formatted")
-    
-    # registerDoParallel(length(names(inla_outputs))+1)
-    # inla_posterior_samples<-foreach(these_outputs=inla_outputs, .verbose=T, .packages(all.available = T)) %dopar% {
-    # 
-    #   print("selecting these outputs")
-    #   model_out <- these_outputs[["model_output"]]
-    # 
-    #   to_extract_names <- c(rownames(model_out$summary.fixed), "field")
-    #   to_extract_vals <- as.list(rep(0, length(to_extract_names)))
-    #   names(to_extract_vals) <- to_extract_names
-    # 
-    #   print("finding raw posterior samples")
-    #   raw_samples <- inla.posterior.sample(nsamp, model_out, selection = to_extract_vals)
-    # 
-    #   print("formatting samples")
-    #   formatted_samples<-lapply(1:length(raw_samples), function(samp_idx){
-    #                             this_sample <- raw_samples[[samp_idx]]$latent
-    #                             random <- data.frame(this_sample[rownames(this_sample) %like% "field",])
-    #                             names(random) <- "value"
-    #                             random$ID <- as.integer(gsub(".*:([0-9]*)", "\\1", rownames(random)))
-    #                             random$sample <- samp_idx
-    #                             rownames(random) <- c()
-    # 
-    #                             fixed <-  data.frame(this_sample[!rownames(this_sample) %like% "field",])
-    #                             names(fixed) <- "value"
-    #                             rownames(fixed) <- gsub(":1", "", rownames(fixed))
-    #                             fixed$sample <- samp_idx
-    #                             return(list(random=random, fixed=fixed))
-    #                           })
-    # 
-    # 
-    #   return(formatted_samples)
-    # }
-    # names(inla_posterior_samples) <- names(inla_outputs)
-    # 
-    # print(paste("Saving posterior samples to", posterior_output_fname))
-    # save(inla_posterior_samples, file=posterior_output_fname)
 
   }
   
@@ -146,5 +104,40 @@ if (Sys.getenv("run_individually")!=""){
 }
 
 
-
+# registerDoParallel(length(names(inla_outputs))+1)
+# inla_posterior_samples<-foreach(these_outputs=inla_outputs, .verbose=T, .packages(all.available = T)) %dopar% {
+# 
+#   print("selecting these outputs")
+#   model_out <- these_outputs[["model_output"]]
+# 
+#   to_extract_names <- c(rownames(model_out$summary.fixed), "field")
+#   to_extract_vals <- as.list(rep(0, length(to_extract_names)))
+#   names(to_extract_vals) <- to_extract_names
+# 
+#   print("finding raw posterior samples")
+#   raw_samples <- inla.posterior.sample(nsamp, model_out, selection = to_extract_vals)
+# 
+#   print("formatting samples")
+#   formatted_samples<-lapply(1:length(raw_samples), function(samp_idx){
+#                             this_sample <- raw_samples[[samp_idx]]$latent
+#                             random <- data.frame(this_sample[rownames(this_sample) %like% "field",])
+#                             names(random) <- "value"
+#                             random$ID <- as.integer(gsub(".*:([0-9]*)", "\\1", rownames(random)))
+#                             random$sample <- samp_idx
+#                             rownames(random) <- c()
+# 
+#                             fixed <-  data.frame(this_sample[!rownames(this_sample) %like% "field",])
+#                             names(fixed) <- "value"
+#                             rownames(fixed) <- gsub(":1", "", rownames(fixed))
+#                             fixed$sample <- samp_idx
+#                             return(list(random=random, fixed=fixed))
+#                           })
+# 
+# 
+#   return(formatted_samples)
+# }
+# names(inla_posterior_samples) <- names(inla_outputs)
+# 
+# print(paste("Saving posterior samples to", posterior_output_fname))
+# save(inla_posterior_samples, file=posterior_output_fname)
 

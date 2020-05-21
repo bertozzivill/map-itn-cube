@@ -179,6 +179,7 @@ npc_time_series_plot <- ggplot(access_npc[year %in% years], aes(x=time, y=nat_pe
 ############ ----------------------------------------------------------------------------------------------------------------------
 
 cube_survey <- fread(file.path(cube_indir, "../01_survey_summary.csv"))
+cube_survey[, use_rate_mean:=use_mean/access_mean]
 cube_survey <- melt(cube_survey, id.vars = c("surveyid", "iso3", "date", "min_date", "max_date"), variable.name = "type")
 cube_survey[, metric:=ifelse(type %like% "_se", "se", "mean")]
 cube_survey[, type:=gsub("_se", "", type)]
@@ -263,6 +264,18 @@ access_use_timeseries <- ggplot(cube_nat_level_annual[type %in% c("access", "use
        x="Time",
        y="Access or Use (%)")
 
+access_use_seasonal <- ggplot(cube_nat_level[type %in% c("access", "use") & year %in% years & year>=2015],
+                                aes(x=time, y=par_adj_value*100, color=type)) + 
+  geom_hline(yintercept = 80) + 
+  geom_line(size=1) + 
+  # geom_point(data=cube_survey[type %in% c("access", "use")], aes(x=date, y=mean*100)) + 
+  facet_wrap(.~iso3, scales="free_y") + 
+  theme(legend.title = element_blank(),
+        axis.text.x = element_text(angle=45, hjust=1)) + 
+  labs(title="ITN Access and Use by Country",
+       x="Time",
+       y="Access or Use (%)")
+
 net_crop_timeseries <- ggplot(cube_nat_level_quarterly[type %in% c("percapita_nets", "access") & year %in% years],
                                 aes(x=time, y=par_adj_value, color=type)) + 
   geom_hline(yintercept=0.8, color=gg_color_hue(2)[1]) + 
@@ -276,6 +289,23 @@ net_crop_timeseries <- ggplot(cube_nat_level_quarterly[type %in% c("percapita_ne
        y="Nets Per Capita")
 
 
+## use rate
+cube_nat_level_wide <- dcast.data.table(cube_nat_level, country_name + iso3 + year + month + time~ type, value.var = "par_adj_value")
+cube_nat_level_wide[, use_ratio:=use/access]
+use_rate_timeseries <- 
+  ggplot(cube_nat_level_wide[year %in% years &  time>=2015], aes(x=time, y=use_ratio, group=iso3))+ 
+  geom_hline(yintercept=0.8, color="#00BFC4") + 
+  geom_line() + 
+  geom_point(data=cube_survey[type=="use_rate" & date>=2015], aes(x=date, y=mean)) + 
+  facet_wrap(~iso3) +
+  theme_minimal() +
+  theme(legend.title = element_blank(),
+        axis.text.x = element_text(hjust=1, angle=45)) + 
+  scale_x_continuous(minor_breaks = years) + 
+  labs(title="",
+       x="Time",
+       y="Use Rate",
+       title="ITN Use Rate by Country")
 
 
 
@@ -432,6 +462,11 @@ graphics.off()
 pdf(file.path(out_dir, "methods_and_supplement_plots.pdf"), width=14, height=8)
 print(survey_panel)
 print(nmcp_plot)
-print(net_crop_timeseries_plot)
-print(stock_and_dist_plot)
+# print(net_crop_timeseries_plot)
+# print(stock_and_dist_plot)
+print(access_use_seasonal)
+print(use_rate_timeseries)
+print(use_gap_timeseries)
+print(acc_dev_timeseries)
+print(npc_dev_timeseries)
 graphics.off()
