@@ -120,11 +120,16 @@ sigmoid_plot <- ggplot(for_sigmoids, aes(x=time, y=sig)) +
 
 country_lambdas <- unique(for_sigmoids[, list(model, net_type, iso3, half_life)])
 descending_order <- country_lambdas[order(half_life, decreasing=T)]$iso3
+
+half_life_bounds <- fread(file.path(stockflow_indir, "trace_plots", "llin_bounds.csv"))
+half_life_bounds <- dcast.data.table(half_life_bounds, iso3 ~ type, value.var = "half_life")
+country_lambdas <- merge(country_lambdas, half_life_bounds, by="iso3")
 country_lambdas[, iso3:= factor(iso3, levels = descending_order)]
 
 # todo: make this into a map instead of a lame text plot
-half_life_iso_plot <- ggplot(country_lambdas, aes(x=iso3, y=half_life)) +
-  geom_text(aes(label=iso3)) +
+half_life_iso_plot <- ggplot(country_lambdas, aes(x=iso3)) +
+  geom_linerange(aes(ymin=lower, ymax=upper)) + 
+  geom_text(aes(label=iso3, y=half_life)) +
   geom_hline(yintercept=3) + 
   # ylim(0, 4) +
   theme(axis.text.x = element_blank(),

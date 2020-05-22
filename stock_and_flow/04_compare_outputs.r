@@ -448,9 +448,9 @@ if(Sys.getenv("model_dir_1")=="") {
   base_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/"
   func_dir <- "~/repos/map-itn-cube/stock_and_flow/"
   setwd(func_dir)
-  plot_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200409_BMGF_ITN_C1.00_R1.00"
+  plot_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2"
   
-  model_dirs <- c("20200404_ToT_block_excess_stock_distribution", "20200409_BMGF_ITN_C1.00_R1.00")
+  model_dirs <- c("20200418_BMGF_ITN_C1.00_R1.00_V2", "20200418_BMGF_ITN_C1.00_R1.00_V2")
   
 } else {
   plot_dir <- Sys.getenv("plot_dir") 

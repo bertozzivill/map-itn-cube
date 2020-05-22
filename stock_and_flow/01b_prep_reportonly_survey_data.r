@@ -152,6 +152,10 @@ survey_data[, random_order:=sample(chron_order), by="iso3"]
 
 write.csv(survey_data, file.path(main_dir, "itn_aggregated_survey_data_plus_reportonly.csv"), row.names=F)
 
+survey_count <- survey_data[, list(surv_count=.N), by=list(iso3, country)]
+survey_count <- survey_count[order(surv_count, iso3)]
+write.csv(survey_count, file.path(main_dir, "survey_count.csv"), row.names=F)
+
 ### Generate a submission tsv for sensitivity analysis (save this to your repo) #####----------------------------------------------------------------------------------------------------------------------------------
 
 for_tsv <- survey_data[, list(survey_count=chron_order, tot_count=.N), by="iso3"]
