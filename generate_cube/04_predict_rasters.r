@@ -76,6 +76,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   # all_inla_cov_names <- unite(find_overlap)
   # save_covs_separately <- ifelse(length(communal_covs)==length(all_inla_cov_names), F, T)
   # rm(inla_cov_names, communal_covs)
+  
   save_covs_separately <- F
   all_inla_cov_names <- rownames(inla_outputs_for_prediction[[1]]$fixed)
   
@@ -167,7 +168,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   ## Create INLA Prediction objects  ## ---------------------------------------------------------
   
   print("creating INLA prediction objects")
-  INLA:::inla.dynload.workaround()
+  # INLA:::inla.dynload.workaround() # activate only if not using a new ubuntu build
   
   ## Predict output variables  ## ---------------------------------------------------------
 
@@ -336,9 +337,9 @@ if (Sys.getenv("run_individually")!=""){
   if(Sys.getenv("input_dir")=="") {
     this_year <- 2021
     input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
-    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200420_BMGF_ITN_C1.00_R1.00_V2_test_new_prediction/"
+    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200422_BMGF_ITN_C1.00_R1.00_V2_access_dev_uncertainty/"
     indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2/for_cube"
-    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200430_BMGF_ITN_C1.00_R1.00_V2_test_uncertainty_prop/"
+    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200422_BMGF_ITN_C1.00_R1.00_V2_access_dev_uncertainty/"
     static_cov_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/20200401/static_covariates.csv"
     annual_cov_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/20200401/annual_covariates.csv"
     dynamic_cov_dir <- paste0("/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/20200401/dynamic_covariates/dynamic_", this_year, ".csv")

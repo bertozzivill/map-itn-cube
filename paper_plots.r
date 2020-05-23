@@ -263,6 +263,7 @@ access_use_timeseries <- ggplot(cube_nat_level_annual[type %in% c("access", "use
   geom_line(size=1) + 
   # geom_point(data=cube_survey[type %in% c("access", "use")], aes(x=date, y=mean*100)) + 
   facet_wrap(.~iso3) + 
+  # ylim(0, 100) + 
   theme(legend.title = element_blank(),
         axis.text.x = element_text(angle=45, hjust=1)) + 
   labs(title="ITN Access and Use by Country",
@@ -307,7 +308,7 @@ use_rate_timeseries <-
   theme(legend.title = element_blank(),
         axis.text.x = element_text(hjust=1, angle=45)) + 
   scale_x_continuous(minor_breaks = years) + 
-  labs(title="",
+  labs(
        x="Time",
        y="Use Rate",
        title="ITN Use Rate by Country")
@@ -454,7 +455,7 @@ rel_gain_plots <- lapply(years_for_rel_gain, function(this_year){
 ## Bring it all together  ----------------------------------------------------------------------------------------------------------------------
 ############ ----------------------------------------------------------------------------------------------------------------------
 
-pdf(file.path(out_dir, "results_plots.pdf"), width=14, height=8)
+pdf(file.path(out_dir, "results_plots.pdf"), width=11, height=10)
 grid.arrange(sigmoid_plot, half_life_iso_plot, ncol=2, top="LLIN Retention Half-Lives")
 print(continental_nets_plot)
 print(access_use_timeseries)
