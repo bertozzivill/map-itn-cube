@@ -34,7 +34,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   source(file.path(func_dir, "03_inla_functions.r")) # for ll_to_xyz and predict_inla
   
   # Load relevant outputs from previous steps 
-  survey_data <- fread(file.path(main_indir, "01_survey_data.csv")) # for subsetting predicted cells
+  # survey_data <- fread(file.path(main_indir, "01_survey_data.csv")) # for subsetting predicted cells
   
   # load inla outputs and only keep the relevant parts
   # For newer regression runs, there is a small .rdata saved with just the information we need. For older runs, we need to extract it explicitly. 
@@ -313,43 +313,49 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   
   ## Find means over country and continent
   full_predictions <- merge(full_predictions, population, by=c("year", "cellnumber"), all.x=T)
+  rm(prediction_cells, population, stock_and_flow)
   
   # set national values to NA for consistency with remainder of dataset
   full_predictions[is.na(pop), nat_access:=NA]
   full_predictions[is.na(pop), nat_percapita_nets:=NA]
   
-  print ("Aggregating to country level")
-  country_level_predictions <- full_predictions[, list(nat_access=weighted.mean(nat_access, pop, na.rm=T),
-                                                        access = weighted.mean(access, pop, na.rm=T),
-                                                        access_dev = weighted.mean(access_dev, pop, na.rm=T),
-                                                        use = weighted.mean(use, pop, na.rm=T),
-                                                        use_gap = weighted.mean(use_gap, pop, na.rm=T),
-                                                        nat_percapita_nets= weighted.mean(nat_percapita_nets, pop, na.rm=T),
-                                                        percapita_nets = weighted.mean(percapita_nets, pop, na.rm=T),
-                                                        percapita_net_dev = weighted.mean(percapita_net_dev, pop, na.rm=T),
-                                                        use_rate = weighted.mean(use_rate, pop, na.rm=T),
-                                                        pop=sum(pop, na.rm=T)
-  ),
-  by=list(iso3, year, month, time, sample)
-  ]
-  country_level_predictions <- country_level_predictions[iso3 %in% unique(stock_and_flow$iso3)]
+  print("Aggregating to country level")
+  country_level_predictions <- rbindlist(lapply(unique(full_predictions$sample), function(this_sample){
+    return(full_predictions[sample==this_sample, list(nat_access=weighted.mean(nat_access, pop, na.rm=T),
+                                   access = weighted.mean(access, pop, na.rm=T),
+                                   access_dev = weighted.mean(access_dev, pop, na.rm=T),
+                                   use = weighted.mean(use, pop, na.rm=T),
+                                   use_gap = weighted.mean(use_gap, pop, na.rm=T),
+                                   nat_percapita_nets= weighted.mean(nat_percapita_nets, pop, na.rm=T),
+                                   percapita_nets = weighted.mean(percapita_nets, pop, na.rm=T),
+                                   percapita_net_dev = weighted.mean(percapita_net_dev, pop, na.rm=T),
+                                   use_rate = weighted.mean(use_rate, pop, na.rm=T),
+                                   pop=sum(pop, na.rm=T)
+    ),
+    by=list(iso3, year, month, time, sample)
+    ]  )
+  }))
   
   print("Aggregating to continent level")
-  continent_level_predictions <- full_predictions[, list(time=mean(time, na.rm=T),
-                                                          nat_access=weighted.mean(nat_access, pop, na.rm=T),
-                                                          access = weighted.mean(access, pop, na.rm=T),
-                                                          access_dev = weighted.mean(access_dev, pop, na.rm=T),
-                                                          use = weighted.mean(use, pop, na.rm=T),
-                                                          use_gap = weighted.mean(use_gap, pop, na.rm=T),
-                                                          nat_percapita_nets= weighted.mean(nat_percapita_nets, pop, na.rm=T),
-                                                          percapita_nets = weighted.mean(percapita_nets, pop, na.rm=T),
-                                                          percapita_net_dev = weighted.mean(percapita_net_dev, pop, na.rm=T),
-                                                          use_rate = weighted.mean(use_rate, pop, na.rm=T),
-                                                          pop=sum(pop, na.rm=T)
-  ),
-  by=list(year, month, sample)
-  ]
-  continent_level_predictions[, iso3:="AFR"]
+  
+  continent_level_predictions <- rbindlist(lapply(unique(full_predictions$sample), function(this_sample){
+    return(full_predictions[sample==this_sample, list(iso3="AFR",
+                                                      time=mean(time, na.rm=T),
+                                                      nat_access=weighted.mean(nat_access, pop, na.rm=T),
+                                                      access = weighted.mean(access, pop, na.rm=T),
+                                                      access_dev = weighted.mean(access_dev, pop, na.rm=T),
+                                                      use = weighted.mean(use, pop, na.rm=T),
+                                                      use_gap = weighted.mean(use_gap, pop, na.rm=T),
+                                                      nat_percapita_nets= weighted.mean(nat_percapita_nets, pop, na.rm=T),
+                                                      percapita_nets = weighted.mean(percapita_nets, pop, na.rm=T),
+                                                      percapita_net_dev = weighted.mean(percapita_net_dev, pop, na.rm=T),
+                                                      use_rate = weighted.mean(use_rate, pop, na.rm=T),
+                                                      pop=sum(pop, na.rm=T)
+    ),
+    by=list(year, month, sample)
+    ]  )
+  }))
+
   country_level_predictions <- rbind(continent_level_predictions, country_level_predictions)
   country_level_predictions <- country_level_predictions[order(iso3, year, month)]
   
@@ -362,9 +368,9 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   # write.csv(country_level_predictions, file.path(out_dir, "aggregated", paste0("aggregated_predictions_", this_year, "_by_draw.csv")), row.names=F)
   write.csv(country_level_summary_stats, file.path(out_dir, "aggregated", paste0("aggregated_predictions_", this_year, ".csv")), row.names=F)
   
-  
   print("Prediction and transformation memory:")
   print(mem_used())
+  rm(country_level_predictions, continent_level_predictions, country_level_summary_stats)
   
   # for_data_comparison <- full_predictions[cellnumber %in% unique(survey_data$cellnumber)]
   # write.csv(for_data_comparison, file.path(out_dir, paste0("data_predictions_wide_", this_year, ".csv")), row.names=F)
@@ -373,33 +379,50 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   print("Predictions and transformations complete.")
   
   print("Finding annual means and converting to raster")
-  annual_predictions <- full_predictions[, list(# nat_access=mean(nat_access, na.rm=F),
-                                                 access = mean(access, na.rm=F),
-                                                 # access_dev = mean(access_dev, na.rm=F),
-                                                 use = mean(use, na.rm=F),
-                                                 # use_gap = mean(use_gap, na.rm=F),
-                                                 use_rate = mean(use_rate, na.rm=F),
-                                                 # nat_percapita_nets= mean(nat_percapita_nets, na.rm=F),
-                                                 percapita_nets = mean(percapita_nets, na.rm=F)
-                                                 # percapita_net_dev = mean(percapita_net_dev, na.rm=F)
-                                                 
-  ),
-  by=list(iso3, year, cellnumber, sample)
-  ]
-  annual_predictions <- annual_predictions[order(sample, cellnumber)]
+  
+  for (obj in ls()) { message(obj); print(object.size(get(obj)), units='auto') }
+  
+  print("Taking average across months")
+  annual_predictions <- rbindlist(lapply(unique(full_predictions$sample), function(this_sample){
+    return(full_predictions[sample==this_sample, list(# nat_access=mean(nat_access, na.rm=F),
+                                    access = mean(access, na.rm=F),
+                                    # access_dev = mean(access_dev, na.rm=F),
+                                    use = mean(use, na.rm=F),
+                                    # use_gap = mean(use_gap, na.rm=F),
+                                    use_rate = mean(use_rate, na.rm=F),
+                                    # nat_percapita_nets= mean(nat_percapita_nets, na.rm=F),
+                                    percapita_nets = mean(percapita_nets, na.rm=F)
+                                    # percapita_net_dev = mean(percapita_net_dev, na.rm=F)
+      
+    ),
+    by=list(iso3, year, cellnumber, sample)
+    ]  )
+  }))
+
+  rm(full_predictions)
+  
+  # annual_predictions <- annual_predictions[order(sample, cellnumber)]
   annual_predictions <- melt(annual_predictions, id.vars=c("iso3", "year", "cellnumber", "sample"))
   
-  tic <- Sys.time()
-  annual_predictions_summary_stats <- annual_predictions[, list(mean=mean(value),
-                                                                lower=quantile(value, 0.025, na.rm=T),
-                                                                upper=quantile(value, 0.975, na.rm=T)),
-                                                          by=list(iso3, year, cellnumber, variable)]
-  toc <- Sys.time()
-  time_elapsed_full <- toc-tic
-  
-  ## Convert to rasters annually
+  print("Taking summary stats across samples")
   annual_metrics <- unique(annual_predictions$variable)
 
+  annual_predictions_summary_stats <- rbindlist(lapply(annual_metrics, function(this_metric){
+    return(annual_predictions[variable==this_metric, {
+                              the_quantiles = quantile(value, c(0.025, 0.975), na.rm=T)
+                              list(
+                                mean = mean(value), 
+                                lower = the_quantiles[1], 
+                                upper = the_quantiles[2]
+                              )
+                              }, keyby=list(iso3, year, cellnumber, variable)]
+    )
+  })
+  )
+  
+  
+  ## Convert to rasters annually
+  print("Converting to raster and saving")
   save_raster <- function(predictions, value_col, raster_template, out_fname, write=T){
     this_raster <- copy(raster_template)
     this_raster[] <- NA
@@ -458,9 +481,12 @@ if (Sys.getenv("run_individually")!=""){
   
 # dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-itn-spatial  --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-4 --disk-size 400 --boot-disk-size 50 --logging gs://map_users/amelia/itn/itn_cube/logs  --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data  indicators_indir=gs://map_users/amelia/itn/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2/for_cube  main_indir=gs://map_users/amelia/itn/itn_cube/results/20200420_BMGF_ITN_C1.00_R1.00_V2_test_new_prediction/ func_dir=gs://map_users/amelia/itn/code/generate_cube/   --input static_cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20200401/static_covariates.csv  annual_cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20200401/annual_covariates.csv  dynamic_cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20200401/dynamic_covariates/dynamic_${this_year}.csv  run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/04_predict_rasters.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20200501_BMGF_ITN_C1.00_R1.00_V2_test_newer_prediction/ --command 'Rscript ${CODE} ${this_year}'  --tasks gs://map_users/amelia/itn/code/generate_cube/for_gcloud/batch_year_list.tsv
   
+  print("Loading Packages")
   package_load <- function(package_list){
     # package installation/loading
     new_packages <- package_list[!(package_list %in% installed.packages()[,"Package"])]
+    print("New Packages to load:")
+    print(new_packages)
     if(length(new_packages)) install.packages(new_packages)
     lapply(package_list, library, character.only=T)
   }
@@ -494,7 +520,7 @@ if (Sys.getenv("run_individually")!=""){
     prediction_type <- "uncertainty"
   }
   
-  
+  print("Predicting")
   predict_rasters(input_dir, indicators_indir, main_indir, static_cov_dir, annual_cov_dir, dynamic_cov_dir, main_outdir, func_dir, this_year=this_year, testing=testing, prediction_type = prediction_type)
   # prof <- lineprof(predict_rasters(input_dir, indicators_indir, main_indir, static_cov_dir, annual_cov_dir, dynamic_cov_dir, main_outdir, func_dir, this_year=this_year))
   
