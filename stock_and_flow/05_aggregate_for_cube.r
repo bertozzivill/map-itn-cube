@@ -37,13 +37,21 @@ aggregate_indicators <- function(reference_dir, list_out_dir){
   cube_out_dir <- file.path(list_out_dir, "for_cube")
   dir.create(cube_out_dir, recursive = T, showWarnings = F)
   
+  # keep only 100 draws for cube uncertainty propagation, also can drop hhsize as it's constant across percaptia nets and access
+  samples <- sample(unique(metrics_for_cube$ITER), 100)
+  metrics_for_cube <- metrics_for_cube[ITER %in% samples & hh_size==1, list(ITER, iso3, year, month, time, nat_access, nat_percapita_nets=stockflow_percapita_nets)]
+  metrics_for_cube <- merge(metrics_for_cube, data.table(ITER=sort(samples),
+                                                         sample=1:length(samples)), all=T)
+  metrics_for_cube <- metrics_for_cube[order(sample)]
+  
+
   write.csv(metrics_for_cube, file=file.path(cube_out_dir, "stock_and_flow_by_draw.csv"), row.names=F)
   write.csv(means_for_cube, file=file.path(cube_out_dir, "stock_and_flow_probs_means.csv"), row.names=F)
   write.csv(national_access, file=file.path(cube_out_dir, "stock_and_flow_access_npc.csv"), row.names=F)
 
 } 
 
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive reference_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200507_BMGF_ITN_C0.00_R0.00_V2 CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive list_out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200507_BMGF_ITN_C0.00_R0.00_V2 --command 'cd ${CODE}; Rscript 05_aggregate_for_cube.r'
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive reference_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2 CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive list_out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2 --command 'cd ${CODE}; Rscript 05_aggregate_for_cube.r'
 package_load <- function(package_list){
   # package installation/loading
   new_packages <- package_list[!(package_list %in% installed.packages()[,"Package"])]
@@ -55,7 +63,7 @@ package_load(c("data.table","rjags", "zoo", "ggplot2", "gridExtra"))
 theme_set(theme_minimal(base_size = 12))
 
 if(Sys.getenv("reference_dir")=="") {
-  reference_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200117_test_access_calc"
+  reference_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2"
   list_out_dir <- reference_dir
 } else {
   reference_dir <- Sys.getenv("reference_dir") 
