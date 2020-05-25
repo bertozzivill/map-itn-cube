@@ -20,8 +20,8 @@ orig_cube_labels <- c( "20200418_BMGF_ITN_C1.00_R1.00_V2",
                   "20200418_BMGF_ITN_C0.00_R0.25_V2")
 orig_stockflow_labels <- orig_cube_labels
 
-years <- 2000:2019
-orig_cube_labels <- c("20200515_thru_2019")
+years <- c(2021)
+orig_cube_labels <- c("20200501_BMGF_ITN_C1.00_R1.00_V2_with_uncertainty")
 orig_stockflow_labels <- c("20200418_BMGF_ITN_C1.00_R1.00_V2")
 
 stockflow_map <- data.table(cube_label=orig_cube_labels,
@@ -35,7 +35,7 @@ to_submit <- merge(to_submit, stockflow_map)
 func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
 
 # options 
-machine_type <- "n1-standard-8"
+machine_type <- "m1-ultramem-40"
 label <- "'type=itn_cube'"
 disk_size <- 400
 boot_disk_size <- 50
@@ -51,7 +51,7 @@ stockflow_dir <- "gs://map_users/amelia/itn/stock_and_flow/results/"
 core_dir <- "gs://map_users/amelia/itn/itn_cube/"
 
 # machine options
-dsub_str <- "dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-itn-spatial --regions europe-west1"
+dsub_str <- "dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-itn-spatial:1.1.0 --regions europe-west1"
 label_str <- paste("--label", label)
 machine_str <- paste("--machine-type", machine_type)
 disk_str <- paste("--disk-size", disk_size)
@@ -94,7 +94,7 @@ for (idx in 1:nrow(to_submit)){
   
   full_dsub_str <- paste(dsub_str, label_str, machine_str, disk_str, boot_disk_str, logging_str, input_str, input_dir_str, output_dir_str, final_str)
   
-  # print(full_dsub_str)
+  print(full_dsub_str)
   system(full_dsub_str, wait=F)
   Sys.sleep(1)
   
