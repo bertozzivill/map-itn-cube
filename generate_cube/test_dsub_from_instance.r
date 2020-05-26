@@ -34,8 +34,9 @@ to_submit <- merge(to_submit, stockflow_map)
 
 func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
 
-# options 
-machine_type <- "m1-ultramem-40"
+# options
+# machine_type <- "m1-megamem-40"
+machine_type <- "n1-standard-8"
 label <- "'type=itn_cube'"
 disk_size <- 400
 boot_disk_size <- 50

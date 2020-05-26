@@ -39,7 +39,8 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   # load inla outputs and only keep the relevant parts
   # For newer regression runs, there is a small .rdata saved with just the information we need. For older runs, we need to extract it explicitly. 
   if (prediction_type=="uncertainty"){
-    stockflow_fname <- file.path(indicators_indir, "stock_and_flow_by_draw.csv")
+    # stockflow_fname <- file.path(indicators_indir, "stock_and_flow_by_draw.csv")
+    stockflow_fname <- file.path(indicators_indir, "stock_and_flow_access_npc.csv")
     for_prediction_fname <- file.path(main_indir, "03_inla_posterior_samples.Rdata")
   }else if (prediction_type=="mean"){
     stockflow_fname <- file.path(indicators_indir, "stock_and_flow_access_npc.csv")
@@ -52,7 +53,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   stock_and_flow[, emp_nat_access:=emplogit(nat_access)]
   if ("ITER" %in% names(stock_and_flow)){ # will be true for results by draw
     stock_and_flow[, ITER:=NULL]
-  }else{ # mean results will need a uniform "sample" variable
+  }else if (prediction_type=="mean"){ # mean results will need a uniform "sample" variable
     stock_and_flow[, sample:="mean"]
   }
   
@@ -258,6 +259,8 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
     full_predictions <- rbindlist(lapply(inla_outputs_for_prediction, predict_by_model,
                                          covs=thisyear_covs, 
                                          base_predictions = prediction_cells))
+    full_predictions[, year:=this_year]
+    full_predictions <- dcast.data.table(full_predictions[iso3 %in% unique(stock_and_flow$iso3)], cellnumber + iso3 +  year + month + sample ~ metric, value.var = "final_prediction")
   }else{
     print("predicting samples")
   
@@ -295,7 +298,11 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   
   # transform
   print("Transforming variables")
-  full_predictions <- merge(full_predictions, stock_and_flow, by=c("iso3", "year", "month", "sample"), all.x=T)
+  if ("sample" %in% names(stock_and_flow)){
+    full_predictions <- merge(full_predictions, stock_and_flow, by=c("iso3", "year", "month", "sample"), all.x=T)
+  }else{
+    full_predictions <- merge(full_predictions, stock_and_flow, by=c("iso3", "year", "month"), all.x=T)
+  }
   
   ## Metric-specific transformations
   full_predictions  <- full_predictions[, list(iso3, year, month, time, sample, cellnumber,
@@ -403,23 +410,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   
   # annual_predictions <- annual_predictions[order(sample, cellnumber)]
   annual_predictions <- melt(annual_predictions, id.vars=c("iso3", "year", "cellnumber", "sample"))
-  
-  print("Taking summary stats across samples")
   annual_metrics <- unique(annual_predictions$variable)
-
-  annual_predictions_summary_stats <- rbindlist(lapply(annual_metrics, function(this_metric){
-    return(annual_predictions[variable==this_metric, {
-                              the_quantiles = quantile(value, c(0.025, 0.975), na.rm=T)
-                              list(
-                                mean = mean(value), 
-                                lower = the_quantiles[1], 
-                                upper = the_quantiles[2]
-                              )
-                              }, keyby=list(iso3, year, cellnumber, variable)]
-    )
-  })
-  )
-  
   
   ## Convert to rasters annually
   print("Converting to raster and saving")
@@ -435,22 +426,41 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
     }
   }
   
-  annual_rasters <- lapply(annual_metrics, function(this_metric){
-    this_df <- annual_predictions_summary_stats[variable==this_metric]
-    base_out_fname <- file.path(out_dir, "rasters", paste0("ITN_", this_year, "_", this_metric))
-    save_raster(this_df, value_col="mean", raster_template = national_raster, out_fname = paste0(base_out_fname, "_mean.tif"))
-    
-    # only save lower and upper if they differ from mean
-    if (prediction_type=="uncertainty"){
+  if (prediction_type=="mean"){
+    print("Saving mean rasters")
+    annual_rasters <- lapply(annual_metrics, function(this_metric){
+      this_df <- annual_predictions[variable==this_metric]
+      base_out_fname <- file.path(out_dir, "rasters", paste0("ITN_", this_year, "_", this_metric))
+      save_raster(this_df, value_col="value", raster_template = national_raster, out_fname = paste0(base_out_fname, "_mean_ONLY.tif"))
+    })
+  }else{
+    print("Calculating raster summary stats")
+    annual_predictions_summary_stats <- rbindlist(lapply(annual_metrics, function(this_metric){
+      return(annual_predictions[variable==this_metric, {
+        the_quantiles = quantile(value, c(0.025, 0.975), na.rm=T)
+        list(
+          mean = mean(value), 
+          lower = the_quantiles[1], 
+          upper = the_quantiles[2]
+        )
+      }, keyby=list(iso3, year, cellnumber, variable)]
+      )
+    })
+    )
+    print("Saving raster summary stats")
+    annual_rasters <- lapply(annual_metrics, function(this_metric){
+      this_df <- annual_predictions_summary_stats[variable==this_metric]
+      base_out_fname <- file.path(out_dir, "rasters", paste0("ITN_", this_year, "_", this_metric))
+      
+      save_raster(this_df, value_col="mean", raster_template = national_raster, out_fname = paste0(base_out_fname, "_mean.tif"))
       save_raster(this_df, value_col="lower", raster_template = national_raster, out_fname = paste0(base_out_fname, "_lower.tif"))
       save_raster(this_df, value_col="upper", raster_template = national_raster, out_fname = paste0(base_out_fname, "_upper.tif"))
-    }
-  })
-  
-  # save draw-level results only for the most relevant variables
-  metrics_by_draw <- c("use")
-  
-  if (prediction_type=="uncertainty"){
+      
+    })
+    
+    # save draw-level results only for the most relevant variables
+    metrics_by_draw <- c("use")
+    print("Saving raster draws")
     annual_rasters_by_draw <- lapply(metrics_by_draw, function(this_metric){
       
       base_out_fname <- file.path(out_dir, "raster_draws", paste0("ITN_", this_year, "_", this_metric))
@@ -464,6 +474,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
     })
     
   }
+  
   
   print("Annual prediction memory:")
   print(mem_used())
@@ -504,7 +515,6 @@ if (Sys.getenv("run_individually")!=""){
     dynamic_cov_dir <- paste0("/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/20200401/dynamic_covariates/dynamic_", this_year, ".csv")
     func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
     testing <- T
-    prediction_type <- "uncertainty"
     
   } else {
     this_year <- commandArgs(trailingOnly=TRUE)[1]
@@ -517,10 +527,10 @@ if (Sys.getenv("run_individually")!=""){
     dynamic_cov_dir <- Sys.getenv("dynamic_cov_dir")
     func_dir <- Sys.getenv("func_dir") # code directory for function scripts
     testing <- F
-    prediction_type <- "uncertainty"
   }
   
   print("Predicting")
+  prediction_type <- "mean"
   predict_rasters(input_dir, indicators_indir, main_indir, static_cov_dir, annual_cov_dir, dynamic_cov_dir, main_outdir, func_dir, this_year=this_year, testing=testing, prediction_type = prediction_type)
   # prof <- lineprof(predict_rasters(input_dir, indicators_indir, main_indir, static_cov_dir, annual_cov_dir, dynamic_cov_dir, main_outdir, func_dir, this_year=this_year))
   
