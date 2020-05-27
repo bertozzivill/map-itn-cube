@@ -53,19 +53,21 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   test_comparison <- F
   
   if (test_comparison){
+    
+    
     # test to make sure mean of draws lines up with true means
     load(file.path(main_indir, "03_inla_outputs_for_prediction.Rdata"))
-    
-    random_mean <- data.table(inla_outputs_for_prediction$access_dev$random)
-    fixed_mean <- inla_outputs_for_prediction$access_dev$fixed
-    fixed_mean$cov <- rownames(fixed_mean)
-    fixed_mean <- data.table(fixed_mean)
-    
     load(file.path(main_indir, "03_inla_posterior_samples.Rdata"))
     
-    this_metric <- "use_gap"
-    subn <- 250
     
+    this_metric <- "access_dev"
+    subn <- 500
+    
+    random_mean <- data.table(inla_outputs_for_prediction[[this_metric]]$random)
+    fixed_mean <- inla_outputs_for_prediction[[this_metric]]$fixed
+    fixed_mean$cov <- rownames(fixed_mean)
+    fixed_mean <- data.table(fixed_mean)
+  
     draws_of_draws <- sample(1:length(inla_posterior_samples[[this_metric]]$samples), subn)
     random_draws <- rbindlist(lapply(inla_posterior_samples[[this_metric]]$samples, function(this_samp){
       return(this_samp$random)
@@ -88,6 +90,22 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
     library(ggplot2)
     ggplot(compare_fixed, aes(x=mean, y=draw_mean, color=cov)) + geom_point() + geom_abline()
     ggplot(compare_random, aes(x=mean, y=draw_mean)) + geom_point() + geom_abline()
+    
+    set.seed(212)
+    test_vals <- data.table(init=rnorm(500))
+    test_vals[, inv_ihs:=inv_ihs(init, theta=inla_posterior_samples[[this_metric]]$ihs_theta)]
+    test_vals[, plogis := plogis(inv_ihs)]
+    test_vals[, init_mean:=mean(init)]
+    test_vals[, inv_ihs_mean:=inv_ihs(init_mean, theta=inla_posterior_samples[[this_metric]]$ihs_theta)]
+    test_vals[, plogis_mean:=plogis(inv_ihs_mean)]
+    
+    means <- test_vals[, lapply(.SD, mean)]
+    
+    ggplot(test_vals, aes(x=plogis)) +
+      geom_density(color="blue") +
+      geom_vline(aes(xintercept=plogis_mean)) +
+      geom_vline(aes(xintercept=mean(plogis)), color="blue")
+    
   }
   
   stock_and_flow <- fread(stockflow_fname)
@@ -609,7 +627,7 @@ if (Sys.getenv("run_individually")!=""){
   
   print("Predicting")
   prediction_type <- "uncertainty"
-  nsamp <- 100
+  nsamp <- 250
   predict_rasters(input_dir, indicators_indir, main_indir, static_cov_dir, annual_cov_dir, dynamic_cov_dir, main_outdir, func_dir, this_year=this_year, testing=testing,
                   prediction_type = prediction_type, nsamp=nsamp)
   # prof <- lineprof(predict_rasters(input_dir, indicators_indir, main_indir, static_cov_dir, annual_cov_dir, dynamic_cov_dir, main_outdir, func_dir, this_year=this_year))
