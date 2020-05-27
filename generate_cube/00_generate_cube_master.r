@@ -27,7 +27,7 @@ package_load(c("zoo","raster","VGAM", "doParallel", "data.table", "lubridate", "
                "rgdal", "INLA", "RColorBrewer", "cvTools", "boot", "stringr", "dismo", "gbm", "pryr", "survey", "RVenn"))
 
 # current dsub:
-# dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-itn-spatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-highmem-64 --disk-size 400 --boot-disk-size 50 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20200401 indicators_indir=gs://map_users/amelia/itn/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2/for_cube survey_indir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20200408 func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input CODE=gs://map_users/amelia/itn/code/generate_cube/00_generate_cube_master.r --output-recursive main_dir=gs://map_users/amelia/itn/itn_cube/results/2020015_thru_2019 --command 'Rscript ${CODE}'
+# dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-itn-spatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-highmem-64 --disk-size 400 --boot-disk-size 50 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data cov_dir=gs://map_users/amelia/itn/itn_cube/results/covariates/20200401 indicators_indir=gs://map_users/amelia/itn/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2/for_cube survey_indir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20200408 func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input CODE=gs://map_users/amelia/itn/code/generate_cube/00_generate_cube_master.r --output-recursive main_dir=gs://map_users/amelia/itn/itn_cube/results/20200501_BMGF_ITN_C1.00_R1.00_V2_with_uncertainty --command 'Rscript ${CODE}'
 
 ##  Environment Prep  ------------------------------------------------------------
 input_dir <- Sys.getenv("input_dir")
@@ -39,9 +39,10 @@ survey_indir <- Sys.getenv("survey_indir")
 indicators_indir <- Sys.getenv("indicators_indir")
 
 start_year <- 2000
-end_year <- 2019
+end_year <- 2021
 
 save_uncertainty <- T # set to TRUE when you want the ability to pull posterior samples from INLA
+nsamp <- 500
 
 ## Prep Data ## ------------------------------------------------------------
 print("STEP 1: Preparing input data")
@@ -64,7 +65,7 @@ time_passed(step_2_tic, step_2_toc)
 print("STEP 3: Running regressions")
 step_3_tic <- Sys.time()
 source(file.path(func_dir, "03_regress.r"))
-run_dev_gap_models(input_dir, func_dir, main_indir=main_dir, main_outdir=main_dir, start_year, end_year+1, save_uncertainty=save_uncertainty)
+run_dev_gap_models(input_dir, func_dir, main_indir=main_dir, main_outdir=main_dir, start_year, end_year+1, save_uncertainty=save_uncertainty, nsamp=nsamp)
 step_3_toc <- Sys.time()
 time_passed(step_3_tic, step_3_toc)
 
