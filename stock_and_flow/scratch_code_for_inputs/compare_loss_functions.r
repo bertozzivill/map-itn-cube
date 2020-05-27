@@ -20,9 +20,9 @@ sigmoid<-function(t,k,L){
 }
 
 n_param_samples <- 20
-# k <- seq(16, 24, length.out = n_param_samples)
+k <- seq(16, 24, length.out = n_param_samples)
 L <- seq(4, 20.7, length.out = n_param_samples)
-k <- 20
+# k <- 20
 
 samples <- data.table(expand.grid(k, L))
 names(samples) <- c("k", "L")
@@ -41,11 +41,20 @@ all_sigs <- rbindlist(lapply(1:nrow(samples), function(idx){
 all_sigs[, half_life:= L * sqrt(1- k/(k-log(0.5)))]
 unique(all_sigs[, list(L, half_life)])
 
-ggplot(all_sigs, aes(x=time, y=sig))  +
+ggplot(all_sigs[time<10], aes(x=time, y=sig))  +
   geom_line(aes(color=as.factor(L), group=as.factor(id))) +
   geom_vline(aes(xintercept=half_life, color=as.factor(L))) + 
   theme(legend.position="none") +
+  facet_wrap(~k) + 
+  labs(title=paste("L from", min(L), "to", max(L)))
+
+ggplot(all_sigs[time<10], aes(x=time, y=sig))  +
+  geom_line(aes(color=as.factor(k), group=as.factor(id))) +
+  geom_vline(aes(xintercept=half_life, color=as.factor(k))) + 
+  theme(legend.position="none") +
+  facet_wrap(~L) + 
   labs(title=paste("k from", min(k), "to", max(k)))
+
 
 
 # perhaps not identifiable, try simple exponential instead:
