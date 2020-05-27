@@ -71,7 +71,7 @@ ll_to_xyz<-function(ll){
 run_inla <- function(data, outcome_var, cov_vars, start_year, end_year, temporal=F, save_uncertainty=F){
   
   # initialize inla
-  INLA:::inla.dynload.workaround() 
+  # INLA:::inla.dynload.workaround() 
 
   # generate spatial mesh using unique xyz values 
   spatial_mesh = inla.mesh.2d(loc= unique(data[, list(x,y,z)]),
@@ -168,9 +168,6 @@ run_inla <- function(data, outcome_var, cov_vars, start_year, end_year, temporal
               ))
   
 }
-
-
-
 
 #### For aggregating rasters to national values
 # function to align resolutions between two rasters

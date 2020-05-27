@@ -42,7 +42,7 @@ sample_posterior <- function(main_indir, main_outdir, save_uncertainty=T, nsamp=
                                 this_sample <- raw_samples[[samp_idx]]$latent
                                 random <- data.frame(this_sample[rownames(this_sample) %like% "field",])
                                 names(random) <- "value"
-                                random$ID <- as.integer(gsub(".*:([0-9]*)", "\\1", rownames(random)))
+                                random$ID <- as.integer(gsub(".*:([0-9]*)", "\\1", rownames(random))) -1
                                 random$sample <- samp_idx
                                 rownames(random) <- c()
 
