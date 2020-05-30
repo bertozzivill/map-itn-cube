@@ -156,6 +156,7 @@ run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, sta
   # limit data to chosen "end year"
   data[, capped_time:=pmin(time, end_year-0.046)]
   
+  write.csv(data, file.path(main_outdir, "03_data_for_model.csv"), row.names=F)
   ## Run model ##------------------------------------------------------------
 
   ncores <- detectCores()
@@ -272,8 +273,8 @@ if (Sys.getenv("run_individually")!=""){
   
   if(Sys.getenv("input_dir")=="") {
     input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
-    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200404_ToT_no_excess_stock/"
-    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200404_ToT_no_excess_stock/"
+    main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200418_BMGF_ITN_C1.00_R1.00_V2/"
+    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200418_BMGF_ITN_C1.00_R1.00_V2/"
     func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
   } else {
     input_dir <- Sys.getenv("input_dir")
