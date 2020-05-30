@@ -38,12 +38,11 @@ aggregate_indicators <- function(reference_dir, list_out_dir){
   dir.create(cube_out_dir, recursive = T, showWarnings = F)
   
   # keep only 100 draws for cube uncertainty propagation, also can drop hhsize as it's constant across percaptia nets and access
-  samples <- sample(unique(metrics_for_cube$ITER), 100)
+  samples <- sample(unique(metrics_for_cube$ITER), 500)
   metrics_for_cube <- metrics_for_cube[ITER %in% samples & hh_size==1, list(ITER, iso3, year, month, time, nat_access, nat_percapita_nets=stockflow_percapita_nets)]
   metrics_for_cube <- merge(metrics_for_cube, data.table(ITER=sort(samples),
                                                          sample=1:length(samples)), all=T)
   metrics_for_cube <- metrics_for_cube[order(sample)]
-  
 
   write.csv(metrics_for_cube, file=file.path(cube_out_dir, "stock_and_flow_by_draw.csv"), row.names=F)
   write.csv(means_for_cube, file=file.path(cube_out_dir, "stock_and_flow_probs_means.csv"), row.names=F)
