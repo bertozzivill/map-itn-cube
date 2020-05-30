@@ -34,7 +34,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   source(file.path(func_dir, "03_inla_functions.r")) # for ll_to_xyz and predict_inla
   
   # Load relevant outputs from previous steps 
-  # survey_data <- fread(file.path(main_indir, "01_survey_data.csv")) # for subsetting predicted cells
+  # survey_data <- fread(file.path(main_indir, "02_data_covariates.csv")) # for subsetting predicted cells
   
   # load inla outputs and only keep the relevant parts
   # For newer regression runs, there is a small .rdata saved with just the information we need. For older runs, we need to extract it explicitly. 
@@ -116,6 +116,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   }else if (prediction_type=="mean"){ # mean results will need a uniform "sample" variable
     stock_and_flow[, sample:=0]
   }
+  time_map <- unique(stock_and_flow[, list(month, time)])
   
   if (file.exists(for_prediction_fname)){
     # for uncertainty, loads a list called "inla_posterior_samples" of the same length as the number of regressions run. Each list element is itself a list containing:
@@ -163,6 +164,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   
   print("inla load:")
   print(mem_used())
+  print(time_passed(start_time, Sys.time()))
   
   # determine how many covariate matrices need to be uniquely saved
   # TEMP: don't invoke b/c the cluster doesn't like RVenn
@@ -206,6 +208,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
                          by=c("cellnumber", "year"), all=T)
   
   thisyear_covs[, "Intercept":=1]
+  print(time_passed(start_time, Sys.time()))
   
   ## Get locations in x-y-z space of each pixel centroid for prediction ## ---------------------------------------------------------
   print("Loading and formatting pixel locations")
@@ -219,16 +222,23 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   setnames(prediction_cells, "row_id", "cellnumber")
   prediction_cells <- prediction_cells[order(cellnumber)]
   prediction_cells <- prediction_cells[iso3 %in% stock_and_flow$iso3]
+  
+  if (testing){
+    prediction_cells <- prediction_cells[iso3=="GMB"]
+  }
+  
   prediction_indices <- prediction_cells$cellnumber
   prediction_xyz <- ll_to_xyz(prediction_cells[, list(row_id=cellnumber, longitude, latitude)])
   
+  print(time_passed(start_time, Sys.time()))
   print("Splitting covariates")
   thisyear_covs <- thisyear_covs[cellnumber %in% prediction_cells$cellnumber]
   thisyear_covs <- split(thisyear_covs, by="month")
   
-  if (testing){
+  if (testing & length(unique(prediction_cells$iso3))>1){
     thisyear_covs <- thisyear_covs[1:2]
   }
+  months_to_predict <- as.integer(names(thisyear_covs))
   
   # convert to simplified matrices for prediction
   if (save_covs_separately){
@@ -247,6 +257,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
 
   print("covariate load:")
   print(mem_used())
+  print(time_passed(start_time, Sys.time()))
   
 
   print("Formatting prediction objects")
@@ -255,15 +266,17 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   for (output_var in names(inla_outputs_for_prediction)){
     temporal_mesh <- inla_outputs_for_prediction[[output_var]][["temporal_mesh"]]
     if (is.null(temporal_mesh)){
-      A_matrix <-inla.spde.make.A(inla_outputs_for_prediction[[output_var]][["spatial_mesh"]], 
-                                  loc=as.matrix(prediction_xyz[, list(x,y,z)])
-      )
+      A_matrix <- lapply(months_to_predict, function(this_month){
+        inla.spde.make.A(inla_outputs_for_prediction[[output_var]][["spatial_mesh"]], 
+                         loc=as.matrix(prediction_xyz[, list(x,y,z)]))
+      })
     }else{
-      A_matrix <-inla.spde.make.A(inla_outputs_for_prediction[[output_var]][["spatial_mesh"]], 
-                                  loc=as.matrix(prediction_xyz[, list(x,y,z)]), 
-                                  group=rep(min(this_year, max(temporal_mesh$interval)), length(prediction_indices)),
-                                  group.mesh=temporal_mesh
-      )
+      A_matrix <- lapply(months_to_predict, function(this_month){
+        inla.spde.make.A(inla_outputs_for_prediction[[output_var]][["spatial_mesh"]], 
+                         loc=as.matrix(prediction_xyz[, list(x,y,z)]), 
+                         group=rep(min(time_map[month==this_month]$time, max(temporal_mesh$interval)), length(prediction_indices)),
+                         group.mesh=temporal_mesh)
+      })
     }
     inla_outputs_for_prediction[[output_var]][["A_matrix"]] <- A_matrix
 
@@ -272,6 +285,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   
   print("format prediction objects:")
   print(mem_used())
+  print(time_passed(start_time, Sys.time()))
   
   ## Create INLA Prediction objects  ## ---------------------------------------------------------
   
@@ -295,9 +309,11 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
       random_effects <- this_model[["samples"]][[this_sample]][["random"]]
       colname <- "value"
     }
-    
-    # same random effects no matter the month
-    random <- drop(this_model[["A_matrix"]] %*% random_effects[[colname]])
+  
+    # random effects by month
+    random <- lapply(this_model[["A_matrix"]], function(this_A){
+      data.table(random=drop(this_A %*% random_effects[[colname]]))
+    })  
 
     # different fixed effects for each month
     these_predictions <- lapply(covs, predict_fixed, fe=fixed_effects[[colname]])
@@ -305,23 +321,29 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
     if (simple_results){
       # add fixed and random
       these_predictions <- rbindlist(lapply(names(these_predictions), function(month_idx){
-        named_preds <- these_predictions[[month_idx]] + random
+        named_preds <- these_predictions[[month_idx]] + random[[as.integer(month_idx)]]
         return(named_preds)
       } ))
+      setnames(these_predictions, "fixed.V1", "final_prediction")
+      these_predictions[, final_prediction := inv_ihs(final_prediction, theta=this_model[["ihs_theta"]])]
+      this_name <- ifelse(this_model[["output_var"]]=="percapita_net_dev", this_model[["output_var"]], paste0("emp_", this_model[["output_var"]])) 
+      setnames(these_predictions, "final_prediction", this_name)
     }else{
-      # add fixed and random
+      this_name <- this_model[["output_var"]]
+      # base_predictions[, random:= random]
       these_predictions <- rbindlist(lapply(names(these_predictions), function(month_idx){
-        named_preds <- cbind(base_predictions, these_predictions[[month_idx]] + random)
+        named_preds <- cbind(base_predictions, these_predictions[[month_idx]])
+        setnames(named_preds, "fixed.V1", "fixed")
+        named_preds <- cbind(named_preds, random[[as.integer(month_idx)]])
+        named_preds[, full:= fixed + random]
+        named_preds[, final_prediction := inv_ihs(full, theta=this_model[["ihs_theta"]])] 
         named_preds[, month:=as.integer(month_idx)]
+        named_preds[, metric:=ifelse(this_name=="percapita_net_dev", this_name, paste0("emp_", this_name))]
         named_preds[, sample:=ifelse(is.null(this_sample), 0, this_sample)]
         return(named_preds)
       } ))
     }
-    setnames(these_predictions, "fixed.V1", "final_prediction")
     
-    these_predictions[, final_prediction := inv_ihs(final_prediction, theta=this_model[["ihs_theta"]])] 
-    this_name <- ifelse(this_model[["output_var"]]=="percapita_net_dev", this_model[["output_var"]], paste0("emp_", this_model[["output_var"]])) 
-    setnames(these_predictions, "final_prediction", this_name)
     return(these_predictions)
   }
   
@@ -334,15 +356,21 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
     return(predictions)
   }
   
+  return_simple <- F
   if (prediction_type=="mean"){
     print("predicting mean")
     full_predictions <- lapply(inla_outputs_for_prediction, predict_by_model,
                                          covs=thisyear_covs, 
                                          base_predictions = prediction_cells[, list(iso3, cellnumber)],
-                               simple_results=T)
+                               simple_results=return_simple)
     
-    full_predictions <- cbind_prediction_outputs(full_predictions, base_df=prediction_cells[, list(iso3, cellnumber)],
-                                                 month_count=length(thisyear_covs))
+    if (return_simple){
+      full_predictions <- cbind_prediction_outputs(full_predictions, base_df=prediction_cells[, list(iso3, cellnumber)],
+                                                   month_count=length(thisyear_covs))
+    }else{
+      full_predictions <- rbindlist(full_predictions)
+    }
+  
     full_predictions <- list(full_predictions)
     
     # test_raster_stack <- stack(lapply(unique(full_predictions$metric), function(this_metric){
@@ -358,7 +386,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   
   }else{
     print("predicting samples")
-    samp_count <- ifelse(testing, 5, ifelse(is.null(nsamp), length(inla_outputs_for_prediction[[1]]$samples), nsamp))
+    samp_count <- ifelse(testing, 500, ifelse(is.null(nsamp), length(inla_outputs_for_prediction[[1]]$samples), nsamp))
     full_predictions <- lapply(1:samp_count, function(this_sample){
       print(this_sample)
       sub_predictions <- lapply(inla_outputs_for_prediction, function(this_model){
@@ -367,25 +395,94 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
                                 covs=thisyear_covs, 
                                 base_predictions=prediction_cells[, list(iso3, cellnumber)],
                                 this_sample=this_sample,
-                                simple_results = T))
+                                simple_results = return_simple))
       })
-      sub_predictions <- cbind_prediction_outputs(sub_predictions, base_df=prediction_cells[, list(iso3, cellnumber)], 
-                                                  month_count=length(thisyear_covs), this_sample = this_sample)
+      
+      if (return_simple){
+        sub_predictions <- cbind_prediction_outputs(sub_predictions, base_df=prediction_cells[, list(iso3, cellnumber)], 
+                                                    month_count=length(thisyear_covs), this_sample = this_sample)
+      }else{
+        sub_predictions <- rbindlist(sub_predictions)
+      }
       
       return(sub_predictions)
     })
     
   }
+  
 
+  
+  
+  if (testing){
+    ## testing for comparison
+    full_predictions <- rbindlist(full_predictions)
+    
+    # if big
+    # draw_means <- full_predictions[, list(fixed=mean(fixed), random=mean(random), full=mean(full), 
+    #                                       final_prediction= mean(final_prediction)), 
+    #                                by=list(iso3, month, cellnumber, metric)]
+    # draw_means_long <- melt(draw_means, id.vars=c("iso3", "month", "cellnumber", "metric"), value.name="from_draws")
+    # write.csv(draw_means, file="~/Desktop/full_predictions_ben_2012_draw_means.csv", row.names=F)
+    
+    # if small
+    predictions_by_draw_long <- melt(full_predictions, id.vars=c("iso3", "month", "cellnumber", "sample", "metric"), value.name="from_draws")
+    draw_means <- predictions_by_draw_long[, list(from_draws=mean(from_draws)), by=list(iso3, month, cellnumber, metric, variable)]
+    
+    predictions_from_mean <- fread("~/Desktop/full_predictions_gmb_2012_means.csv")
+    predictions_from_mean_long <- melt(predictions_from_mean, id.vars=c("iso3", "month", "cellnumber", "sample", "metric"), value.name="from_mean")
+    predictions_from_mean_long[, sample:=NULL]
+    
+    compare_draws <- merge(predictions_from_mean_long, draw_means)
+    library(ggplot2)
+    ggplot(compare_draws, aes(x=from_mean, y=from_draws)) +
+      geom_abline() + 
+      geom_point(aes(color=variable)) + 
+      facet_wrap(metric~variable, scales="free")
+    
+    full_predictions[, type:="draw"]
+    predictions_from_mean[, type:="mean"]
+    
+    for_compare <- rbind(full_predictions, predictions_from_mean)
+    for_compare <- dcast.data.table(for_compare, iso3 + month +  type + sample +cellnumber ~ metric, value.var="final_prediction" )
+    
+    for_compare <- merge(for_compare, stock_and_flow, by=c("iso3", "month"), all.x=T)
+    for_compare[, access:= plogis(emp_nat_access + emp_access_dev)]
+    for_compare[, access_dev:= access-nat_access]
+    for_compare[, use:= plogis(emp_nat_access + emp_access_dev - emp_use_gap)]
+    for_compare[, use_gap:= access-use]
+    for_compare[, percapita_nets:= pmax(0, nat_percapita_nets + percapita_net_dev)]
+    for_compare[, percapita_net_dev:= percapita_nets - nat_percapita_nets]
+    
+    for_compare <- melt(for_compare, id.vars=c("iso3", "year", "month", "time", "type", "sample", "cellnumber"))
+    
+    for_compare_means <- for_compare[, list(value=mean(value)), by=list(iso3, year, month, time, type, cellnumber, variable)]
+    for_compare_means <- dcast.data.table(for_compare_means, iso3 + year + month + time + cellnumber + variable ~ type)
+    
+    ggplot(for_compare_means[!variable %like% "nat"], aes(x=mean, y=draw)) +
+      geom_abline() + 
+      geom_point(aes(color=variable)) + 
+      facet_wrap(.~variable, scales="free")
+    
+    
+    
+    # write.csv(rbindlist(full_predictions), file="~/Desktop/full_predictions_gmb_2012_means.csv", row.names=F)
+    
+    #################
+  }
+  
   print("Predict regression outputs:")
   print(mem_used())
+  print(time_passed(start_time, Sys.time()))
+  print("Size of prediction object:")
+  print(object.size(full_predictions), units="auto")
   
   rm(thisyear_covs, inla_outputs_for_prediction)
   
   # transform
   print("Transforming variables")
   
-  full_predictions <- lapply(full_predictions, function(these_predictions){
+  for (prediction_idx in 1:length(full_predictions)){
+    these_predictions <- full_predictions[[prediction_idx]]
     print(unique(these_predictions$sample))
     if ("sample" %in% names(stock_and_flow)){
       these_predictions <- merge(these_predictions, stock_and_flow, by=c("iso3", "month", "sample"), all.x=T)
@@ -395,41 +492,70 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
     
     ## Metric-specific transformations
     these_predictions  <- these_predictions[, list(iso3, year, month, time, sample, cellnumber,
-                                                 nat_access,
-                                                 access = plogis(emp_nat_access + emp_access_dev),
-                                                 use = plogis(emp_nat_access + emp_access_dev - emp_use_gap),
-                                                 nat_percapita_nets,
-                                                 percapita_nets = pmax(0, nat_percapita_nets + percapita_net_dev)
+                                                   access = plogis(emp_nat_access + emp_access_dev),
+                                                   access_dev = plogis(emp_nat_access + emp_access_dev) - nat_access,
+                                                   use = plogis(emp_nat_access + emp_access_dev - emp_use_gap),
+                                                   use_gap = plogis(emp_nat_access + emp_access_dev) - plogis(emp_nat_access + emp_access_dev - emp_use_gap),
+                                                   percapita_nets = pmax(0, nat_percapita_nets + percapita_net_dev),
+                                                   percapita_net_dev = pmax(0, nat_percapita_nets + percapita_net_dev) - nat_percapita_nets
     )]
-    these_predictions[, access_dev:= access-nat_access]
-    these_predictions[, use_gap:=access-use]
-    these_predictions[, percapita_net_dev:=percapita_nets - nat_percapita_nets]
-    these_predictions[, use_rate:= use/access]
-    these_predictions[use_rate>1, use_rate:=1]
+    # these_predictions[, access_dev:= access-nat_access]
+    # these_predictions[, nat_access:=NULL]
+    # these_predictions[, percapita_net_dev:=percapita_nets - nat_percapita_nets]
+    # these_predictions[, nat_percapita_nets:=NULL]
+    # these_predictions[, use_gap:=access-use]
+    these_predictions[, use_rate:= pmin(use/access, 1)]
     
     these_predictions <- merge(these_predictions, population, by=c("year", "cellnumber"), all.x=T)
-    
-    # set national values to NA for consistency with remainder of dataset
-    these_predictions[is.na(access), nat_access:=NA]
-    these_predictions[is.na(percapita_nets), nat_percapita_nets:=NA]
-    
-    return(these_predictions)
-  })
+    full_predictions[[prediction_idx]] <- these_predictions
+    print(mem_used())
+  }
+  
+  
+  # full_predictions <- lapply(full_predictions, function(these_predictions){
+  #   print(unique(these_predictions$sample))
+  #   if ("sample" %in% names(stock_and_flow)){
+  #     these_predictions <- merge(these_predictions, stock_and_flow, by=c("iso3", "month", "sample"), all.x=T)
+  #   }else{
+  #     these_predictions <- merge(these_predictions, stock_and_flow, by=c("iso3", "month"), all.x=T)
+  #   }
+  #   
+  #   ## Metric-specific transformations
+  #   these_predictions  <- these_predictions[, list(iso3, year, month, time, sample, cellnumber,
+  #                                                access = plogis(emp_nat_access + emp_access_dev),
+  #                                                access_dev = plogis(emp_nat_access + emp_access_dev) - nat_access,
+  #                                                use = plogis(emp_nat_access + emp_access_dev - emp_use_gap),
+  #                                                use_gap = plogis(emp_nat_access + emp_access_dev) - plogis(emp_nat_access + emp_access_dev - emp_use_gap),
+  #                                                percapita_nets = pmax(0, nat_percapita_nets + percapita_net_dev),
+  #                                                percapita_net_dev = pmax(0, nat_percapita_nets + percapita_net_dev) - nat_percapita_nets
+  #   )]
+  #   # these_predictions[, access_dev:= access-nat_access]
+  #   # these_predictions[, nat_access:=NULL]
+  #   # these_predictions[, percapita_net_dev:=percapita_nets - nat_percapita_nets]
+  #   # these_predictions[, nat_percapita_nets:=NULL]
+  #   # these_predictions[, use_gap:=access-use]
+  #   these_predictions[, use_rate:= pmin(use/access, 1)]
+  #   
+  #   these_predictions <- merge(these_predictions, population, by=c("year", "cellnumber"), all.x=T)
+  #   print(mem_used())
+  #   
+  #   return(these_predictions)
+  # })
+  
   
   print("Transform variables:")
   print(mem_used())
+  print(time_passed(start_time, Sys.time()))
   
-  rm(prediction_cells, population, stock_and_flow)
+  rm(prediction_cells, population, stock_and_flow, these_predictions)
   
   ## Find means over country and continent
   print("Aggregating to country level")
   country_level_predictions <- rbindlist(lapply(full_predictions, function(these_predictions){
-    return(these_predictions[, list(nat_access=weighted.mean(nat_access, pop, na.rm=T),
-                                   access = weighted.mean(access, pop, na.rm=T),
+    return(these_predictions[, list(access = weighted.mean(access, pop, na.rm=T),
                                    access_dev = weighted.mean(access_dev, pop, na.rm=T),
                                    use = weighted.mean(use, pop, na.rm=T),
                                    use_gap = weighted.mean(use_gap, pop, na.rm=T),
-                                   nat_percapita_nets= weighted.mean(nat_percapita_nets, pop, na.rm=T),
                                    percapita_nets = weighted.mean(percapita_nets, pop, na.rm=T),
                                    percapita_net_dev = weighted.mean(percapita_net_dev, pop, na.rm=T),
                                    use_rate = weighted.mean(use_rate, pop, na.rm=T),
@@ -439,17 +565,16 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
     ]  )
   }))
   
+  print(time_passed(start_time, Sys.time()))
   print("Aggregating to continent level")
   
   continent_level_predictions <- rbindlist(lapply(full_predictions, function(these_predictions){
     return(these_predictions[, list(iso3="AFR",
                                                       time=mean(time, na.rm=T),
-                                                      nat_access=weighted.mean(nat_access, pop, na.rm=T),
                                                       access = weighted.mean(access, pop, na.rm=T),
                                                       access_dev = weighted.mean(access_dev, pop, na.rm=T),
                                                       use = weighted.mean(use, pop, na.rm=T),
                                                       use_gap = weighted.mean(use_gap, pop, na.rm=T),
-                                                      nat_percapita_nets= weighted.mean(nat_percapita_nets, pop, na.rm=T),
                                                       percapita_nets = weighted.mean(percapita_nets, pop, na.rm=T),
                                                       percapita_net_dev = weighted.mean(percapita_net_dev, pop, na.rm=T),
                                                       use_rate = weighted.mean(use_rate, pop, na.rm=T),
@@ -461,7 +586,10 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
 
   country_level_predictions <- rbind(continent_level_predictions, country_level_predictions)
   country_level_predictions <- country_level_predictions[order(iso3, year, month)]
+  print(time_passed(start_time, Sys.time()))
   
+  print(time_passed(start_time, Sys.time()))
+  print("melting long")
   country_level_predictions <- melt(country_level_predictions, id.vars=c("iso3", "year", "month", "time", "sample", "pop"))
   country_level_summary_stats <- country_level_predictions[, list(mean=mean(value),
                                                                     lower=quantile(value, 0.025),
@@ -469,10 +597,12 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
                                                              by=list(iso3, year, month, time, variable, pop)]
   
   # write.csv(country_level_predictions, file.path(out_dir, "aggregated", paste0("aggregated_predictions_", this_year, "_by_draw.csv")), row.names=F)
-  write.csv(country_level_summary_stats, file.path(out_dir, "aggregated", paste0("aggregated_predictions_", this_year, ".csv")), row.names=F)
+  suffix <- ifelse(prediction_type=="mean", "_mean_ONLY", "")
+  write.csv(country_level_summary_stats, file.path(out_dir, "aggregated", paste0("aggregated_predictions_", this_year, suffix, ".csv")), row.names=F)
   
   print("Prediction and transformation memory:")
   print(mem_used())
+  print(time_passed(start_time, Sys.time()))
   rm(country_level_predictions, continent_level_predictions, country_level_summary_stats)
   
   # for_data_comparison <- full_predictions[cellnumber %in% unique(survey_data$cellnumber)]
@@ -487,13 +617,11 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   
   print("Taking average across months")
   annual_predictions <- rbindlist(lapply(full_predictions, function(these_predictions){
-    return(these_predictions[, list(# nat_access=mean(nat_access, na.rm=F),
-                                    access = mean(access, na.rm=F),
+    return(these_predictions[, list(access = mean(access, na.rm=F),
                                     # access_dev = mean(access_dev, na.rm=F),
                                     use = mean(use, na.rm=F),
                                     # use_gap = mean(use_gap, na.rm=F),
                                     use_rate = mean(use_rate, na.rm=F),
-                                    # nat_percapita_nets= mean(nat_percapita_nets, na.rm=F),
                                     percapita_nets = mean(percapita_nets, na.rm=F)
                                     # percapita_net_dev = mean(percapita_net_dev, na.rm=F)
       
@@ -501,7 +629,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
     by=list(iso3, year, cellnumber, sample)
     ]  )
   }))
-
+  print(time_passed(start_time, Sys.time()))
   rm(full_predictions)
   
   # annual_predictions <- annual_predictions[order(sample, cellnumber)]
@@ -543,6 +671,8 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
       )
     })
     )
+    print(time_passed(start_time, Sys.time()))
+    
     print("Saving raster summary stats")
     annual_rasters <- lapply(annual_metrics, function(this_metric){
       this_df <- annual_predictions_summary_stats[variable==this_metric]
@@ -553,6 +683,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
       make_raster(this_df, value_col="upper", raster_template = national_raster, out_fname = paste0(base_out_fname, "_upper.tif"))
       
     })
+    print(time_passed(start_time, Sys.time()))
     
     # save draw-level results only for the most relevant variables
     metrics_by_draw <- c("use")
@@ -564,7 +695,7 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
       these_rasters <- lapply(unique(annual_predictions$sample), function(this_sample){
         make_raster(annual_predictions[variable==this_metric & sample==this_sample],
                     value_col = "value", raster_template = national_raster,
-                    out_fname = paste0(base_out_fname, "_sample", this_sample, ".tif"))
+                    out_fname = paste0(base_out_fname, "_sample_", this_sample, ".tif"))
       })
       
     })
@@ -574,10 +705,11 @@ predict_rasters <- function(input_dir, indicators_indir, main_indir, static_cov_
   
   print("Annual prediction memory:")
   print(mem_used())
+  print(time_passed(start_time, Sys.time()))
   
   rm(annual_predictions, annual_rasters)
   print(paste(this_year, "annual rasters saved!"))
-
+  
 }
 
 ## TO RUN THIS SCRIPT INDIVIDUALLY, READ HERE
@@ -601,11 +733,11 @@ if (Sys.getenv("run_individually")!=""){
   package_load(c("zoo", "VGAM", "raster", "doParallel", "data.table", "rgdal", "INLA", "RColorBrewer", "cvTools", "boot", "stringr", "dismo", "gbm", "pryr"))
   
   if(Sys.getenv("input_dir")=="") {
-    this_year <- 2021
+    this_year <- 2012
     input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
     main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200501_BMGF_ITN_C1.00_R1.00_V2_with_uncertainty/"
     indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2/for_cube"
-    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200501_BMGF_ITN_C1.00_R1.00_V2_with_uncertainty/"
+    main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200528_test_prediction/"
     static_cov_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/20200401/static_covariates.csv"
     annual_cov_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/20200401/annual_covariates.csv"
     dynamic_cov_dir <- paste0("/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/20200401/dynamic_covariates/dynamic_", this_year, ".csv")
@@ -625,9 +757,17 @@ if (Sys.getenv("run_individually")!=""){
     testing <- F
   }
   
+  time_passed <- function(tic, toc){
+    elapsed <- toc-tic
+    print(paste("--> Time Elapsed: ", elapsed, units(elapsed)))
+  }
+  
   print("Predicting")
   prediction_type <- "uncertainty"
-  nsamp <- 250
+  nsamp <- 200
+  
+  start_time <- Sys.time()
+  print(paste("Start time:", start_time))
   predict_rasters(input_dir, indicators_indir, main_indir, static_cov_dir, annual_cov_dir, dynamic_cov_dir, main_outdir, func_dir, this_year=this_year, testing=testing,
                   prediction_type = prediction_type, nsamp=nsamp)
   # prof <- lineprof(predict_rasters(input_dir, indicators_indir, main_indir, static_cov_dir, annual_cov_dir, dynamic_cov_dir, main_outdir, func_dir, this_year=this_year))

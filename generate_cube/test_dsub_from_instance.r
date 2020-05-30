@@ -20,7 +20,7 @@ orig_cube_labels <- c( "20200418_BMGF_ITN_C1.00_R1.00_V2",
                   "20200418_BMGF_ITN_C0.00_R0.25_V2")
 orig_stockflow_labels <- orig_cube_labels
 
-years <- c(2021)
+years <- c(2019)
 orig_cube_labels <- c("20200501_BMGF_ITN_C1.00_R1.00_V2_with_uncertainty")
 orig_stockflow_labels <- c("20200418_BMGF_ITN_C1.00_R1.00_V2")
 
@@ -35,7 +35,7 @@ to_submit <- merge(to_submit, stockflow_map)
 func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
 
 # options
-# machine_type <- "m1-megamem-40"
+# machine_type <- "n1-standard-8"
 machine_type <- "n1-highmem-64"
 label <- "'type=itn_cube'"
 disk_size <- 400
