@@ -20,7 +20,8 @@ orig_cube_labels <- c( "20200418_BMGF_ITN_C1.00_R1.00_V2",
                   "20200418_BMGF_ITN_C0.00_R0.25_V2")
 orig_stockflow_labels <- orig_cube_labels
 
-years <- c(2019)
+years <- 2000
+preempt <- T
 orig_cube_labels <- c("20200501_BMGF_ITN_C1.00_R1.00_V2_with_uncertainty")
 orig_stockflow_labels <- c("20200418_BMGF_ITN_C1.00_R1.00_V2")
 
@@ -36,7 +37,9 @@ func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
 
 # options
 # machine_type <- "n1-standard-8"
-machine_type <- "n1-highmem-64"
+# machine_type <- "n1-highmem-64"
+machine_type <- "n1-ultramem-40"
+preempt_str <- ifelse(preempt, "--preemptible --retries 3 --wait", "")
 label <- "'type=itn_cube'"
 disk_size <- 400
 boot_disk_size <- 50
@@ -93,7 +96,8 @@ for (idx in 1:nrow(to_submit)){
   
   final_str <- paste0("--command 'Rscript ${CODE} ",  this_year, "' ")
   
-  full_dsub_str <- paste(dsub_str, label_str, machine_str, disk_str, boot_disk_str, logging_str, input_str, input_dir_str, output_dir_str, final_str)
+  full_dsub_str <- paste(dsub_str, label_str, machine_str, disk_str, boot_disk_str, preempt_str,
+                         logging_str, input_str, input_dir_str, output_dir_str, final_str)
   
   print(full_dsub_str)
   system(full_dsub_str, wait=F)
