@@ -3,7 +3,7 @@ library(INLA)
 library(data.table)
 library(ggplot2)
 
-load("~/Desktop/GMB_2012_compare.rdata")
+load("~/Desktop/with_ihs/GMB_2012_compare.rdata")
 
 ggplot(for_compare_means[variable=="emp_use_gap"], aes(x=mean, y=draw)) +
   geom_abline() + 
@@ -21,7 +21,7 @@ ggplot(compare_draws,
   theme(legend.position = "none")
   
 
-these_metrics <- c("emp_use_gap", "emp_access_dev")
+these_metrics <- c("emp_use_gap", "emp_access_dev", "percapita_net_dev")
 this_month <- 5
 these_cells <- c(976693)
 
