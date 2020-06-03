@@ -19,12 +19,12 @@ years <- 2000:2019
 
 cube_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200530_no_ihs/04_predictions"
 old_cube_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200418_BMGF_ITN_C1.00_R1.00_V2/04_predictions"
-# stockflow_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2"
-# survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200408"
-# nmcp_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020/20200507/ITN_C0.00_R0.00/"
-# data_fname <- "../02_data_covariates.csv"
+pop_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/gbd_populations"
 
 shape_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/shapefiles/"
+gaul_tif_fname <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/african_cn5km_2013_no_disputes.tif"
+iso_gaul_map<-fread("/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/iso_gaul_map.csv")
+setnames(iso_gaul_map, c("GAUL_CODE", "COUNTRY_ID", "NAME"), c("gaul", "iso3", "country"))
 
 setwd(cube_indir)
 
@@ -37,6 +37,8 @@ cube_survey[, type:=gsub("_mean", "", type)]
 cube_survey <- dcast.data.table(cube_survey, surveyid + iso3 + date + min_date + max_date + type ~ metric)
 cube_survey[, type:=gsub("iation", "", type)]
 
+
+### Comparing old to new time series #################################---------------------------------------------------------------------------
 
 cube_nat_level_old <- rbindlist(lapply(list.files(file.path(old_cube_indir, "aggregated"), full.names = T), fread))
 cube_nat_level_old <- melt(cube_nat_level_old, id.vars = c("iso3", "year", "month", "time", "pop"), value.name="mean")
@@ -61,13 +63,14 @@ oldnew_plot <- ggplot(compare_oldnew[variable==this_var & year %in% years], aes(
                       facet_wrap(.~iso3)
 
 
+### Comparing mean to mean of draws time series #################################---------------------------------------------------------------------------
+
 cube_nat_level_draws <- rbindlist(lapply(new_files[!new_files %like% "mean_ONLY"], fread))
 cube_nat_level_draws[, type:="draw"]
 cube_nat_level_means <- cube_nat_level_new[time %in% cube_nat_level_draws$time, 
                                                    list(iso3, year, month, time, variable, pop, mean, type="mean")]
 compare_drawmean <- rbind(cube_nat_level_draws, cube_nat_level_means, use.names=T, fill=T)
 
-# todo: pdf of each variable
 
 pdf(file.path(cube_indir, "line_comparisons.pdf"), width=10, height=8)
 
@@ -87,7 +90,7 @@ for (this_var in unique(compare_drawmean$variable)){
 
 graphics.off()
 
-
+### Comparing mean to mean of draws rasters #################################---------------------------------------------------------------------------
 
 raster_metrics <- c("percapita_nets", "access", "use", "use_rate")
 raster_files <- list.files(file.path(cube_indir, "rasters"), full.names = T)
@@ -125,7 +128,6 @@ for (this_metric in raster_metrics){
   years_for_plot <- c(2011, 2013, 2015, 2017, 2019)
   year_indices <- which(years %in% years_for_plot)
   
-  
   lower_upper_plots <- levelplot(stack(upper_rasters[[year_indices]], drawmean_rasters[[year_indices]], lower_rasters[[year_indices]]),
                                  par.settings=rasterTheme(region= wpal("seaside", noblack = T)), at= seq(0, 1, 0.05),
                                  xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(length(years_for_plot),3), 
@@ -139,10 +141,73 @@ graphics.off()
 
 ci_width <- upper_rasters - lower_rasters
 names(ci_width) <- names(drawmean_rasters)
-ci_plot <- levelplot(ci_width[[c(2,1,3)]],
-          par.settings=rasterTheme(region= rev(pnw_palette("Lake", 100))), at= seq(0, 1, 0.05),
-          xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(3,1), 
-          main="Percentage Point difference between \n lower and upper confidence intervals")
+# ci_plot <- levelplot(ci_width[[c(2,1,3)]],
+#           par.settings=rasterTheme(region= rev(pnw_palette("Lake", 100))), at= seq(0, 1, 0.05),
+#           xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(3,1), 
+#           main="Percentage Point difference between \n lower and upper confidence intervals")
 
 # grid.arrange(diff_plot, ci_plot, nrow=2)
+
+### Calculating time series at the annual level #################################---------------------------------------------------------------------------
+
+
+# load and organize population files
+population_rasters <- stack(file.path(pop_dir, paste0("ihme_corrected_frankenpop_All_Ages_3_", years, ".tif")))
+national_raster <- raster(gaul_tif_fname)
+NAvalue(national_raster) <- -9999
+population_rasters <- raster::mask(crop(population_rasters, national_raster), national_raster)
+
+calc_zonal <- function(input, pop, admin, label=""){
+  count.raster <- input * pop
+  
+  # calculate zonal stats
+  full.zonal <- data.table(zonal(count.raster, admin, fun='sum'))
+  pop.zonal  <- data.table(zonal(pop, admin, fun='sum'))
+  
+  rate.zonal <- merge(full.zonal[, list(uid=zone, count_val=sum)],
+                      pop.zonal[, list(uid=zone, total_pop=sum)],
+                      by="uid", all=T)
+  rate.zonal[, final_val:= count_val/total_pop]
+  if (!label==""){
+    rate.zonal[, label:=label]
+  }
+  
+  return(rate.zonal)
+}
+
+this_metric <- "use"
+
+drawmean_rasters <- stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_mean.tif")))
+lower_rasters <- stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_lower.tif")))
+upper_rasters <- stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_upper.tif")))
+
+summary_vals_annual <- lapply(1:nlayers(population_rasters), function(idx){
+  print(idx)
+  all_vals <- rbindlist(list(calc_zonal(lower_rasters[[idx]], population_rasters[[idx]], national_raster, label="lower"),
+                        calc_zonal(drawmean_rasters[[idx]], population_rasters[[idx]], national_raster, label="mean"),
+                        calc_zonal(upper_rasters[[idx]], population_rasters[[idx]], national_raster, label="upper")))
+  all_vals[, metric:=this_metric]
+  all_vals[, year:= years[idx]]
+  return(dcast.data.table(all_vals,  metric + year + uid ~ label, value.var="final_val"))
+})
+summary_vals_annual <- rbindlist(summary_vals_annual)
+summary_vals_annual <- merge(summary_vals_annual, iso_gaul_map[, list(uid=gaul, iso3, country)], all.x=T)
+
+compare_annual_monthly <- rbind(summary_vals_annual[iso3 %in% unique(cube_nat_level_draws$iso3),
+                                                    list(iso3, time=year, variable=metric, type="annual", mean, lower, upper)],
+                                cube_nat_level_draws[variable %in% unique(summary_vals_annual$metric) & year %in% years,
+                                                     list(iso3, time, variable, type="monthly", mean, lower, upper)])
+
+
+ggplot(compare_annual_monthly, aes(x=time, color=type, fill=type)) + 
+  geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.4) + 
+  geom_line(aes(y=mean)) + 
+  facet_wrap(.~iso3) +
+  theme(axis.text.x = element_text(angle=45, hjust=1)) + 
+  labs(title=paste(this_metric, ": Annual vs Monthly"),
+       y=this_metric,
+       x="")
+
+
+
 
