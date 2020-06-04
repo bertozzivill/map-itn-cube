@@ -194,19 +194,34 @@ summary_vals_annual <- rbindlist(summary_vals_annual)
 summary_vals_annual <- merge(summary_vals_annual, iso_gaul_map[, list(uid=gaul, iso3, country)], all.x=T)
 
 compare_annual_monthly <- rbind(summary_vals_annual[iso3 %in% unique(cube_nat_level_draws$iso3),
-                                                    list(iso3, time=year, variable=metric, type="annual", mean, lower, upper)],
+                                                    list(iso3, time=year, variable=metric, type="pixel %ile", mean, lower, upper)],
                                 cube_nat_level_draws[variable %in% unique(summary_vals_annual$metric) & year %in% years,
-                                                     list(iso3, time, variable, type="monthly", mean, lower, upper)])
+                                                     list(iso3, time, variable, type="national %ile", mean, lower, upper)])
 
 
-ggplot(compare_annual_monthly, aes(x=time, color=type, fill=type)) + 
-  geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.4) + 
-  geom_line(aes(y=mean)) + 
+ggplot(compare_annual_monthly, aes(x=time)) + 
+  # geom_hline(yintercept=c(0.5, 0.25, 0.75)) + 
+  geom_ribbon(aes(ymin=lower, ymax=upper, fill=type), alpha=0.4) + 
+  geom_line(aes(y=mean, color=type)) + 
+  geom_point(data=cube_survey[type==this_metric], aes(x=date, y=mean)) + 
   facet_wrap(.~iso3) +
   theme(axis.text.x = element_text(angle=45, hjust=1)) + 
   labs(title=paste(this_metric, ": Annual vs Monthly"),
        y=this_metric,
        x="")
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
