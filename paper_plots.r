@@ -456,7 +456,8 @@ rel_gain_plots <- lapply(years_for_rel_gain, function(this_year){
 ############ ----------------------------------------------------------------------------------------------------------------------
 
 pdf(file.path(out_dir, "results_plots.pdf"), width=11, height=10)
-grid.arrange(sigmoid_plot, half_life_iso_plot, ncol=2, top="LLIN Retention Half-Lives")
+# grid.arrange(sigmoid_plot, half_life_iso_plot, ncol=2, top="LLIN Retention Half-Lives")
+print(half_life_iso_plot)
 print(continental_nets_plot)
 print(access_use_timeseries)
 grid.arrange(access_plot, use_rate_plot, npc_plot, nrow=3)
