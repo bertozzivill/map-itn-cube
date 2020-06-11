@@ -68,8 +68,6 @@ get_prediction_objects <- function(for_prediction_fname, metrics_to_extract, nsa
 }
 
 
-
-
 predict_by_sample <- function(this_sample, this_model, these_covs, month_idx){
   print(this_sample)
   if (!"samples" %in% names(this_model)){
@@ -116,26 +114,95 @@ format_stockflow <- function(stock_and_flow, value_var, months, pixel_template){
   return(lapply(stock_and_flow, as.matrix))
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-cbind_prediction_outputs <- function(predictions, base_df, month_count=12, this_sample=NULL){
-  predictions <- do.call("cbind", predictions)
-  names(predictions) <- gsub(".*\\.(.*)", "\\1", names(predictions))
-  predictions <- cbind(base_df, predictions)
-  predictions[, month:= rep(1:month_count, each=nrow(predictions)/month_count)]
-  predictions[, sample:=ifelse(is.null(this_sample), 0, this_sample)]
-  return(predictions)
+nat_summary_stats <- function(df, quantiles=c(0.025, 0.975)){
+  summary_df <- df[,  as.list(quantile(.SD, quantiles)), by=iso3]
+  names(summary_df) <- c("iso3", "lower", "upper")
+  summary_df <- merge(df[, .(mean = rowMeans(.SD)), by = iso3], summary_df) 
 }
+
+aggregate_to_nat <- function(predictions, base_df, nsamp){
+  
+  print("finding national means")
+  country_level <- lapply(predictions, function(these_predictions){
+    this_country_level <- cbind(base_df, these_predictions)
+    continent_level <- this_country_level[,lapply(.SD, weighted.mean, w=pop, na.rm=T),  .SDcols=as.character(1:nsamp)]
+    continent_level[, iso3:="AFR"]
+    this_country_level <- this_country_level[,lapply(.SD, weighted.mean, w=pop, na.rm=T), by=iso3, .SDcols=as.character(1:nsamp)]
+    this_country_level <- rbind(continent_level, this_country_level)
+  })
+  
+  print("summary stats by month")
+  monthly_summary_stats <- lapply(country_level, nat_summary_stats)
+  for (idx in 1:length(monthly_summary_stats)) {monthly_summary_stats[[idx]][, month:=idx]}
+  monthly_summary_stats <- rbindlist(monthly_summary_stats)
+  
+  print("summary stats by year")
+  annual_summary_stats <- nat_summary_stats(rbindlist(country_level)[, lapply(.SD, mean), by=iso3])
+  
+  return(rbind(monthly_summary_stats, annual_summary_stats, fill=T))
+  
+}
+
+mean_of_matrices <- function(df_list){
+  return(Reduce("+", df_list) / length(df_list))
+}
+
+exceedence <- function(matrix, cutoff, non = FALSE) {
+  #' Takes in a matrix, calculates probability of mean exceeding cutoff value by column
+  #' Set non = TRUE to get non-exceedance
+  if(is.logical(non) == FALSE){
+    stop("'non' argument must be TRUE/FALSE.")
+  }
+  if(non == FALSE) {
+    out <- apply(matrix > cutoff, 1, mean) 
+  }
+  if (non == TRUE) {
+    out <- apply(matrix < cutoff, 1, mean) 
+  }
+  return(out)
+}
+
+pixel_summary_stats <- function(draw_matrix, quantiles=c(0.025, 0.975), exceedence_cutoffs=c(0.5)){
+  print("means")
+  means <- matrix(rowMeans2(draw_matrix))
+  colnames(means) <- "mean"
+  
+  print("positive exceedence")
+  pos_exceed <- do.call(cbind, lapply(exceedence_cutoffs, function(cutoff){
+    print(cutoff)
+    return(exceedence(draw_matrix, cutoff, non=F))
+  })) 
+  colnames(pos_exceed) <- paste0("pos_exceed_", exceedence_cutoffs)
+  
+  print("negative exceedence")
+  neg_exceed <- do.call(cbind, lapply(exceedence_cutoffs, function(cutoff){
+    print(cutoff)
+    return(exceedence(draw_matrix, cutoff, non=T))
+  })) 
+  colnames(neg_exceed) <- paste0("neg_exceed_", exceedence_cutoffs)
+  
+  print("confidence intervals")
+  cis <- rowQuantiles(draw_matrix, probs=quantiles)
+  colnames(cis) <- c("lower", "upper")
+  
+  return(cbind(means, cis, pos_exceed, neg_exceed))
+}
+
+make_raster <- function(values, cellnumbers, raster_template, out_fname=NULL){
+  this_raster <- copy(raster_template)
+  this_raster[] <- NA
+  this_raster[cellnumbers] <- values
+  this_raster[!is.na(raster_template) & is.na(this_raster)] <- 0
+  if (!is.null(out_fname)){
+    writeRaster(this_raster, out_fname, NAflag=-9999, overwrite=T)
+  }else{
+    return(this_raster)
+  }
+}
+
+
+
+
+
 
 

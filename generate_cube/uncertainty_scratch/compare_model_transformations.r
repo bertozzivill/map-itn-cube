@@ -57,15 +57,28 @@ if (compare_inla_objects){
     this_fixed$cov <- rownames(this_fixed)
     return(this_fixed)
   }))
-  fixed_draws_summary <- fixed_draws[sample %in% draws_of_draws, list(draw_mean=mean(value)), by="cov"]
   
-  ggplot(fixed_draws, aes(x=value)) + 
-    geom_density(fill="black", alpha=0.5) + 
+  draw_counts <- c(100, 250, 500, 1000)
+  fixed_draws_summary <- rbindlist(lapply(draw_counts, function(draw_count){
+    return(fixed_draws[sample %in% 1:draw_count, list(draw_mean=mean(value), draw_count=draw_count), by="cov"])
+  }))
+  
+  # fixed_draws_summary <- fixed_draws[sample %in% draws_of_draws, list(draw_mean=mean(value)), by="cov"]
+  
+  draws_for_comparison <- rbindlist(lapply(draw_counts, function(draw_count){
+    return(fixed_draws[sample %in% 1:draw_count, list(value, sample, cov, draw_count=draw_count)])
+  }))
+  
+  fixed_draws_summary[, draw_count:=factor(draw_count)]
+  draws_for_comparison[, draw_count:=factor(draw_count)]
+  
+  ggplot(draws_for_comparison, aes(x=value)) + 
+    geom_density(aes(color=draw_count), alpha=0.5, fill=NA) + 
     facet_wrap(~cov, scales="free_y") + 
-    geom_vline(data=fixed_mean, aes(xintercept=mean), size=1, color="blue") + 
-    geom_vline(data=fixed_mean, aes(xintercept=lower95), color="blue") + 
-    geom_vline(data=fixed_mean, aes(xintercept=upper95), color="blue") + 
-    geom_vline(data=fixed_draws_summary, aes(xintercept=draw_mean)) 
+    geom_vline(data=fixed_mean, aes(xintercept=mean), size=1, color="black") + 
+    geom_vline(data=fixed_mean, aes(xintercept=lower95), color="black") + 
+    geom_vline(data=fixed_mean, aes(xintercept=upper95), color="black") + 
+    geom_vline(data=fixed_draws_summary, aes(xintercept=draw_mean, color=draw_count)) 
     
   
   these_ids <- sample(random_mean$ID, 20)
