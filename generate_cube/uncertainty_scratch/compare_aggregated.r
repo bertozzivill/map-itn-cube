@@ -17,7 +17,7 @@ rm(list=ls())
 
 years <- 2000:2019
 
-cube_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200530_no_ihs/04_predictions"
+cube_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200501_BMGF_ITN_C1.00_R1.00_V2_with_uncertainty/04_predictions"
 old_cube_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200418_BMGF_ITN_C1.00_R1.00_V2/04_predictions"
 pop_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/gbd_populations"
 
@@ -69,18 +69,18 @@ cube_nat_level_draws <- rbindlist(lapply(new_files[!new_files %like% "mean_ONLY"
 cube_nat_level_draws[, type:="draw"]
 cube_nat_level_means <- cube_nat_level_new[time %in% cube_nat_level_draws$time, 
                                                    list(iso3, year, month, time, variable, pop, mean, type="mean")]
-compare_drawmean <- rbind(cube_nat_level_draws, cube_nat_level_means, use.names=T, fill=T)
+compare_drawmean <- rbind(cube_nat_level_draws[!is.na(month)], cube_nat_level_means, use.names=T, fill=T)
 
 
 pdf(file.path(cube_indir, "line_comparisons.pdf"), width=10, height=8)
 
-for (this_var in unique(compare_drawmean$variable)){
+for (this_var in unique(cube_nat_level_draws$variable)){
   print(this_var)
   drawmean_plot <- ggplot(compare_drawmean[variable==this_var & year %in% years], aes(x=time, y=mean)) + 
     geom_ribbon(aes(ymin=lower, ymax=upper, fill=type), alpha=0.4) + 
     geom_line(aes(color=type)) + 
-    geom_linerange(data=cube_survey[type==this_var], aes(x=date, ymin=mean-1.96*se, ymax=mean+1.96*se)) + 
-    geom_point(data=cube_survey[type==this_var], aes(x=date, y=mean)) + 
+    # geom_linerange(data=cube_survey[type==this_var], aes(x=date, ymin=mean-1.96*se, ymax=mean+1.96*se)) + 
+    # geom_point(data=cube_survey[type==this_var], aes(x=date, y=mean)) + 
     facet_wrap(.~iso3) +
     theme(axis.text.x = element_text(angle=45, hjust=1)) + 
     labs(title=paste(this_var, ": True Mean vs Mean of Draws"),

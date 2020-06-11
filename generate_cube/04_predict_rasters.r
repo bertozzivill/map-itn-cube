@@ -59,7 +59,7 @@ time_passed <- function(tic, toc){
 
 print("Predicting")
 prediction_type <- "uncertainty"
-nsamp <- 200
+nsamp <- 50
 
 start_time <- Sys.time()
 print(paste("Start time:", start_time))
@@ -251,7 +251,7 @@ if (this_metric=="access_use"){
   stock_and_flow <- format_stockflow(base_stock_and_flow, "emp_nat_access", months_to_predict, prediction_cells)
   
   full_predictions[["access_dev"]] <- Map("+", full_predictions[["access_dev"]], stock_and_flow)
-  full_predictions[["use_gap"]] <- Map("+", full_predictions[["access_dev"]], full_predictions[["use_gap"]])
+  full_predictions[["use_gap"]] <- Map("-", full_predictions[["access_dev"]], full_predictions[["use_gap"]])
   names(full_predictions) <- c("access", "use")
   
   # transform into level space
@@ -272,7 +272,7 @@ if (this_metric=="access_use"){
                     access_dev = aggregate_to_nat(Map("-", full_predictions[["access"]], stock_and_flow), base_df=base_df, nsamp=nsamp),
                     use = aggregate_to_nat(full_predictions[["use"]], base_df=base_df, nsamp=nsamp),
                     use_gap = aggregate_to_nat(Map("-", full_predictions[["access"]], full_predictions[["use"]]), base_df=base_df, nsamp=nsamp),
-                    use_rate = aggregate_to_nat( lapply(Map("/", full_predictions[["use"]], full_predictions[["access"]]), pmin, 0), base_df=base_df, nsamp=nsamp)
+                    use_rate = aggregate_to_nat( lapply(Map("/", full_predictions[["use"]], full_predictions[["access"]]), pmin, 1), base_df=base_df, nsamp=nsamp)
                     )
   for (name in names(nat_level)){ nat_level[[name]][, variable:=name]}
   nat_level <- rbindlist(nat_level)
