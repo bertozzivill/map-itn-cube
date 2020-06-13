@@ -18,7 +18,7 @@ rm(list=ls())
 years <- 2000:2019
 
 cube_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200501_BMGF_ITN_C1.00_R1.00_V2_with_uncertainty/04_predictions"
-old_cube_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200418_BMGF_ITN_C1.00_R1.00_V2/04_predictions"
+old_cube_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200530_no_ihs/04_predictions"
 pop_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/gbd_populations"
 
 shape_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/shapefiles/"
@@ -40,14 +40,14 @@ cube_survey[, type:=gsub("iation", "", type)]
 
 ### Comparing old to new time series #################################---------------------------------------------------------------------------
 
-cube_nat_level_old <- rbindlist(lapply(list.files(file.path(old_cube_indir, "aggregated"), full.names = T), fread))
-cube_nat_level_old <- melt(cube_nat_level_old, id.vars = c("iso3", "year", "month", "time", "pop"), value.name="mean")
+old_files <- list.files(file.path(old_cube_indir, "aggregated"), full.names = T)
+cube_nat_level_old <- rbindlist(lapply(old_files[!old_files %like% "mean_ONLY"], fread))
 cube_nat_level_old[, type:="old"]
 
 new_files <- list.files(file.path(cube_indir, "aggregated"), full.names = T)
-cube_nat_level_new <- rbindlist(lapply(new_files[new_files %like% "mean_ONLY"], fread))
+cube_nat_level_new <- rbindlist(lapply(new_files[!new_files %like% "mean_ONLY"], fread))
 # cube_nat_level_new[, type:="new"]
-cube_nat_level_new <- cube_nat_level_new[, list(iso3, year, month, time, pop, variable, mean, type="new")]
+cube_nat_level_new <- cube_nat_level_new[!is.na(month), list(iso3, year, month, time, pop=NA, variable, mean, lower, upper, type="new")]
 
 compare_oldnew <- rbind(cube_nat_level_old, cube_nat_level_new)
 
@@ -56,10 +56,11 @@ compare_oldnew_annual <- compare_oldnew[, list(time=mean(time),
                                                pop=mean(pop)), 
                                         by=list(iso3, variable, year, type)]
 
-this_var <- "use"
-oldnew_plot <- ggplot(compare_oldnew[variable==this_var & year %in% years], aes(x=time, y=mean)) + 
+this_var <- "percapita_net_dev"
+oldnew_plot <- ggplot(compare_oldnew[variable==this_var & year %in% years], aes(x=time, y=mean)) +
+                      geom_ribbon(aes(ymin=lower, ymax=upper, fill=type), alpha=0.5) + 
                       geom_line(aes(color=type)) + 
-                      geom_point(data=cube_survey[type==this_var], aes(x=date, y=mean)) + 
+                      geom_point(data=cube_survey, aes(x=date, y=mean)) + 
                       facet_wrap(.~iso3)
 
 
@@ -96,37 +97,69 @@ graphics.off()
 raster_metrics <- c("percapita_nets", "access", "use", "use_rate")
 raster_files <- list.files(file.path(cube_indir, "rasters"), full.names = T)
 
+years <- c(2011, 2015, 2019)
+exceed_vals <- c(0.1, 0.4, 0.6, 0.8)
+
 pdf(file.path(cube_indir, "rasters_with_ci.pdf"), width=8, height=8)
 for (this_metric in raster_metrics){
   print(this_metric)
   
-  mean_raster_files <- raster_files[raster_files %like% paste0("ITN_[0-9]{4}_", this_metric) & raster_files %like% "mean"]
   drawmean_rasters <- stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_mean.tif")))
   mean_rasters <- stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_mean_ONLY.tif")))
   lower_rasters <- stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_lower.tif")))
   upper_rasters <- stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_upper.tif")))
+  pos_exceed_rasters <- stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_pos_exceed_", exceed_vals, ".tif")))
+  neg_exceed_rasters <- stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_neg_exceed_", exceed_vals, ".tif")))
   
-  diffs <- drawmean_rasters - mean_rasters
-  names(diffs) <- names(drawmean_rasters)
+  # exceedence plots 
+  pos_exceed <- levelplot(pos_exceed_rasters,
+                          par.settings=rasterTheme(region= brewer.pal(4, "YlGnBu")), at= seq(0, 1, 0.25),
+                          xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(length(exceed_vals), 1), 
+                          main=paste(this_metric, ": Positive Exceedence"))
+  neg_exceed <- levelplot(neg_exceed_rasters,
+                          par.settings=rasterTheme(region= brewer.pal(4, "YlOrBr")), at= seq(0, 1, 0.25),
+                          xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(length(exceed_vals), 1), 
+                          main=paste(this_metric, ": Negative Exceedence"))
   
-  main_colors <- brewer.pal(11, "PRGn")
+  means <- levelplot(stack(drawmean_rasters[[1]], drawmean_rasters[[1]], drawmean_rasters[[1]], drawmean_rasters[[1]]),
+                     par.settings=rasterTheme(region=wpal("seaside", noblack = T)), at= seq(0, 1, 0.05),
+                     xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(length(exceed_vals), 1), 
+                     main=paste(this_metric, ": Means"))
   
-  diff_plot <- levelplot(diffs,
-                         par.settings=rasterTheme(region= main_colors), at= seq(-0.1, 0.1, 0.005),
-                         xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F,  
-                         main=paste(this_metric, ": Percentage point difference between \nmean of draws and mean"))
+  grid.arrange(pos_exceed, means, neg_exceed, nrow=3)
   
-  print("checking for mean values outside draw ci's")
-  outside_means <- stack(lapply(1:nlayers(mean_rasters), function(idx){
-    print(idx)
-    return(mean_rasters[[idx]]<lower_rasters[[idx]] | mean_rasters[[idx]]>upper_rasters[[idx]])
-  }))
   
-  if (any(c(minValue(outside_means), maxValue(outside_means))>0)){
-    print(paste(this_metric, "HAS MEAN ESTIMATES OUTSIDE UNCERTAINTY BOUNDS"))
-  }
+  # CI plots
+  ci_width <- upper_rasters - lower_rasters
+  width_plot <- levelplot(ci_width,
+                          par.settings=rasterTheme(region=brewer.pal(4, "BuPu")), at= seq(0, 1, 0.25),
+                          xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, 
+                          main=paste(this_metric, ": CI width"))
   
-  years_for_plot <- c(2011, 2013, 2015, 2017, 2019)
+  
+  
+  
+  # diffs <- drawmean_rasters - mean_rasters
+  # names(diffs) <- names(drawmean_rasters)
+  # 
+  # main_colors <- brewer.pal(11, "PRGn")
+  # 
+  # diff_plot <- levelplot(diffs,
+  #                        par.settings=rasterTheme(region= main_colors), at= seq(-0.1, 0.1, 0.005),
+  #                        xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F,  
+  #                        main=paste(this_metric, ": Percentage point difference between \nmean of draws and mean"))
+  # 
+  # print("checking for mean values outside draw ci's")
+  # outside_means <- stack(lapply(1:nlayers(mean_rasters), function(idx){
+  #   print(idx)
+  #   return(mean_rasters[[idx]]<lower_rasters[[idx]] | mean_rasters[[idx]]>upper_rasters[[idx]])
+  # }))
+  # 
+  # if (any(c(minValue(outside_means), maxValue(outside_means))>0)){
+  #   print(paste(this_metric, "HAS MEAN ESTIMATES OUTSIDE UNCERTAINTY BOUNDS"))
+  # }
+  
+  years_for_plot <- c(2011, 2015, 2019)
   year_indices <- which(years %in% years_for_plot)
   
   lower_upper_plots <- levelplot(stack(upper_rasters[[year_indices]], drawmean_rasters[[year_indices]], lower_rasters[[year_indices]]),

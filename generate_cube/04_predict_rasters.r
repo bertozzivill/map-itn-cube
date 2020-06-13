@@ -303,7 +303,7 @@ annual_predictions[["use_gap"]] <- mean_of_matrices(Map("-", full_predictions[["
 annual_predictions[["use_rate"]] <- mean_of_matrices(lapply(Map("/", full_predictions[["use"]], full_predictions[["access"]]), pmin, 1))
 rm(full_predictions)
 
-exceedence_cutoffs <- c(0.1, 0.4, 0.6, 0.8)
+exceedence_cutoffs <- c(0.2, 0.4, 0.6, 0.8)
 annual_summary_stats <- lapply(annual_predictions, pixel_summary_stats, exceedence_cutoffs=exceedence_cutoffs)
 
 print("Annual means calculated.")
