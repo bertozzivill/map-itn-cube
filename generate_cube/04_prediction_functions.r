@@ -114,21 +114,23 @@ format_stockflow <- function(stock_and_flow, value_var, months, pixel_template){
   return(lapply(stock_and_flow, as.matrix))
 }
 
-nat_summary_stats <- function(df, quantiles=c(0.025, 0.975)){
-  summary_df <- df[,  as.list(quantile(.SD, quantiles)), by=iso3]
-  names(summary_df) <- c("iso3", "lower", "upper")
-  summary_df <- merge(df[, .(mean = rowMeans(.SD)), by = iso3], summary_df) 
+nat_summary_stats <- function(draw_matrix, quantiles=c(0.025, 0.975)){
+  summary_stats <- cbind(rowQuantiles(draw_matrix, probs=quantiles),
+                         rowMeans2(draw_matrix))
+  summary_stats <- data.table(summary_stats, keep.rownames = T)
+  names(summary_stats) <- c("iso3", "lower", "upper", "mean")
+  return(summary_stats)
 }
 
-aggregate_to_nat <- function(predictions, base_df, nsamp){
+aggregate_to_nat <- function(predictions, base_df){
   
   print("finding national means")
+  nat_pop <- aggregate.Matrix(as.matrix(base_df$pop), as.matrix(base_df$iso3), fun="sum")
+  cont_pop <- aggregate.Matrix(as.matrix(base_df$pop), as.matrix(base_df$cont), fun="sum")
+  
   country_level <- lapply(predictions, function(these_predictions){
-    this_country_level <- cbind(base_df, these_predictions)
-    continent_level <- this_country_level[,lapply(.SD, weighted.mean, w=pop, na.rm=T),  .SDcols=as.character(1:nsamp)]
-    continent_level[, iso3:="AFR"]
-    this_country_level <- this_country_level[,lapply(.SD, weighted.mean, w=pop, na.rm=T), by=iso3, .SDcols=as.character(1:nsamp)]
-    this_country_level <- rbind(continent_level, this_country_level)
+    return(as.matrix(rbind(aggregate.Matrix(base_df$pop * these_predictions, as.matrix(base_df$cont), fun="sum") / as.vector(cont_pop),
+                           aggregate.Matrix(base_df$pop * these_predictions, as.matrix(base_df$iso3), fun="sum") / as.vector(nat_pop))))
   })
   
   print("summary stats by month")
@@ -137,11 +139,12 @@ aggregate_to_nat <- function(predictions, base_df, nsamp){
   monthly_summary_stats <- rbindlist(monthly_summary_stats)
   
   print("summary stats by year")
-  annual_summary_stats <- nat_summary_stats(rbindlist(country_level)[, lapply(.SD, mean), by=iso3])
+  annual_summary_stats <- nat_summary_stats(mean_of_matrices(country_level))
   
   return(rbind(monthly_summary_stats, annual_summary_stats, fill=T))
   
 }
+
 
 mean_of_matrices <- function(df_list){
   return(Reduce("+", df_list) / length(df_list))

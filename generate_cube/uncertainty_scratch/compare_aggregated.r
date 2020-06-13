@@ -79,8 +79,8 @@ for (this_var in unique(cube_nat_level_draws$variable)){
   drawmean_plot <- ggplot(compare_drawmean[variable==this_var & year %in% years], aes(x=time, y=mean)) + 
     geom_ribbon(aes(ymin=lower, ymax=upper, fill=type), alpha=0.4) + 
     geom_line(aes(color=type)) + 
-    # geom_linerange(data=cube_survey[type==this_var], aes(x=date, ymin=mean-1.96*se, ymax=mean+1.96*se)) + 
-    # geom_point(data=cube_survey[type==this_var], aes(x=date, y=mean)) + 
+    geom_linerange(data=cube_survey[type==this_var], aes(x=date, ymin=mean-1.96*se, ymax=mean+1.96*se)) + 
+    geom_point(data=cube_survey[type==this_var], aes(x=date, y=mean)) + 
     facet_wrap(.~iso3) +
     theme(axis.text.x = element_text(angle=45, hjust=1)) + 
     labs(title=paste(this_var, ": True Mean vs Mean of Draws"),

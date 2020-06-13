@@ -22,13 +22,12 @@ package_load <- function(package_list){
 }
 
 package_load(c("zoo", "VGAM", "raster", "doParallel", "data.table", "rgdal", "INLA", "RColorBrewer", "cvTools", "boot", "stringr", "dismo", "gbm", "pryr",
-               "matrixStats"))
+               "matrixStats", "Matrix.utils"))
 
 ## Input info, move to bottom after debugging ----------------------------------------------------------------------------------------
 
 if(Sys.getenv("input_dir")=="") {
   this_year <- 2012
-  this_metric <- "access_use"
   input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
   main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200501_BMGF_ITN_C1.00_R1.00_V2_with_uncertainty/"
   indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2/for_cube"
@@ -40,7 +39,6 @@ if(Sys.getenv("input_dir")=="") {
   testing <- T
 } else {
   this_year <- commandArgs(trailingOnly=TRUE)[1]
-  this_metric <- commandArgs(trailingOnly=TRUE)[2]
   input_dir <- Sys.getenv("input_dir")
   main_indir <- Sys.getenv("main_indir")
   indicators_indir <- Sys.getenv("indicators_indir")
@@ -59,7 +57,7 @@ time_passed <- function(tic, toc){
 
 print("Predicting")
 prediction_type <- "uncertainty"
-nsamp <- 50
+nsamp <- 200
 
 start_time <- Sys.time()
 print(paste("Start time:", start_time))
@@ -68,7 +66,7 @@ print(paste("Start time:", start_time))
 ## Setup  ----------------------------------------------------------------------------------------
 
 this_year <- as.integer(this_year)
-print(paste("predicting for year", this_year, "and metric", this_metric))
+print(paste("predicting for year", this_year))
 print(mem_used())
 
 # output directory creation
@@ -94,14 +92,8 @@ if (prediction_type=="uncertainty"){
   stop(paste("Unknown prediction type", prediction_type))
 }
 
-# Identify the INLA output labels associated with "this_metric"
-if (this_metric=="access_use"){
-  inla_metric_names <- c("access_dev", "use_gap")
-}else if (this_metric=="percapita_nets"){
-  inla_metric_names <- "percapita_net_dev"
-}else{
-  stop(paste("Unknown prediction metric", this_metric))
-}
+
+inla_metric_names <- c("access_dev", "use_gap", "percapita_net_dev")
 
 print("Setup complete.")
 print(mem_used())
@@ -138,19 +130,24 @@ print(mem_used())
 ## Load covariates  ----------------------------------------------------------------------------------------
 print("Loading covariates")
 
-print("Static")
-static_covs <- fread(static_cov_dir)
-prediction_indices <- static_covs$cellnumber
-print("Annual")
-thisyear_covs <- fread(annual_cov_dir)
-thisyear_covs <- thisyear_covs[year %in% this_year]
-thisyear_covs <- merge(thisyear_covs, static_covs, by="cellnumber", all=T)
-rm(static_covs)
 print("Dynamic")
-thisyear_covs <- merge(thisyear_covs, fread(dynamic_cov_dir),
-                       by=c("cellnumber", "year"), all=T)
+thisyear_covs <- fread(dynamic_cov_dir)
+# find and delete the cellnumbers that contain NA's for any month
+to_keep <- thisyear_covs[, lapply(.SD, sum), by=cellnumber]
+to_keep <- to_keep[complete.cases(to_keep)]$cellnumber
+thisyear_covs <- thisyear_covs[cellnumber %in% to_keep]
+rm(to_keep)
 
+print("Annual")
+thisyear_covs <- merge(thisyear_covs, fread(annual_cov_dir), 
+                       by=c("cellnumber", "year"))
+
+print("Static")
+thisyear_covs <- merge(thisyear_covs, fread(static_cov_dir), by="cellnumber")
 thisyear_covs[, "Intercept":=1]
+
+thisyear_covs <- thisyear_covs[complete.cases(thisyear_covs)]
+prediction_indices <- thisyear_covs[month==1]$cellnumber
 
 print("Covariate loading complete.")
 print(mem_used())
@@ -240,73 +237,60 @@ full_predictions <- lapply(inla_outputs_for_prediction, function(this_model){
 
 print("Predictions complete")
 print(mem_used())
+
 rm(thisyear_covs, inla_outputs_for_prediction)
 
 ## Transforming prediction objects, find national means & cis  ----------------------------------------------------------------------------------------
 
 print("Transforming predictions")
 
-if (this_metric=="access_use"){
-  # transform stock and flow into a pixel-level estimate
-  stock_and_flow <- format_stockflow(base_stock_and_flow, "emp_nat_access", months_to_predict, prediction_cells)
-  
-  full_predictions[["access_dev"]] <- Map("+", full_predictions[["access_dev"]], stock_and_flow)
-  full_predictions[["use_gap"]] <- Map("-", full_predictions[["access_dev"]], full_predictions[["use_gap"]])
-  names(full_predictions) <- c("access", "use")
-  
-  # transform into level space
-  full_predictions <- lapply(full_predictions, function(this_pred){
-    return(lapply(this_pred, plogis))
-  })
-  
-  # convert stockflow back to level space for access dev prediction
-  stock_and_flow <- lapply(stock_and_flow, plogis)
-  
-  print("Predictions transformed.")
-  print(mem_used())
-  
-  print("Calculating national summary stats")
-  # find national-level summary stats for indicators
-  base_df <- cbind(prediction_cells[, list(iso3)], population[, list(pop)])
-  nat_level <- list(access = aggregate_to_nat(full_predictions[["access"]], base_df=base_df, nsamp=nsamp),
-                    access_dev = aggregate_to_nat(Map("-", full_predictions[["access"]], stock_and_flow), base_df=base_df, nsamp=nsamp),
-                    use = aggregate_to_nat(full_predictions[["use"]], base_df=base_df, nsamp=nsamp),
-                    use_gap = aggregate_to_nat(Map("-", full_predictions[["access"]], full_predictions[["use"]]), base_df=base_df, nsamp=nsamp),
-                    use_rate = aggregate_to_nat( lapply(Map("/", full_predictions[["use"]], full_predictions[["access"]]), pmin, 1), base_df=base_df, nsamp=nsamp)
-                    )
-  for (name in names(nat_level)){ nat_level[[name]][, variable:=name]}
-  nat_level <- rbindlist(nat_level)
-  
-}else if (this_metric=="percapita_nets"){
-  stock_and_flow <- format_stockflow(stock_and_flow, "nat_percapita_nets", months_to_predict, prediction_cells)
-  
-  full_predictions[["percapita_nets"]] <- Map("+", full_predictions[["percapita_nets"]], stock_and_flow)
-  full_predictions[["percapita_nets"]] <- lapply(full_predictions[["percapita_nets"]], pmax, 0)
-  
-  print("Predictions transformed.")
-  print(mem_used())
-  
-  print("Calculating national summary stats")
-  base_df <- cbind(prediction_cells[, list(iso3)], population[, list(pop)])
-  nat_level <- list(percapita_nets = aggregate_to_nat(full_predictions[["percapita_nets"]], base_df=base_df, nsamp=nsamp),
-                    percapita_net_dev = aggregate_to_nat(full_predictions[["percapita_net_dev"]], base_df=base_df, nsamp=nsamp),
-                    )
-  for (name in names(nat_level)){ nat_level[[name]][, variable:=name]}
-  nat_level <- rbindlist(nat_level)
-  
-  full_predictions <- full_predictions[["percapita_nets"]]
-  
-}
+# transform stock and flow into a pixel-level estimate
+access_stockflow <- format_stockflow(base_stock_and_flow, "emp_nat_access", months_to_predict, prediction_cells)
+
+full_predictions[["access_dev"]] <- Map("+", full_predictions[["access_dev"]], access_stockflow)
+full_predictions[["use_gap"]] <- Map("-", full_predictions[["access_dev"]], full_predictions[["use_gap"]])
+names(full_predictions) <- c("access", "use", "percapita_net_dev")
+percapita_stockflow <- format_stockflow(base_stock_and_flow, "nat_percapita_nets", months_to_predict, prediction_cells)
+full_predictions[["percapita_nets"]] <- lapply(Map("+", full_predictions[["percapita_net_dev"]], percapita_stockflow), pmax, 0)
+
+for(idx in 1:length(full_predictions[["percapita_net_dev"]])){colnames(full_predictions[["percapita_net_dev"]][[idx]]) <- 1:nsamp}
+
+# transform into level space
+full_predictions[["access"]] <- lapply(full_predictions[["access"]], plogis)
+full_predictions[["use"]] <- lapply(full_predictions[["use"]], plogis)
+access_stockflow <- lapply(access_stockflow, plogis)
+
+print("Predictions transformed.")
+print(mem_used())
+sort( sapply(ls(),function(x){object.size(get(x))})) 
+
+print("Calculating national summary stats")
+# find national-level summary stats for indicators
+base_df <- cbind(prediction_cells[, list(iso3)], population[, list(pop)])
+base_df[, cont:="AFR"]
+
+nat_level <- list(access = aggregate_to_nat(full_predictions[["access"]], base_df=base_df),
+                  access_dev = aggregate_to_nat(Map("-", full_predictions[["access"]], access_stockflow), base_df=base_df),
+                  use = aggregate_to_nat(full_predictions[["use"]], base_df=base_df),
+                  use_gap = aggregate_to_nat(Map("-", full_predictions[["access"]], full_predictions[["use"]]), base_df=base_df),
+                  use_rate = aggregate_to_nat( lapply(Map("/", full_predictions[["use"]], full_predictions[["access"]]), pmin, 1), base_df=base_df),
+                  percapita_nets = aggregate_to_nat(full_predictions[["percapita_nets"]], base_df=base_df),
+                  percapita_net_dev = aggregate_to_nat(full_predictions[["percapita_net_dev"]], base_df=base_df)
+)
+for (name in names(nat_level)){ nat_level[[name]][, variable:=name]}
+nat_level <- rbindlist(nat_level)
+
+full_predictions[["percapita_net_dev"]] <- NULL
 
 # format and save nat_level
 nat_level <- merge(nat_level, time_map, all.x=T)
 nat_level[, year:=this_year]
 suffix <- ifelse(prediction_type=="mean", "_mean_ONLY", "")
-write.csv(nat_level, file.path(out_dir, "aggregated", paste0("aggregated_predictions_", this_year, "_", this_metric, suffix, ".csv")), row.names=F)
+write.csv(nat_level, file.path(out_dir, "aggregated", paste0("aggregated_predictions_", this_year, suffix, ".csv")), row.names=F)
 
 print("Summary stats calculated.")
 print(mem_used())
-rm(stock_and_flow, nat_level, base_df, population, base_stock_and_flow)
+rm(access_stockflow, percapita_stockflow, nat_level, base_df, population, base_stock_and_flow)
 
 ## Aggregate to annual level, save rasters  ----------------------------------------------------------------------------------------
 
@@ -315,10 +299,8 @@ sort( sapply(ls(),function(x){object.size(get(x))}))
 print("Finding annual means.")
 annual_predictions <- lapply(full_predictions, mean_of_matrices)
 
-if (this_metric=="access_use"){
-  annual_predictions[["use_gap"]] <- mean_of_matrices(Map("-", full_predictions[["access"]], full_predictions[["use"]]))
-  annual_predictions[["use_rate"]] <- mean_of_matrices(lapply(Map("/", full_predictions[["use"]], full_predictions[["access"]]), pmin, 1))
-}
+annual_predictions[["use_gap"]] <- mean_of_matrices(Map("-", full_predictions[["access"]], full_predictions[["use"]]))
+annual_predictions[["use_rate"]] <- mean_of_matrices(lapply(Map("/", full_predictions[["use"]], full_predictions[["access"]]), pmin, 1))
 rm(full_predictions)
 
 exceedence_cutoffs <- c(0.1, 0.4, 0.6, 0.8)
@@ -338,7 +320,7 @@ all_maps <- lapply(names(annual_summary_stats), function(this_var){
   })
 })
 
-print(paste("Maps made, process complete for year,", this_year, "and metric", this_metric))
+print(paste("Maps made, process complete for year,", this_year))
 print(mem_used())
 
 
