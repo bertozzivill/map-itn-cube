@@ -94,50 +94,75 @@ graphics.off()
 
 ### Comparing mean to mean of draws rasters #################################---------------------------------------------------------------------------
 
-raster_metrics <- c("percapita_nets", "access", "use", "use_rate")
+
 raster_files <- list.files(file.path(cube_indir, "rasters"), full.names = T)
 
 years <- c(2011, 2015, 2019)
 exceed_vals <- c(0.1, 0.4, 0.6, 0.8)
 
+
+plot_exceed <- function(exceed_rasters, exceed_type, exceed_val){
+  
+  if (exceed_type=="Positive"){
+    pal <- brewer.pal(5, "YlGnBu")
+  }else{
+    pal <- brewer.pal(5, "YlOrBr")
+  }
+
+  return(levelplot(exceed_rasters,
+                   par.settings=rasterTheme(region= pal), at= seq(0, 1, 0.2),
+                   xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(nlayers(exceed_rasters), 1), 
+                   main=paste(this_metric, ":", exceed_type, "Exceedence,", exceed_val)))
+  
+}
+
+raster_metrics <- data.table(metric=c("percapita_nets", "access", "use", "use_rate"),
+                             pos_exceed=c(0.4, 0.6, 0.6, 0.8),
+                             neg_exceed=c(0.1, 0.4, 0.4, 0.6))
+
 pdf(file.path(cube_indir, "rasters_with_ci.pdf"), width=8, height=8)
-for (this_metric in raster_metrics){
+for (idx  in 1:nrow(raster_metrics)){
+  
+  this_metric <- raster_metrics[idx]$metric
   print(this_metric)
+  
+  if (this_metric %in% c("access", "use")){
+    mean_pal <- wpal("seaside", noblack = T)
+  }else if (this_metric == "use_rate"){
+    mean_pal <- c("#722503", "#AB0002", "#F2A378", "#F4CA7D", "#C8D79E", "#70A800")
+  }else{
+    mean_pal <- rev(pnw_palette("Mushroom", 30))
+  }
+  
   
   drawmean_rasters <- stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_mean.tif")))
   mean_rasters <- stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_mean_ONLY.tif")))
   lower_rasters <- stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_lower.tif")))
   upper_rasters <- stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_upper.tif")))
-  pos_exceed_rasters <- stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_pos_exceed_", exceed_vals, ".tif")))
-  neg_exceed_rasters <- stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_neg_exceed_", exceed_vals, ".tif")))
+  pos_exceed_rasters <- stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_pos_exceed_", raster_metrics[idx]$pos_exceed, ".tif")))
+  neg_exceed_rasters <- stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_neg_exceed_", raster_metrics[idx]$neg_exceed, ".tif")))
   
   # exceedence plots 
-  pos_exceed <- levelplot(pos_exceed_rasters,
-                          par.settings=rasterTheme(region= brewer.pal(4, "YlGnBu")), at= seq(0, 1, 0.25),
-                          xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(length(exceed_vals), 1), 
-                          main=paste(this_metric, ": Positive Exceedence"))
-  neg_exceed <- levelplot(neg_exceed_rasters,
-                          par.settings=rasterTheme(region= brewer.pal(4, "YlOrBr")), at= seq(0, 1, 0.25),
-                          xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(length(exceed_vals), 1), 
-                          main=paste(this_metric, ": Negative Exceedence"))
+  pos_exceed <- plot_exceed(pos_exceed_rasters, "Positive", raster_metrics[idx]$pos_exceed)
+  neg_exceed <- plot_exceed(neg_exceed_rasters, "Negative", raster_metrics[idx]$neg_exceed)
   
-  means <- levelplot(stack(drawmean_rasters[[1]], drawmean_rasters[[1]], drawmean_rasters[[1]], drawmean_rasters[[1]]),
-                     par.settings=rasterTheme(region=wpal("seaside", noblack = T)), at= seq(0, 1, 0.05),
-                     xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(length(exceed_vals), 1), 
+  means <- levelplot(drawmean_rasters,
+                     par.settings=rasterTheme(region=mean_pal), at= seq(0, 1, 0.05),
+                     xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(nlayers(drawmean_rasters), 1), 
                      main=paste(this_metric, ": Means"))
   
   grid.arrange(pos_exceed, means, neg_exceed, nrow=3)
   
   
-  # CI plots
-  ci_width <- upper_rasters - lower_rasters
-  width_plot <- levelplot(ci_width,
-                          par.settings=rasterTheme(region=brewer.pal(4, "BuPu")), at= seq(0, 1, 0.25),
-                          xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, 
-                          main=paste(this_metric, ": CI width"))
-  
-  
-  
+  # # CI plots
+  # ci_width <- upper_rasters - lower_rasters
+  # width_plot <- levelplot(ci_width,
+  #                         par.settings=rasterTheme(region=brewer.pal(4, "BuPu")), at= seq(0, 1, 0.25),
+  #                         xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, 
+  #                         main=paste(this_metric, ": CI width"))
+  # 
+  # 
+  # 
   
   # diffs <- drawmean_rasters - mean_rasters
   # names(diffs) <- names(drawmean_rasters)
@@ -159,14 +184,14 @@ for (this_metric in raster_metrics){
   #   print(paste(this_metric, "HAS MEAN ESTIMATES OUTSIDE UNCERTAINTY BOUNDS"))
   # }
   
-  years_for_plot <- c(2011, 2015, 2019)
-  year_indices <- which(years %in% years_for_plot)
-  
-  lower_upper_plots <- levelplot(stack(upper_rasters[[year_indices]], drawmean_rasters[[year_indices]], lower_rasters[[year_indices]]),
-                                 par.settings=rasterTheme(region= wpal("seaside", noblack = T)), at= seq(0, 1, 0.05),
-                                 xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(length(years_for_plot),3), 
-                                 main=paste(this_metric, ": Mean and CI"))
-  print(lower_upper_plots)
+  # years_for_plot <- c(2011, 2015, 2019)
+  # year_indices <- which(years %in% years_for_plot)
+  # 
+  # lower_upper_plots <- levelplot(stack(upper_rasters[[year_indices]], drawmean_rasters[[year_indices]], lower_rasters[[year_indices]]),
+  #                                par.settings=rasterTheme(region= wpal("seaside", noblack = T)), at= seq(0, 1, 0.05),
+  #                                xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(length(years_for_plot),3), 
+  #                                main=paste(this_metric, ": Mean and CI"))
+  # print(lower_upper_plots)
   
 }
 graphics.off()
