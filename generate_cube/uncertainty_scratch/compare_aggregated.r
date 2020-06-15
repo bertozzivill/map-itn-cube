@@ -8,6 +8,7 @@ library(gridExtra)
 library(MapSuite)
 library(maptools)
 library(PNWColors)
+library(Hmisc)
 
 rm(list=ls())
 
@@ -100,6 +101,39 @@ raster_files <- list.files(file.path(cube_indir, "rasters"), full.names = T)
 years <- c(2011, 2015, 2019)
 exceed_vals <- c(0.1, 0.4, 0.6, 0.8)
 
+# load and organize population files
+population_rasters <- stack(file.path(pop_dir, paste0("ihme_corrected_frankenpop_All_Ages_3_", years, ".tif")))
+national_raster <- raster(gaul_tif_fname)
+NAvalue(national_raster) <- -9999
+
+population_rasters <- crop(population_rasters, national_raster)
+population_rasters <- setExtent(population_rasters, national_raster)
+
+
+non_modeled_gauls <- iso_gaul_map[!iso3 %in% unique(cube_nat_level_draws$iso3)]$gaul
+modeled_gauls <- iso_gaul_map[iso3 %in% unique(cube_nat_level_draws$iso3)]$gaul
+
+mask_raster <- copy(national_raster)
+mask_raster[mask_raster %in% non_modeled_gauls] <- NA
+
+background_raster <- copy(national_raster)
+background_raster[background_raster%in% modeled_gauls] <- NA
+background_raster[!is.na(background_raster)] <- 1
+background_mask_dt <- data.table(rasterToPoints(background_raster))
+names(background_mask_dt) <- c("long", "lat", "mask")
+
+background_plot_single <- levelplot(background_raster,
+                             par.settings=GrTheme,
+                             xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F # layout=c(nlayers(exceed_rasters), 1), 
+                             )
+
+background_plot_multi <- levelplot(stack(background_raster, background_raster, background_raster),
+                                    par.settings=GrTheme,
+                                    xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(3, 1))
+
+# make pop dt
+population_rasters <- raster::mask(population_rasters, mask_raster)
+
 
 plot_exceed <- function(exceed_rasters, exceed_type, exceed_val){
   
@@ -109,16 +143,29 @@ plot_exceed <- function(exceed_rasters, exceed_type, exceed_val){
     pal <- brewer.pal(5, "YlOrBr")
   }
 
+  names(exceed_rasters) <- gsub("(ITN_[0-9]{4})_.*", "\\1", names(exceed_rasters))
+  
   return(levelplot(exceed_rasters,
                    par.settings=rasterTheme(region= pal), at= seq(0, 1, 0.2),
                    xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(nlayers(exceed_rasters), 1), 
-                   main=paste(this_metric, ":", exceed_type, "Exceedence,", exceed_val)))
+                   main=paste(this_metric, ":", exceed_type, "Exceedence,", exceed_val))
+         )
   
 }
 
 raster_metrics <- data.table(metric=c("percapita_nets", "access", "use", "use_rate"),
                              pos_exceed=c(0.4, 0.6, 0.6, 0.8),
                              neg_exceed=c(0.1, 0.4, 0.4, 0.6))
+
+gauls_to_drop <- iso_gaul_map[!iso3 %in% unique(cube_nat_level_draws$iso3)]$gaul
+
+drop_from_stack <- function(raster_stack, vals_to_drop){
+  for (idx in 1:nlayers(raster_stack)){
+    raster_stack[[idx]][raster_stack[[idx]] %in% vals_to_drop] <- NA
+  }
+}
+
+
 
 pdf(file.path(cube_indir, "rasters_with_ci.pdf"), width=8, height=8)
 for (idx  in 1:nrow(raster_metrics)){
@@ -135,34 +182,106 @@ for (idx  in 1:nrow(raster_metrics)){
   }
   
   
-  drawmean_rasters <- stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_mean.tif")))
-  mean_rasters <- stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_mean_ONLY.tif")))
-  lower_rasters <- stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_lower.tif")))
-  upper_rasters <- stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_upper.tif")))
-  pos_exceed_rasters <- stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_pos_exceed_", raster_metrics[idx]$pos_exceed, ".tif")))
-  neg_exceed_rasters <- stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_neg_exceed_", raster_metrics[idx]$neg_exceed, ".tif")))
+  drawmean_rasters <- raster::mask(stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_mean.tif"))), mask_raster)
+  mean_rasters <- raster::mask(stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_mean_ONLY.tif"))), mask_raster)
+  lower_rasters <- raster::mask(stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_lower.tif"))), mask_raster)
+  upper_rasters <- raster::mask(stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_upper.tif"))), mask_raster)
+  pos_exceed_rasters <- raster::mask(stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_pos_exceed_", raster_metrics[idx]$pos_exceed, ".tif"))), mask_raster)
+  neg_exceed_rasters <- raster::mask(stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_neg_exceed_", raster_metrics[idx]$neg_exceed, ".tif"))), mask_raster)
   
   # exceedence plots 
   pos_exceed <- plot_exceed(pos_exceed_rasters, "Positive", raster_metrics[idx]$pos_exceed)
   neg_exceed <- plot_exceed(neg_exceed_rasters, "Negative", raster_metrics[idx]$neg_exceed)
+  
   
   means <- levelplot(drawmean_rasters,
                      par.settings=rasterTheme(region=mean_pal), at= seq(0, 1, 0.05),
                      xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(nlayers(drawmean_rasters), 1), 
                      main=paste(this_metric, ": Means"))
   
-  grid.arrange(pos_exceed, means, neg_exceed, nrow=3)
+  grid.arrange(pos_exceed + background_plot_multi,
+               means + background_plot_multi,
+               neg_exceed + background_plot_multi,
+               nrow=3)
   
   
-  # # CI plots
-  # ci_width <- upper_rasters - lower_rasters
-  # width_plot <- levelplot(ci_width,
-  #                         par.settings=rasterTheme(region=brewer.pal(4, "BuPu")), at= seq(0, 1, 0.25),
-  #                         xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, 
-  #                         main=paste(this_metric, ": CI width"))
-  # 
-  # 
-  # 
+  # CI plots
+  ci_width <- upper_rasters - lower_rasters
+  names(ci_width) <- paste0("cirange_", years)
+  
+  round_vals <- function(dt, sig=6){
+    dt[, x:=round(x, sig)]
+    dt[, y:=round(y, sig)]
+    return(dt)
+  }
+  
+  colors <- list(c(249, 244, 248), c(205, 216, 236), c(177, 203, 230), c(138, 181, 223),
+                 c(239, 212, 219), c(202, 190, 210), c(175, 176, 207), c(131, 160, 204),
+                 c(237, 170, 179), c(197, 163, 187), c(157, 145, 183), c(130, 142, 190),
+                 c(234, 129, 143), c(192, 130, 155), c(161, 129, 166), c(121, 122, 170))
+  colors <- sapply(colors, function(x) do.call("rgb", c(as.list(x), maxColorValue = 255)))
+  
+  
+  all_rel_uncertainty <- lapply(1:length(years), function(year_idx){
+    print(year_idx)
+    pop_dt <- round_vals(data.table(rasterToPoints(population_rasters[[year_idx]])))
+    mean_dt <- round_vals(data.table(rasterToPoints(drawmean_rasters[[year_idx]])))
+    ci_width_dt <- round_vals(data.table(rasterToPoints(ci_width[[year_idx]])))
+    full_dt <- merge(merge(mean_dt, ci_width_dt), pop_dt)
+    names(full_dt) <- c("long", "lat", "mean", "cirange", "pop")
+    
+    full_dt[, mean_quart := cut(mean, breaks = wtd.quantile(mean, pop, c(0, 0.25, 0.5, 0.75, 1), na.rm = T), labels = F, include.lowest = T)]
+    full_dt[, uncert_quart := cut(cirange, breaks = wtd.quantile(cirange, pop, c(0, 0.25, 0.5, 0.75, 1), na.rm = T), labels = F, include.lowest = T)]
+    full_dt$mean_quart[which(is.na(full_dt$mean_quart))] <- 4
+    full_dt$uncert_quart[which(is.na(full_dt$uncert_quart))] <- 4
+    
+    # make legend
+    levels <- CJ(uncert_quart = unique(full_dt$uncert_quart),
+                 mean_quart = unique(full_dt$mean_quart))
+    levels[, comb := factor(paste(uncert_quart, mean_quart))]
+    full_dt[, comb := factor(paste(uncert_quart, mean_quart), levels = levels(levels$comb))]
+    full_dt[, year:= years[year_idx]]
+    return(full_dt)
+  })
+
+  all_rel_uncertainty <- rbindlist(all_rel_uncertainty)
+  
+  map <- ggplot() +
+    geom_raster(data = all_rel_uncertainty, aes(fill = comb, y = lat, x = long), show.legend = F) +
+    annotate(geom = "raster", x = background_mask_dt$long, y = background_mask_dt$lat, fill = "gray80") +
+    # annotate(geom = "raster", x = lakes$long, y = lakes$lat, fill = "lightblue") +
+    # geom_polygon(data = africa[!id %in% admin0$ADM0_CODE, ], aes(x = long, y = lat, group = group), fill = "gray50") +
+    # geom_path(data = africa, aes(x = long, y = lat, group = group), color = "black", size = 0.01) +
+    # geom_point(data = disputed_fill, aes(x = long, y = lat), color = "black", shape = 20, size = 0.02, stroke = 0.02) +
+    # geom_path(data = disputed_outline, aes(x = long, y = lat, group = group), color = "black", size = 0.05, linetype = 2) +
+    scale_fill_manual(values = colors) +
+    facet_grid(.~year) + 
+    coord_equal(xlim = c(-26, 52), ylim = c(-35, 38)) +
+    labs(x = NULL, y = NULL, title = paste("Relative Uncertainty:", this_metric)) +
+    theme_classic(base_size = 12) +
+    theme(axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(),
+          plot.margin = unit(c(0, 0, 0, 0), "in"))
+  
+  legend <- ggplot(unique(all_rel_uncertainty[, list(mean_quart, uncert_quart, comb)])) +
+    geom_raster(aes(x = factor(mean_quart), y = factor(uncert_quart), fill = comb), show.legend = F) +
+    scale_fill_manual(values = colors) +
+    scale_x_discrete(labels = c("Low", "", "", "High"), expand = c(0, 0)) +
+    scale_y_discrete(labels = c("Low", "", "", "High"), expand = c(0, 0)) +
+    coord_equal() +
+    labs(x = paste0(" \n", this_metric), y = "Uncertainty\n ", title = NULL) +
+    theme_minimal() +
+    theme(axis.line = element_blank(), axis.ticks = element_blank(),
+          panel.grid = element_blank(), axis.text.y = element_text(angle = 90, hjust = 0.5),
+          plot.margin = unit(c(0, 0, 0, 0), "in"), panel.border = element_rect(fill = NA, color = "black"))
+  
+  
+  
+  grid.arrange(means + background_plot_multi,
+               map,
+               legend,
+               layout_matrix = rbind(c(1,1,1),
+                                      c(2,2,2),
+                                      c(NA,3,NA)))
   
   # diffs <- drawmean_rasters - mean_rasters
   # names(diffs) <- names(drawmean_rasters)
@@ -198,8 +317,8 @@ graphics.off()
 
 
 
-ci_width <- upper_rasters - lower_rasters
-names(ci_width) <- names(drawmean_rasters)
+# ci_width <- upper_rasters - lower_rasters
+# names(ci_width) <- names(drawmean_rasters)
 # ci_plot <- levelplot(ci_width[[c(2,1,3)]],
 #           par.settings=rasterTheme(region= rev(pnw_palette("Lake", 100))), at= seq(0, 1, 0.05),
 #           xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(3,1), 
@@ -208,13 +327,6 @@ names(ci_width) <- names(drawmean_rasters)
 # grid.arrange(diff_plot, ci_plot, nrow=2)
 
 ### Calculating time series at the annual level #################################---------------------------------------------------------------------------
-
-
-# load and organize population files
-population_rasters <- stack(file.path(pop_dir, paste0("ihme_corrected_frankenpop_All_Ages_3_", years, ".tif")))
-national_raster <- raster(gaul_tif_fname)
-NAvalue(national_raster) <- -9999
-population_rasters <- raster::mask(crop(population_rasters, national_raster), national_raster)
 
 calc_zonal <- function(input, pop, admin, label=""){
   count.raster <- input * pop
