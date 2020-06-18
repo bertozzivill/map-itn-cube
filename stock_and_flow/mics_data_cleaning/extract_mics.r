@@ -11,10 +11,11 @@ library(data.table)
 rm(list=ls())
 
 # directory setup
-this_svy <- "mics5"
+this_svy <- "MICS5"
 
 func_dir <- "~/repos/map-itn-cube/stock_and_flow/mics_data_cleaning/"
 in_dir <- "/Volumes/map_data/MICS_Automation/Acquisition/NEW/03 Processed"
+in_dir <- "/Volumes/map_data/MICS_Automation/Acquisition/February_2019_Update/03 Processed"
 main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/household_surveys"
 out_dir <- file.path(main_dir, paste0(this_svy, "_raw"))
 # dir.create(out_dir, showWarnings=F, recursive=T)
@@ -23,9 +24,10 @@ data_fnames <- list.files(svy_dir)
 
 # maps to extract and format column names
 hh_cols <- c("HH1", "HH2", "HH5M", "HH5Y", "HH11", "HH14", "hhweight", "TN1", "TN2")
-hl_cols <- c("HH1", "HH2", "HL1", "HL6A")
+hl_cols <- c("HH1", "HH2", "HL1", "HL6A", "HL7B")
 tn_cols <- c( "HH1", "HH2", "TNLN", "TN5", "TN6", "TN11", 
               "TN12_1", "TN12_2", "TN12_3", "TN12_4", "TN12_5", "TN12_6")
+wm_cols <- c("HH1", "HH2", "LN", "CP1")
 
 short_names <- c(HH1="clusterid",
                  HH2="hhid",
@@ -36,6 +38,7 @@ short_names <- c(HH1="clusterid",
                  hhweight="hh_sample_wt",
                  HL1="hh_member_id",
                  HL6A="hh_member_slept_in_hh",
+                 HL7B="hh_member_under_5",
                  TN1="hh_has_nets",
                  TN2="n_itn",
                  TNLN="net_id",
@@ -47,7 +50,9 @@ short_names <- c(HH1="clusterid",
                  TN12_3="net_sleeper_3",
                  TN12_4="net_sleeper_4",
                  TN12_5="net_sleeper_5",
-                 TN12_6="net_sleeper_6"
+                 TN12_6="net_sleeper_6",
+                 LN="hh_member_id",
+                 CP1="is_pregnant"
 )
 short_names <- data.table(code=names(short_names),
                           short_name=short_names)
@@ -91,6 +96,7 @@ idx <- 1
 hh_list <- NULL
 hl_list <- NULL
 tn_list <- NULL
+wm_list <- NULL
 
 for (this_country in country_list){
   
@@ -143,6 +149,10 @@ for (this_country in country_list){
   this_hldata[, binary_slept_in_hh:=as.integer(hh_member_slept_in_hh %in% c("Yes", "Oui", "Sim"))]
   this_hldata[hh_member_slept_in_hh %in% c("Missing", "Non d\xe9clar\xe9/Pas de r\xe9ponse", "Manquant", "Em falta", "missing/ND"), binary_slept_in_hh:=NA]
   this_hldata[, hh_member_slept_in_hh:=NULL]
+  this_hldata[, binary_under_5:=as.integer(!is.na(as.integer(hh_member_under_5)))]
+  print("Not under 5 values:")
+  print(unique(this_hldata[binary_under_5==0]$hh_member_under_5))
+  this_hldata[, hh_member_under_5:=NULL]
   this_hldata[, surveyid:=this_surveyid]
   this_hldata[, subnat:=this_country_info$subnat]
   
@@ -157,6 +167,21 @@ for (this_country in country_list){
   
   tn_list[[idx]] <- this_tndata
   
+  print("EXTRACTING WM")
+  this_wmdata <- format_data(file.path(svy_dir, these_fnames[these_fnames %like% "Datasets_wm"]),
+                             cols_to_keep <- short_names[code %in% wm_cols])
+  this_wmdata[, binary_is_pregnant:= as.integer(is_pregnant %in% c("Oui, actuellement enceinte", "Sim,actualmente gravida", "Yes, currently pregnant"))]
+  this_wmdata[is.na(is_pregnant) | is_pregnant %in% 
+                c("Ne sait pas / Pas s\xfbre", "Non d\xe9clar\xe9/Pas de r\xe9ponse", "Manquant", "NSP / Pas s\xfbre",
+                  "Pas s\xfbre ou NSP", "Pas s\xfbre ou ne sait pas", "Non D\xe9clar\xe9e", "N\xe3o tem certeza ou NS",
+                  "Não tem certeza ou  Não Sabe", "Em falta", "Unsure or DK", "Missing"), is_pregnant:=NA]
+  # this_wmdata[, is_pregnant:=NULL]
+  this_wmdata[, surveyid:=this_surveyid]
+  this_wmdata[, subnat:=this_country_info$subnat]
+  print(this_wmdata)
+  
+  wm_list[[this_idx]] <- this_wmdata
+  
   # could merge here? but maybe keep as-is and calculate metrics. 
   idx <- idx+1
 }
@@ -164,8 +189,9 @@ for (this_country in country_list){
 hh_data <- rbindlist(hh_list)
 hl_data <- rbindlist(hl_list)
 tn_data <- rbindlist(tn_list)
+wm_data <- rbindlist(wm_list)
 
 write.csv(hh_data, file.path(out_dir, "hh_data.csv"), row.names = F)
 write.csv(hl_data, file.path(out_dir, "hl_data.csv"), row.names = F)
 write.csv(tn_data, file.path(out_dir, "tn_data.csv"), row.names = F)
-
+write.csv(wm_data, file.path(out_dir, "wm_data.csv"), row.names = F)

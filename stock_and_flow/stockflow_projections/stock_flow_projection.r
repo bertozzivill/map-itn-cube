@@ -7,7 +7,7 @@
 ## Use fitted stock and flow outputs to project access forward.
 ##############################################################################################################
 
-
+rm(list=ls())
 
 package_load <- function(package_list){
   # package installation/loading
@@ -20,14 +20,16 @@ package_load(c("data.table","raster","rjags", "zoo", "ggplot2", "doParallel", "l
 
 if(Sys.getenv("main_sf_dir")=="") {
   distribution_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020/20200615/llin_projections_2023.csv"
+  hh_size_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200408/"
   main_sf_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2"
-  projection_out_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/testing"
+  projection_out_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200617_project_to_2023"
   code_dir <- "~/repos/map-itn-cube"
-  this_country <- "NGA"
+  this_country <- "MOZ"
   setwd(code_dir)
 } else {
   main_sf_dir <- Sys.getenv("main_sf_dir")
-  distribution_dir <- Sys.getenv("distribution_dir") 
+  distribution_dir <- Sys.getenv("distribution_dir")
+  hh_size_dir <- Sys.getenv("hh_size_dir")
   projection_out_dir <- Sys.getenv("projection_out_dir") 
   this_country <- commandArgs(trailingOnly=TRUE)[1]
 }
@@ -49,19 +51,16 @@ load(file.path(main_sf_dir, paste0(this_country, "_all_output.RData")))
 new_objects <- setdiff(ls(), pre_load_objects)
 
 to_keep_quarter_count <- (last_fitted_year - start_year + 1)*4
-# items to keep:
-# main_input_list
-# start_year
-# end_year
-# jdat_matrix
 
 # extract loss function parameters
 k_draws <- jdat_matrix[, which(colnames(jdat_matrix) %like% "k_llin")]
 L_draws <- jdat_matrix[, which(colnames(jdat_matrix) %like% "L_llin")]
 
 llin_remaining_draws <- jdat_matrix[, which(colnames(jdat_matrix) %like% "quarterly_nets_remaining_matrix_llin")]
-llin_remaining_draws <- lapply(1:nrow(llin_remaining_draws), function(row_idx){
-  return(matrix(llin_remaining_draws[row_idx,], nrow=quarter_count)[1:to_keep_quarter_count, 1:to_keep_quarter_count])
+citn_remaining_draws <- jdat_matrix[, which(colnames(jdat_matrix) %like% "quarterly_nets_remaining_matrix_citn")]
+itn_remaining_draws <- lapply(1:nrow(llin_remaining_draws), function(row_idx){
+  return(matrix(llin_remaining_draws[row_idx,], nrow=quarter_count)[1:to_keep_quarter_count, 1:to_keep_quarter_count]) + 
+        matrix(citn_remaining_draws[row_idx,], nrow=quarter_count)[1:to_keep_quarter_count, 1:to_keep_quarter_count]
 })
 
 orig_input_list <- main_input_list
@@ -76,7 +75,7 @@ new_dist_data <- fread(distribution_dir)
 new_dist_data <- new_dist_data[iso3==this_country]
 new_dist_data[, percapita_llin:=llin/pop]
 
-nsamp <- length(llin_remaining_draws)
+nsamp <- length(itn_remaining_draws)
 new_dist_draws <- rbindlist(lapply(1:nrow(new_dist_data), function(row_idx){
   this_row <- new_dist_data[row_idx]
   llin_draws <- data.table(year=this_row$year,
@@ -85,6 +84,37 @@ new_dist_draws <- rbindlist(lapply(1:nrow(new_dist_data), function(row_idx){
                            )
   return(llin_draws)
 }))
+
+##  Load and format household size distributions for each survey ## ------------------------------------------------------------
+print("loading and formatting household size distributions")
+hh_sizes<-fread(file.path(hh_size_dir, "hhsize_from_surveys.csv"))
+
+# function to aggregate survey data to find the total distribution of household sizes from 1:10+ across the provided dataset
+find_hh_distribution <- function(props, cap_hh_size=10){
+  # where 'props' is a data.table with columns ('hh_size' and 'prop')
+  denominator <- sum(props$prop)
+  hh_dist <- props[, list(hh_size_prop=sum(prop)/denominator), by="hh_size"]
+  final_bin <- sum(hh_dist[hh_size>=cap_hh_size]$hh_size_prop)
+  hh_dist <- hh_dist[hh_size<=cap_hh_size]
+  hh_dist[hh_size==cap_hh_size, hh_size_prop:=final_bin]
+  
+  if (abs(sum(hh_dist$hh_size_prop)-1) > 1e-15){
+    warning("Household size distribution improperly computed!")
+  }
+  return(hh_dist)
+}
+
+# find household distribution across all surveys
+hh_dist_all <- find_hh_distribution(hh_sizes)
+
+# find household distribution by country, using hh_dist_all if there is no hh survey data available
+if (this_country %in% unique(hh_sizes$iso3)){
+  hh_distributions <- find_hh_distribution(hh_sizes[iso3==this_country])
+}else{
+  hh_distributions <- copy(hh_dist_all)
+}
+
+rm(hh_sizes, hh_dist_all)
 
 
 ## Track new nets through time, by draw, assuming equal distribution across quarters  ----------------------------------------------------------------------------------------
@@ -99,9 +129,18 @@ for (i in 1:full_quarter_count){
   }
 }
 
+# pick a subsample of 500 draws for computation
+set.seed(846)
+samples <- sample(1:nsamp, 500)
 
-projected_outputs <- lapply(1:length(llin_remaining_draws), function(idx){
-  print(idx)
+
+
+projected_outputs <- lapply(samples, function(idx){
+  
+  if (which(samples==idx)%%10==0){
+    print(which(samples==idx))
+  }
+
   k_llin <- k_draws[idx]
   L_llin <- L_draws[idx]
   
@@ -122,7 +161,7 @@ projected_outputs <- lapply(1:length(llin_remaining_draws), function(idx){
                                         new_quarterly_nets_remaining)
   
   # extend calculated lifespan for previously-distributed nets
-  old_quarterly_nets_remaining <- rbind(llin_remaining_draws[[idx]],
+  old_quarterly_nets_remaining <- rbind(itn_remaining_draws[[idx]],
                                         matrix(NA, nrow=new_quarter_count, ncol=to_keep_quarter_count))
   for(i in (to_keep_quarter_count+1):full_quarter_count){
     for (j in 1:ncol(old_quarterly_nets_remaining)){
@@ -139,7 +178,7 @@ projected_outputs <- lapply(1:length(llin_remaining_draws), function(idx){
   quarterly_percapita_nets[full_quarter_count+1] <- quarterly_percapita_nets[full_quarter_count] # for interpolation
   
   # print("Estimating no-net and mean-net indicators")
-  # Estimates of 'proportion of households with no nets' and 'mean nets per household', Used for generating measures of national access
+  # Estimates of 'proportion of households with nos nets' and 'mean nets per household', Used for generating measures of national access
   
   # initialize
   max_hhsize <- orig_input_list$max_hhsize
@@ -166,26 +205,89 @@ projected_outputs <- lapply(1:length(llin_remaining_draws), function(idx){
     }
   }
   
-  return(list(nonet_prop=nonet_prop_est,
-              mean_net_count=mean_net_count_est,
-              net_crop=quarterly_net_count))
+  nonet_prop_est <- data.table(plogis(nonet_prop_est))
+  nonet_prop_est[, qtr:=1:nrow(nonet_prop_est)]
+  nonet_prop_est <- melt(nonet_prop_est, id.vars = "qtr", variable.name="hh_size", value.name="stockflow_prob_no_nets")
+  nonet_prop_est[, hh_size:=as.integer(hh_size)]
+  
+  mean_net_count_est <- data.table(mean_net_count_est)
+  mean_net_count_est[, qtr:=1:nrow(mean_net_count_est)]
+  mean_net_count_est <- melt(mean_net_count_est, id.vars = "qtr", variable.name="hh_size", value.name="stockflow_mean_nets_per_hh")
+  mean_net_count_est[, hh_size:=as.integer(hh_size)]
+  mean_net_count_est[stockflow_mean_nets_per_hh<0, stockflow_mean_nets_per_hh:=1e-6]
+  
+  # merge and find weighted probs
+  indicator_dt <- merge(nonet_prop_est, mean_net_count_est)
+  indicator_dt[, iso3:=this_country]
+  indicator_dt <- merge(indicator_dt, hh_distributions, by="hh_size", all.x=T)
+  indicator_dt[, weighted_prob_no_nets:=hh_size_prop*stockflow_prob_no_nets]
+  indicator_dt[, weighted_prob_any_net:=hh_size_prop*(1-stockflow_prob_no_nets)]
+  
+  access <- sapply(unique(indicator_dt$qtr), function(this_qtr){
+    calc_access(indicator_dt[qtr==this_qtr], return_mean = T)
+  })  
+  projected_quarters <- 1:(full_quarter_count+1) # (to_keep_quarter_count+1):(full_quarter_count+1)
+  quarterly_net_count[full_quarter_count+1] <- NA
+  return(data.table(draw=idx,
+                          qtr=projected_quarters,
+                          net_crop=quarterly_net_count[projected_quarters],
+                          access=access))
+  
 })
 
-# aggregate and format
+
+  
+  
+# aggregate and format, compare to saved
 
 
+all_outputs <- rbindlist(projected_outputs)
+all_outputs <- melt(all_outputs, id.vars=c("draw", "qtr"))
+all_outputs[, time:=orig_start_year + (qtr-1)/4]
+all_outputs[, year:=floor(time)]
+all_outputs <- all_outputs[year<=project_end_year]
 
 
+all_outputs_summary <- all_outputs[, list(mean=mean(value),
+                                    lower=quantile(value, probs=0.025),
+                                    upper=quantile(value, probs=0.975)),
+                             by=list(variable, qtr, time)]
+
+ggplot(all_outputs_summary, aes(x=time, color=variable)) +
+  geom_ribbon(aes(ymin=lower, ymax=upper, fill=variable), alpha=0.5) +
+  geom_line(aes(y=mean)) +
+  geom_vline(aes(xintercept=2019.75)) +
+  facet_grid(variable~., scales="free_y")
 
 
+# and by year
+all_outputs_annual <- rbind(all_outputs[variable=="net_crop", list(variable="Net Crop", value=sum(value)/1000000), by=list(draw, year)],
+                            all_outputs[variable=="access", list(variable="Access", value=mean(value)*100), by=list(draw, year)])
+
+all_outputs_annual_summary <- all_outputs_annual[, list(mean=mean(value),
+                                          lower=quantile(value, probs=0.025),
+                                          upper=quantile(value, probs=0.975)),
+                                   by=list(variable, year)]
+
+write.csv(all_outputs, file=file.path(projection_out_dir, paste0("all_outputs_", this_country, ".csv")), row.names = F)
+write.csv(all_outputs_annual_summary, file=file.path(projection_out_dir, paste0("all_outputs_annual_summary_", this_country, ".csv")), row.names = F)
 
 
+year_plot <- ggplot(all_outputs_annual_summary, aes(x=year, color=variable)) +
+  geom_ribbon(aes(ymin=lower, ymax=upper, fill=variable), alpha=0.5) +
+  geom_line(aes(y=mean)) + 
+  geom_vline(aes(xintercept=2019)) +
+  facet_grid(variable~., scales="free_y") +
+  theme(legend.position = "none") + 
+  labs(x="",
+       y="Access (%) or Net Crop (Millions)",
+       title=paste("ITN Access and Net Crop,", this_country))
 
 
-
-
-
-
+pdf(file.path(projection_out_dir, paste0("projections_", this_country, ".pdf")), width=6, height=8)
+  print(year_plot)
+graphics.off()
+ 
 
 
 
