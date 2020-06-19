@@ -20,6 +20,7 @@ print("loading data")
 hh_data <- fread(file.path(main_dir, "hh_data.csv"))
 hl_data <- fread(file.path(main_dir, "hl_data.csv"))
 tn_data <- fread(file.path(main_dir, "tn_data.csv"))
+wm_data <- fread(file.path(main_dir, "wm_data.csv"))
 
 # calculate columns of interest from the available data
 
@@ -32,17 +33,47 @@ final_data <- final_data[hh_size>0] # drop houses with zero population, they don
 defacto_pop <- hl_data[, list(n_defacto_pop=sum(binary_slept_in_hh, na.rm=T)), by=list(subnat, surveyid, clusterid, hhid)]
 final_data <- merge(final_data, defacto_pop, by=c("surveyid", "subnat", "clusterid", "hhid"), all=T)
 
+# determine # of under-5s who slept in hh previous night
+defacto_pop_u5 <- hl_data[binary_slept_in_hh==1, list(n_pop_u5=sum(binary_under_5, na.rm=T)), by=list(subnat, surveyid, clusterid, hhid)]
+final_data <- merge(final_data, defacto_pop_u5, by=c("surveyid", "subnat", "clusterid", "hhid"), all=T)
+final_data[n_defacto_pop==0 & is.na(n_pop_u5), n_pop_u5:=0]
+
+# determine # of pregnant women who slept in hh previous night
+defacto_pop_preg <- merge(wm_data[binary_is_pregnant==1], hl_data, by=c("surveyid", "subnat", "clusterid", "hhid", "hh_member_id"), all.x=T)
+defacto_pop_preg <- defacto_pop_preg[binary_slept_in_hh==1, list(n_preg_tot=sum(binary_slept_in_hh, na.rm=T)), by=list(subnat, surveyid, clusterid, hhid)]
+final_data <- merge(final_data, defacto_pop_preg, by=c("surveyid", "subnat", "clusterid", "hhid"), all=T)
+final_data[is.na(n_preg_tot), n_preg_tot:=0]
+
+
 # determine n_slept_under_itn
 itn_sleepers <- tn_data[, list(surveyid, subnat, clusterid, hhid, net_id, 
                               net_sleeper_1, net_sleeper_2, net_sleeper_3, net_sleeper_4, net_sleeper_5, net_sleeper_6)]
 
-itn_sleepers <- melt(itn_sleepers, id.vars = c("surveyid", "subnat", "clusterid", "hhid", "net_id"))
+itn_sleepers <- melt(itn_sleepers, id.vars = c("surveyid", "subnat", "clusterid", "hhid", "net_id"), value.name="hh_member_id")
 
-itn_sleepers <- itn_sleepers[, list(n_slept_under_itn=sum(!is.na(value))), by=list(surveyid, subnat, clusterid, hhid)]
+itn_sleepers_all <- itn_sleepers[, list(n_slept_under_itn=sum(!is.na(hh_member_id))), by=list(surveyid, subnat, clusterid, hhid)]
 
-final_data <- merge(final_data, itn_sleepers, by=c("surveyid", "subnat", "clusterid", "hhid"), all=T)
+final_data <- merge(final_data, itn_sleepers_all, by=c("surveyid", "subnat", "clusterid", "hhid"), all=T)
 final_data[is.na(n_slept_under_itn) & n_itn==0, n_slept_under_itn:=0]
 final_data[n_slept_under_itn>n_defacto_pop, n_defacto_pop:=n_slept_under_itn] # occurs when more non hh members slept in house/under net
+
+# determine # of under-5s who slept under an itn the previous night
+itn_sleepers[, hh_member_id:=as.integer(hh_member_id)]
+itn_sleepers_u5 <- merge(itn_sleepers[!is.na(hh_member_id)], hl_data, by=c("surveyid", "subnat", "clusterid", "hhid", "hh_member_id"), all.x=T)
+itn_sleepers_u5 <- itn_sleepers_u5[binary_under_5==1, list(n_u5_under_itn=sum(binary_under_5)), by=list(surveyid, subnat, clusterid, hhid)]
+
+final_data <- merge(final_data, itn_sleepers_u5, by=c("surveyid", "subnat", "clusterid", "hhid"), all=T)
+final_data[is.na(n_u5_under_itn), n_u5_under_itn:=0]
+final_data[n_u5_under_itn>n_pop_u5, n_pop_u5:=n_u5_under_itn]
+
+# determine # of pregnant women who slept under an itn the previous night
+
+itn_sleepers_preg <- merge(itn_sleepers[!is.na(hh_member_id)], wm_data, by=c("surveyid", "subnat", "clusterid", "hhid", "hh_member_id"), all.x=T)
+itn_sleepers_preg <- itn_sleepers_preg[binary_is_pregnant==1, list(n_preg_under_itn=sum(binary_is_pregnant)), by=list(surveyid, subnat, clusterid, hhid)]
+
+final_data <- merge(final_data, itn_sleepers_preg, by=c("surveyid", "subnat", "clusterid", "hhid"), all=T)
+final_data[is.na(n_preg_under_itn), n_preg_under_itn:=0]
+final_data[n_preg_under_itn>n_preg_tot, n_preg_tot:=n_preg_under_itn]
 
 # determine n_itn_used
 print("finding net use count")
@@ -85,6 +116,6 @@ final_data[, n_llin:=n_itn]
 final_data[, n_conv_itn:=0]
 
 ### save
-write.csv(final_data, file.path(main_dir, "../mics5_hh_04_october_2019.csv"), row.names = F)
+write.csv(final_data, file.path(main_dir, "../mics5_hh_18_june_2020.csv"), row.names = F)
 
 

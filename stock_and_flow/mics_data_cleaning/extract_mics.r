@@ -170,17 +170,16 @@ for (this_country in country_list){
   print("EXTRACTING WM")
   this_wmdata <- format_data(file.path(svy_dir, these_fnames[these_fnames %like% "Datasets_wm"]),
                              cols_to_keep <- short_names[code %in% wm_cols])
-  this_wmdata[, binary_is_pregnant:= as.integer(is_pregnant %in% c("Oui, actuellement enceinte", "Sim,actualmente gravida", "Yes, currently pregnant"))]
-  this_wmdata[is.na(is_pregnant) | is_pregnant %in% 
-                c("Ne sait pas / Pas s\xfbre", "Non d\xe9clar\xe9/Pas de r\xe9ponse", "Manquant", "NSP / Pas s\xfbre",
-                  "Pas s\xfbre ou NSP", "Pas s\xfbre ou ne sait pas", "Non D\xe9clar\xe9e", "N\xe3o tem certeza ou NS",
-                  "Não tem certeza ou  Não Sabe", "Em falta", "Unsure or DK", "Missing"), is_pregnant:=NA]
-  # this_wmdata[, is_pregnant:=NULL]
+  this_wmdata[, binary_is_pregnant:= as.integer(is_pregnant %in% c("Oui, actuellement enceinte", "Sim,actualmente gravida", "Yes, currently pregnant",
+                                                                   "Sim, actualmente grávida"))]
+  this_wmdata[binary_is_pregnant==0 &  !is_pregnant %in% c("Non", "N\xe3o", "No", "Não"), binary_is_pregnant:=NA]
+
+  this_wmdata[, is_pregnant:=NULL]
   this_wmdata[, surveyid:=this_surveyid]
   this_wmdata[, subnat:=this_country_info$subnat]
   print(this_wmdata)
   
-  wm_list[[this_idx]] <- this_wmdata
+  wm_list[[idx]] <- this_wmdata
   
   # could merge here? but maybe keep as-is and calculate metrics. 
   idx <- idx+1

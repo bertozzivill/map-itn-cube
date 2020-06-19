@@ -16,7 +16,7 @@ library(lubridate)
 
 rm(list=ls())
 
-out_subdir <- "20200408"
+out_subdir <- "20200618"
 
 main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/household_surveys"
 out_dir <- file.path("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep", out_subdir)
@@ -122,7 +122,8 @@ setnames(old_mics_data, to_sub_mics, gsub("LLIN", "LLINs", to_sub_mics))
 
 ## MICS5 data -- I extracted and cleaned these, see extract_mics.r and clean_new_mics.r
 ## These include some subnational surveys that can't be included in the cube data (no lat/long) or the stock and flow data, drop those.
-mics5_data<-fread(file.path(main_dir, "mics5_hh_04_october_2019.csv"))
+mics5_data<-fread(file.path(main_dir, "mics5_hh_18_june_2020.csv"))
+
 setnames(mics5_data, c("surveyid", "country"), c("SurveyId", "CountryName"))
 mics5_data <- mics5_data[subnat==""]
 mics5_data[, subnat:=NULL]
@@ -189,14 +190,11 @@ all_old_data <- all_old_data[, list(SurveyId,
                                     ]
 all_data <- rbind(all_old_data, dhs_data)
 
-# remove columns about pregnant women and children under 5, we don't use them
-# also drop theoretical capacity and n_itn_used
-to_drop <- names(all_data)[names(all_data) %like% "u5" | names(all_data) %like% "preg"]
-to_drop <- c(to_drop, "itn_theoretical_capacity", "n_itn_used")
-all_data[, (to_drop):=NULL]
-
 # add cleaned mics5 data
 all_data <- rbind(all_data, mics5_data, fill=T)
+
+to_drop <- c( "itn_theoretical_capacity", "n_itn_used")
+all_data[, (to_drop):=NULL]
 
 ## Remove all countries not among the 40 for which we run stock and flow  ----------------------------------------------------------------------------------------------------------------------
 
@@ -477,3 +475,4 @@ survey_summary <- lapply(unique(all_data$SurveyId), function(this_svy){
 survey_summary <- rbindlist(survey_summary)
 
 write.csv(survey_summary, file.path(out_dir, "itn_aggregated_survey_data.csv"), row.names=F)
+write.csv(all_data, file.path(out_dir, "itn_hh_data_all.csv"))
