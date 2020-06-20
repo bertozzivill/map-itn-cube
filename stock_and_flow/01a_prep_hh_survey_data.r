@@ -1,5 +1,5 @@
 ###############################################################################################################
-## 01_hh_survey_data.r
+## 01a_prep_hh_survey_data.r
 ## Amelia Bertozzi-Villa
 ## Samir Bhatt
 ## October 2019
@@ -475,4 +475,4 @@ survey_summary <- lapply(unique(all_data$SurveyId), function(this_svy){
 survey_summary <- rbindlist(survey_summary)
 
 write.csv(survey_summary, file.path(out_dir, "itn_aggregated_survey_data.csv"), row.names=F)
-write.csv(all_data, file.path(out_dir, "itn_hh_data_all.csv"))
+write.csv(all_data, file.path(out_dir, "itn_hh_data_all.csv"), row.names=F)
