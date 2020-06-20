@@ -431,6 +431,17 @@ all_data[use>1, use:=1]
 all_data[, use_gap:= (n_with_access-n_slept_under_itn)/n_defacto_pop]
 all_data[is.na(use_gap) & n_defacto_pop==0, use_gap:=0]
 
+# calculate survey-level use among pregnant women and under-5's for subgroup analysis
+all_data[, n_u5_under_itn:= pmin(n_u5_under_itn, n_pop_u5)] # sometimes the data logs more people sleeping under a net than slept in the house
+all_data[, u5_use:= n_u5_under_itn/n_pop_u5]
+all_data[is.na(u5_use) & n_u5_under_itn==0, u5_use:=0]
+all_data[u5_use>1, u5_use:=1]
+
+all_data[, n_preg_under_itn:= pmin(n_preg_under_itn, n_preg_tot)] # sometimes the data logs more people sleeping under a net than slept in the house
+all_data[, preg_use:= n_preg_under_itn/n_preg_tot]
+all_data[is.na(preg_use) & n_preg_under_itn==0, preg_use:=0]
+all_data[preg_use>1, preg_use:=1]
+
 print("Summarizing surveys")
 survey_summary <- lapply(unique(all_data$SurveyId), function(this_svy){
   
@@ -440,7 +451,7 @@ survey_summary <- lapply(unique(all_data$SurveyId), function(this_svy){
   # set up survey design
   svy_strat<-svydesign(ids=~clusterid, data=this_svy_data, weight=~hh_sample_wt) 
   
-  meanvals <- c("n_defacto_pop", "n_itn", "n_llin", "n_conv_itn", "access", "use")
+  meanvals <- c("n_defacto_pop", "n_itn", "n_llin", "n_conv_itn", "access", "use", "u5_use", "preg_use")
   svy_means <- lapply(meanvals, function(this_val){
     uniques <- unique(this_svy_data[[this_val]])
     if (length(uniques)==1 & is.na(uniques[1])){
@@ -475,4 +486,4 @@ survey_summary <- lapply(unique(all_data$SurveyId), function(this_svy){
 survey_summary <- rbindlist(survey_summary)
 
 write.csv(survey_summary, file.path(out_dir, "itn_aggregated_survey_data.csv"), row.names=F)
-write.csv(all_data, file.path(out_dir, "itn_hh_data_all.csv"), row.names=F)
+
