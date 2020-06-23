@@ -24,11 +24,18 @@ code_dir <-"/Users/bertozzivill/repos/map-itn-cube/stock_and_flow"
 
 survey_data <- fread(file.path(main_dir, "itn_aggregated_survey_data.csv"))
 
+ggplot(survey_data, aes(x=access_mean, y=preg_use_mean)) +
+  geom_abline() + 
+  geom_point()
+
 
 all_traces <- rbindlist(lapply(c("use", "preg_use", "u5_use"), function(this_out_var){
   print(this_out_var)
   
-  stan_data<-data.table(y=survey_data[[paste0(this_out_var, "_mean")]], x=survey_data$access_mean)
+  varname <- paste0(this_out_var, "_mean")
+  to_keep <- !is.na(survey_data[[varname]])
+  
+  stan_data<-data.table(y=survey_data[[varname]][to_keep], x=survey_data$access_mean[to_keep])
   ggplot(stan_data, aes(x=x, y=y)) + geom_point() + labs(title=this_out_var)
   stan_data<-stan_data[complete.cases(stan_data),]
   N_obs<-nrow(stan_data)

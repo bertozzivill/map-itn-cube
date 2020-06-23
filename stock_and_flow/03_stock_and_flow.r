@@ -614,6 +614,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
   ### Find National Access  #####----------------------------------------------------------------------------------------------------------------------------------
   
   # Only calculate draw-level access if not running a sensitivity analysis
+  # TODO: save more of these outputs (esp household size distributions)
   if (is.na(sensitivity_survey_count)){
     
     pre_new_objects <- ls()

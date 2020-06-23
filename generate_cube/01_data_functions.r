@@ -29,6 +29,23 @@ emplogit2<-function(y, n){
   return(log(top/bottom))
 }
 
+calc_nets_by_hhsize <- function(this_hh_size, hh_props, max_nets=40){
+  these_net_stats <- hh_props[hh_size==this_hh_size]
+  
+  no_hh_subset <- data.table(hh_size=this_hh_size,
+                             net_count=0,
+                             weighted_net_prob=these_net_stats$weighted_prob_no_nets)
+  
+  net_hh_subset <- data.table(hh_size=this_hh_size,
+                              net_count=1:max_nets,
+                              weighted_net_prob=dpospois(1:max_nets, 
+                                                         these_net_stats$stockflow_mean_nets_per_hh) * these_net_stats$weighted_prob_any_net
+  )
+  
+  return(rbind(no_hh_subset, net_hh_subset))
+}
+
+
 calc_access <- function(hh_props, max_nets=40, return_mean=F){
   
   # Find the probabilities of a household of sizes 1:10 having 1:max_nets nets, 
@@ -37,25 +54,7 @@ calc_access <- function(hh_props, max_nets=40, return_mean=F){
   # of an hh_sized household having a given number of nets. This is the same as the proportion of hh-sized households
   # expected to have a given number of nets-- e.g., as the access within that household size. 
   
-  net_dist <- lapply(hh_props$hh_size, function(this_hh_size){
-    
-    these_net_stats <- hh_props[hh_size==this_hh_size]
-    
-    no_hh_subset <- data.table(hh_size=this_hh_size,
-                               net_count=0,
-                               weighted_net_prob=these_net_stats$weighted_prob_no_nets)
-    
-    net_hh_subset <- data.table(hh_size=this_hh_size,
-                                net_count=1:max_nets,
-                                weighted_net_prob=dpospois(1:max_nets, 
-                                                           these_net_stats$stockflow_mean_nets_per_hh) * these_net_stats$weighted_prob_any_net
-    )
-    
-    return(rbind(no_hh_subset, net_hh_subset))
-    
-  })
-  
-  net_dist <- rbindlist(net_dist)
+  net_dist <- rbindlist(lapply(hh_props$hh_size, calc_nets_by_hhsize, hh_props=hh_props))
   
   if (sum(net_dist$weighted_net_prob)!=1){
     if (abs(sum(net_dist$weighted_net_prob)-1)>1e-10){
@@ -64,7 +63,6 @@ calc_access <- function(hh_props, max_nets=40, return_mean=F){
   }
   
   # calculate access
-  net_dist_test <- copy(net_dist)
   net_dist[, pop_weight:=hh_size*weighted_net_prob]
   net_dist[, prop_in_bin:=pop_weight/sum(pop_weight)] # convert from proportions among household to proportions among the population
   net_dist[, access_weight:= pmin(2*net_count/hh_size, 1)]

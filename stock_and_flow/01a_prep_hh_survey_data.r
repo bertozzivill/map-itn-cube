@@ -448,17 +448,27 @@ survey_summary <- lapply(unique(all_data$SurveyId), function(this_svy){
   print(this_svy)
   this_svy_data <- all_data[SurveyId==this_svy]
   
-  # set up survey design
-  svy_strat<-svydesign(ids=~clusterid, data=this_svy_data, weight=~hh_sample_wt) 
-  
   meanvals <- c("n_defacto_pop", "n_itn", "n_llin", "n_conv_itn", "access", "use", "u5_use", "preg_use")
   svy_means <- lapply(meanvals, function(this_val){
-    uniques <- unique(this_svy_data[[this_val]])
-    if (length(uniques)==1 & is.na(uniques[1])){
-      warning("single null value found")
-      mean_df<- as.data.frame(svymean(as.formula(paste("~", this_val)), svy_strat))
+    # set up survey design
+    if(this_val=="u5_use"){
+      to_use_data <- this_svy_data[n_pop_u5>0]
+      to_use_strat<-svydesign(ids=~clusterid, data=to_use_data, weight=~hh_sample_wt) 
+    }else if (this_val=="preg_use"){
+      to_use_data <- this_svy_data[n_preg_tot>0]
+      to_use_strat<-svydesign(ids=~clusterid, data=to_use_data, weight=~hh_sample_wt) 
     }else{
-      mean_df<- as.data.frame(svymean(as.formula(paste("~", this_val)), svy_strat, na.rm=T))
+      to_use_data <- this_svy_data
+      to_use_strat<-svydesign(ids=~clusterid, data=to_use_data, weight=~hh_sample_wt) 
+    }
+    
+    uniques <- unique(to_use_data[[this_val]])
+    if ( (length(uniques)==1 & is.na(uniques[1])) | nrow(to_use_data)==0 ){
+      warning(paste(this_svy, this_val, "single null value found"))
+      mean_df<- data.frame(mean=NA, se=NA)
+      rownames(mean_df) <- this_val
+    }else{
+      mean_df<- as.data.frame(svymean(as.formula(paste("~", this_val)), to_use_strat, na.rm=T))
     }
     names(mean_df) <- c("mean", "se")
     return(mean_df)
@@ -467,6 +477,7 @@ survey_summary <- lapply(unique(all_data$SurveyId), function(this_svy){
   
   svy_summary$variable <- rownames(svy_summary)
   
+  svy_strat <- svydesign(ids=~clusterid, data=this_svy_data, weight=~hh_sample_wt)
   svy_summary <- data.table(svy_summary,
                             surveyid = this_svy,
                             iso3=unique(this_svy_data$iso3) ,
