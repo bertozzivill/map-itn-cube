@@ -90,8 +90,6 @@ print("reading older dhs data")
 old_dhs_data <-fread(file.path(main_dir, "older_dhs_hh_06_october.csv"),stringsAsFactors=FALSE)
 
 # keep only surveys that don't overlap with newer DHS data-- see data_checking.r for how we got these survey values specifically
-# old_surveys_to_keep <- c("TZ2007AIS", "ML2010OTH", "KE2007BM", "KE2010BM", "NM2009SPA")
-# TEST: exclude kenya 2007
 old_surveys_to_keep <- c("TZ2007AIS", "ML2010OTH", "KE2010BM", "NM2009SPA")
 to_keep_ids <- old_survey_key[SurveyId %in% old_surveys_to_keep]$Survey.hh
 old_dhs_data <- old_dhs_data[Survey.hh %in% to_keep_ids]
@@ -458,7 +456,7 @@ survey_summary <- lapply(unique(all_data$SurveyId), function(this_svy){
       to_use_data <- this_svy_data[n_preg_tot>0]
       to_use_strat<-svydesign(ids=~clusterid, data=to_use_data, weight=~hh_sample_wt) 
     }else{
-      to_use_data <- this_svy_data
+      to_use_data <- this_svy_data[n_defacto_pop>0]
       to_use_strat<-svydesign(ids=~clusterid, data=to_use_data, weight=~hh_sample_wt) 
     }
     
@@ -497,4 +495,4 @@ survey_summary <- lapply(unique(all_data$SurveyId), function(this_svy){
 survey_summary <- rbindlist(survey_summary)
 
 write.csv(survey_summary, file.path(out_dir, "itn_aggregated_survey_data.csv"), row.names=F)
-
+write.csv(all_data, file.path(out_dir, "itn_hh_data_all.csv"), row.names=F)

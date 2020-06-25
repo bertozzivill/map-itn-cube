@@ -20,11 +20,11 @@ package_load(c("data.table","raster","rjags", "zoo", "ggplot2", "doParallel", "l
 
 if(Sys.getenv("main_sf_dir")=="") {
   distribution_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020/20200615/llin_projections_2023.csv"
-  hh_size_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200408/"
+  hh_size_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200618/"
   main_sf_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2"
   projection_out_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200617_project_to_2023"
   code_dir <- "~/repos/map-itn-cube"
-  this_country <- "MOZ"
+  this_country <- "NGA"
   setwd(code_dir)
 } else {
   main_sf_dir <- Sys.getenv("main_sf_dir")
@@ -115,6 +115,10 @@ if (this_country %in% unique(hh_sizes$iso3)){
 }
 
 rm(hh_sizes, hh_dist_all)
+
+## Load and format access-to-use conversion  ----------------------------------------------------------------------------------------
+use_traces <- fread(file.path(hh_size_dir, "access_use_relationship.csv"))
+use_multiplier <- use_traces[metric=="use", list(beta=mean(`chain:1.beta`))]$beta
 
 
 ## Track new nets through time, by draw, assuming equal distribution across quarters  ----------------------------------------------------------------------------------------
@@ -231,12 +235,13 @@ projected_outputs <- lapply(samples, function(idx){
   return(data.table(draw=idx,
                           qtr=projected_quarters,
                           net_crop=quarterly_net_count[projected_quarters],
-                          access=access))
+                          access=access,
+                          use=access*use_multiplier))
   
 })
 
 
-  
+
   
 # aggregate and format, compare to saved
 
@@ -262,7 +267,8 @@ ggplot(all_outputs_summary, aes(x=time, color=variable)) +
 
 # and by year
 all_outputs_annual <- rbind(all_outputs[variable=="net_crop", list(variable="Net Crop", value=sum(value)/1000000), by=list(draw, year)],
-                            all_outputs[variable=="access", list(variable="Access", value=mean(value)*100), by=list(draw, year)])
+                            all_outputs[variable=="access", list(variable="Access", value=mean(value)*100), by=list(draw, year)],
+                            all_outputs[variable=="use", list(variable="Use", value=mean(value)*100), by=list(draw, year)])
 
 all_outputs_annual_summary <- all_outputs_annual[, list(mean=mean(value),
                                           lower=quantile(value, probs=0.025),
@@ -280,8 +286,8 @@ year_plot <- ggplot(all_outputs_annual_summary, aes(x=year, color=variable)) +
   facet_grid(variable~., scales="free_y") +
   theme(legend.position = "none") + 
   labs(x="",
-       y="Access (%) or Net Crop (Millions)",
-       title=paste("ITN Access and Net Crop,", this_country))
+       y="Access (%), Use (%), or Net Crop (Millions)",
+       title=paste("ITN Access, Use, and Net Crop,", this_country))
 
 
 pdf(file.path(projection_out_dir, paste0("projections_", this_country, ".pdf")), width=6, height=8)
