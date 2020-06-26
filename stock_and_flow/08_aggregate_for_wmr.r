@@ -25,7 +25,7 @@ aggregate_indicators <- function(reference_dir, list_out_dir, wmr_input_dir){
   registerDoParallel(ncores-2)
   
   
-  all_indicators <- foreach(this_country=countries[1:2], .combine="rbind") %dopar% {
+  all_indicators <- foreach(this_country=countries, .combine="rbind") %dopar% {
     print(this_country)
     # load all outputs
     pre_load_objects <- ls()
@@ -190,7 +190,7 @@ aggregate_indicators <- function(reference_dir, list_out_dir, wmr_input_dir){
   
 } 
 
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-32  --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive reference_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2 wmr_input_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20200618 CODE=gs://map_users/amelia/itn/code/ --output-recursive list_out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200624_test_wmr_agg --command 'cd ${CODE}; Rscript stock_and_flow/08_aggregate_for_wmr.r'
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --preemptible --retries 1 --wait --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n2-highmem-32  --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive reference_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2 wmr_input_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20200618 CODE=gs://map_users/amelia/itn/code/ --output-recursive list_out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200624_test_wmr_agg --command 'cd ${CODE}; Rscript stock_and_flow/08_aggregate_for_wmr.r'
 # --preemptible --retries 1 --wait
 
 package_load <- function(package_list){

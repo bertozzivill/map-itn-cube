@@ -30,9 +30,9 @@ to_format <- rbindlist(lapply(to_format_files, function(fname){
   print(iso3)
   subset <- fread(fname)
   subset[, iso3:=iso3]
-  return(melt(subset[year>=from_year & variable=="Access"], id.vars=c("iso3", "year", "variable"), variable.name="metric"))
+  return(melt(subset[year>=from_year & variable %in% c("Access", "Use")], id.vars=c("iso3", "year", "variable"), variable.name="metric"))
 }))
 
 to_format[, label:=paste0(year, "_", metric)]
 formatted <- dcast.data.table(to_format, iso3 + variable ~ label, value.var="value")
-write.csv(formatted, file=file.path(main_dir, "formatted/access_2000_2023.csv"), row.names=F)
+write.csv(formatted, file=file.path(main_dir, "formatted/access_use_2000_2023.csv"), row.names=F)
