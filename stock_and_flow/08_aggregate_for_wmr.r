@@ -221,3 +221,33 @@ aggregate_indicators(reference_dir, list_out_dir, wmr_input_dir)
 
 
 
+
+# plotting code to review: 
+
+
+# library(data.table)
+# library(ggplot2)
+# 
+# indir <- "~/Downloads/amelia_itn_stock_and_flow_results_20200624_test_wmr_agg_indicators_for_wmr.csv"
+# wmr_agg <- fread(indir)
+# 
+# 
+# subset <- wmr_agg[time_type=="quarterly" & (variable %like% "ind" & !variable %like% "ind4" | variable=="use")]
+# 
+# subset <- wmr_agg[time_type=="quarterly" & (variable %like% "alloc")]
+# 
+# ggplot(subset, aes(x=quarter, color=variable, fill=variable)) +
+#   geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.5) +
+#   geom_line(aes(y=mean)) + 
+#   facet_wrap(~iso3)
+# 
+# 
+# subset <- wmr_agg[time_type=="annual" & (variable %like% "use")]
+# 
+# ggplot(subset[year>=2010], aes(x=year, color=variable, fill=variable)) +
+#   # geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.5) +
+#   geom_line(aes(y=mean)) + 
+#   facet_wrap(~iso3, scales="free")
+
+
+

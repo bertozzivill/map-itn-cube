@@ -99,7 +99,7 @@ graphics.off()
 raster_files <- list.files(file.path(cube_indir, "rasters"), full.names = T)
 
 years <- c(2011, 2015, 2019)
-exceed_vals <- c(0.1, 0.4, 0.6, 0.8)
+exceed_vals <- seq(0.1, 0.9, 0.1)
 
 # load and organize population files
 population_rasters <- stack(file.path(pop_dir, paste0("ihme_corrected_frankenpop_All_Ages_3_", years, ".tif")))
@@ -153,9 +153,10 @@ plot_exceed <- function(exceed_rasters, exceed_type, exceed_val){
   
 }
 
-raster_metrics <- data.table(metric=c("percapita_nets", "access", "use", "use_rate"),
-                             pos_exceed=c(0.4, 0.6, 0.6, 0.8),
-                             neg_exceed=c(0.1, 0.4, 0.4, 0.6))
+metrics_to_plot <- c("percapita_nets", "access", "use", "use_rate")
+raster_metrics <- data.table(metric=metrics_to_plot,
+                             pos_exceed=c(0.3, 0.5, 0.5, 0.8),
+                             neg_exceed=c(0.1, 0.3, 0.3, 0.7))
 
 gauls_to_drop <- iso_gaul_map[!iso3 %in% unique(cube_nat_level_draws$iso3)]$gaul
 
@@ -181,11 +182,28 @@ for (idx  in 1:nrow(raster_metrics)){
     mean_pal <- rev(pnw_palette("Mushroom", 30))
   }
   
+  years <- 2019
   
   drawmean_rasters <- raster::mask(stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_mean.tif"))), mask_raster)
   mean_rasters <- raster::mask(stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_mean_ONLY.tif"))), mask_raster)
   lower_rasters <- raster::mask(stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_lower.tif"))), mask_raster)
   upper_rasters <- raster::mask(stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_upper.tif"))), mask_raster)
+  
+  
+  pos_exceed_rasters <- raster::mask(stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_pos_exceed_", exceed_vals, ".tif"))), mask_raster)
+  neg_exceed_rasters <- raster::mask(stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_neg_exceed_", exceed_vals, ".tif"))), mask_raster)
+  
+  mean_stack <- stack(replicate(length(exceed_vals), drawmean_rasters[[1]]))
+  means <- levelplot(mean_stack,
+                     par.settings=rasterTheme(region=mean_pal), at= seq(0, 1, 0.05),
+                     xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(nlayers(mean_stack), 1), 
+                     main=paste(this_metric, ": Means"))
+  
+  pos_exceed <- plot_exceed(pos_exceed_rasters, "Positive", "all")
+  neg_exceed <- plot_exceed(neg_exceed_rasters, "Negative", "all")
+  
+  
+  
   pos_exceed_rasters <- raster::mask(stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_pos_exceed_", raster_metrics[idx]$pos_exceed, ".tif"))), mask_raster)
   neg_exceed_rasters <- raster::mask(stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_neg_exceed_", raster_metrics[idx]$neg_exceed, ".tif"))), mask_raster)
   
@@ -204,6 +222,7 @@ for (idx  in 1:nrow(raster_metrics)){
                neg_exceed + background_plot_multi,
                nrow=3)
   
+  next
   
   # CI plots
   ci_width <- upper_rasters - lower_rasters
@@ -380,13 +399,6 @@ ggplot(compare_annual_monthly, aes(x=time)) +
   labs(title=paste(this_metric, ": Annual vs Monthly"),
        y=this_metric,
        x="")
-
-
-
-
-
-
-
 
 
 
