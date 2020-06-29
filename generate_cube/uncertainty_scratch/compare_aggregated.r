@@ -138,15 +138,15 @@ population_rasters <- raster::mask(population_rasters, mask_raster)
 plot_exceed <- function(exceed_rasters, exceed_type, exceed_val){
   
   if (exceed_type=="Positive"){
-    pal <- brewer.pal(5, "YlGnBu")
+    pal <- brewer.pal(4, "YlGnBu")
   }else{
-    pal <- brewer.pal(5, "YlOrBr")
+    pal <- brewer.pal(4, "YlOrBr")
   }
 
   names(exceed_rasters) <- gsub("(ITN_[0-9]{4})_.*", "\\1", names(exceed_rasters))
   
   return(levelplot(exceed_rasters,
-                   par.settings=rasterTheme(region= pal), at= seq(0, 1, 0.2),
+                   par.settings=rasterTheme(region= pal), at= seq(0, 1, 0.25),
                    xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(nlayers(exceed_rasters), 1), 
                    main=paste(this_metric, ":", exceed_type, "Exceedence,", exceed_val))
          )
@@ -182,35 +182,17 @@ for (idx  in 1:nrow(raster_metrics)){
     mean_pal <- rev(pnw_palette("Mushroom", 30))
   }
   
-  years <- 2019
-  
   drawmean_rasters <- raster::mask(stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_mean.tif"))), mask_raster)
   mean_rasters <- raster::mask(stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_mean_ONLY.tif"))), mask_raster)
   lower_rasters <- raster::mask(stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_lower.tif"))), mask_raster)
   upper_rasters <- raster::mask(stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_upper.tif"))), mask_raster)
-  
-  
-  pos_exceed_rasters <- raster::mask(stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_pos_exceed_", exceed_vals, ".tif"))), mask_raster)
-  neg_exceed_rasters <- raster::mask(stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_neg_exceed_", exceed_vals, ".tif"))), mask_raster)
-  
-  mean_stack <- stack(replicate(length(exceed_vals), drawmean_rasters[[1]]))
-  means <- levelplot(mean_stack,
-                     par.settings=rasterTheme(region=mean_pal), at= seq(0, 1, 0.05),
-                     xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(nlayers(mean_stack), 1), 
-                     main=paste(this_metric, ": Means"))
-  
-  pos_exceed <- plot_exceed(pos_exceed_rasters, "Positive", "all")
-  neg_exceed <- plot_exceed(neg_exceed_rasters, "Negative", "all")
-  
-  
-  
+
   pos_exceed_rasters <- raster::mask(stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_pos_exceed_", raster_metrics[idx]$pos_exceed, ".tif"))), mask_raster)
   neg_exceed_rasters <- raster::mask(stack(file.path(cube_indir, "rasters", paste0("ITN_", years, "_", this_metric, "_neg_exceed_", raster_metrics[idx]$neg_exceed, ".tif"))), mask_raster)
   
   # exceedence plots 
   pos_exceed <- plot_exceed(pos_exceed_rasters, "Positive", raster_metrics[idx]$pos_exceed)
   neg_exceed <- plot_exceed(neg_exceed_rasters, "Negative", raster_metrics[idx]$neg_exceed)
-  
   
   means <- levelplot(drawmean_rasters,
                      par.settings=rasterTheme(region=mean_pal), at= seq(0, 1, 0.05),
@@ -221,8 +203,7 @@ for (idx  in 1:nrow(raster_metrics)){
                means + background_plot_multi,
                neg_exceed + background_plot_multi,
                nrow=3)
-  
-  next
+
   
   # CI plots
   ci_width <- upper_rasters - lower_rasters
@@ -240,6 +221,10 @@ for (idx  in 1:nrow(raster_metrics)){
                  c(234, 129, 143), c(192, 130, 155), c(161, 129, 166), c(121, 122, 170))
   colors <- sapply(colors, function(x) do.call("rgb", c(as.list(x), maxColorValue = 255)))
   
+  colors <- c("#EA818F", "#E7A184", "#88C7E2", "#8AB5DF",
+              "#EDAAB3", "#EEBEAA", "#ADD8EB", "#B1CBE6",
+              "#EFD4DB", "#EEDBD2", "#CBE2EB", "#CDD8EC",
+              "#F9F4F8", "#FAF7F5", "#EEF4F7", "#EDF1F7")
   
   all_rel_uncertainty <- lapply(1:length(years), function(year_idx){
     print(year_idx)
