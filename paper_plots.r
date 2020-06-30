@@ -23,7 +23,7 @@ rm(list=ls())
 years <- 2000:2019
 years_for_rel_gain <- c(2015, 2019)
 
-cube_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200418_BMGF_ITN_C1.00_R1.00_V2/04_predictions"
+cube_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200501_BMGF_ITN_C1.00_R1.00_V2_with_uncertainty/04_predictions"
 stockflow_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2"
 survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200408"
 nmcp_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020/20200507/ITN_C0.00_R0.00/"
@@ -192,10 +192,11 @@ cube_survey[, type:=gsub("_mean", "", type)]
 cube_survey <- dcast.data.table(cube_survey, surveyid + iso3 + date + min_date + max_date + type ~ metric)
 
 # access and use line plots
-cube_nat_level <- rbindlist(lapply(list.files(file.path(cube_indir, "aggregated"), full.names = T), fread))
-cube_nat_level <- melt(cube_nat_level, id.vars = c("iso3", "year", "month", "time", "pop"), variable.name="type")
+cube_nat_level_fnames <- list.files(file.path(cube_indir, "aggregated"), full.names = T)
+cube_nat_level_fnames <- cube_nat_level_fnames[!cube_nat_level_fnames %like% "mean_ONLY"]
+cube_nat_level <- rbindlist(lapply(cube_nat_level_fnames, fread))
 cube_nat_level <- cube_nat_level[iso3 %in% c(unique(nets_in_houses_all$iso3), "AFR")]
-cube_nat_level[, time:=year + (month-1)/12]
+
 
 # merge on population-at-risk; adjust
 pop_all <- fread(file.path(nmcp_indir, "ihme_populations.csv"))
@@ -205,39 +206,49 @@ pop <- rbind(pop[, list(iso3="AFR", country_name="SSA", par=sum(par), pop=sum(po
              pop)
 pop[, par_prop:=par/pop]
 
-cube_nat_level <- merge(cube_nat_level, pop[, list(iso3, country_name, year, par, par_prop)], all.x=T)
-cube_nat_level[, par_adj_value:=value*(1/par_prop)]
+cube_nat_level <- merge(cube_nat_level, pop[, list(iso3, country_name, year, pop, par, par_prop)], all.x=T)
+cube_nat_level[, par_adj_mean:=mean*(1/par_prop)]
+cube_nat_level[, par_adj_lower:=lower*(1/par_prop)]
+cube_nat_level[, par_adj_upper:=upper*(1/par_prop)]
 
 # convert npc to net crop
-net_crop <- cube_nat_level[type=="percapita_nets"]
-net_crop[, type:="net_crop"]
-net_crop[, value:=value*pop]
-net_crop[, par_adj_value:=value]
-cube_nat_level <- rbind(cube_nat_level, net_crop)
+net_crop <- cube_nat_level[variable=="percapita_nets", list(iso3, country_name, year, month, time, 
+                                                            variable="net_crop",
+                                                            mean=mean*pop,
+                                                            lower=lower*pop,
+                                                            upper=upper*pop,
+                                                            par_adj_mean=mean*pop, # this is an absolute count, don't need to pop-adjust
+                                                            par_adj_lower=lower*pop,
+                                                            par_adj_upper=upper*pop,
+                                                            pop,
+                                                            par,
+                                                            par_prop
+                                                            )]
 
-cube_nat_level[, quarter:=floor((month-1)/3)+1]
-cube_nat_level_quarterly <- cube_nat_level[, list(time=mean(time),
-                                                  value=mean(value),
-                                                  par_adj_value=mean(par_adj_value),
-                                                  pop=mean(pop),
-                                                  par=mean(par),
-                                                  par_prop=mean(par_prop)), 
-                                           by=list(iso3, type, year, quarter)]
+cube_nat_level <- rbind(net_crop, cube_nat_level)
 
-cube_nat_level_annual <- cube_nat_level[, list(time=mean(time),
-                                               value=mean(value),
-                                               par_adj_value=mean(par_adj_value),
-                                               pop=mean(pop),
-                                               par=mean(par),
-                                               par_prop=mean(par_prop)), 
-                                        by=list(iso3, type, year)]
+# cube_nat_level[, quarter:=floor((month-1)/3)+1]
+# cube_nat_level_quarterly <- cube_nat_level[, list(time=mean(time),
+#                                                   value=mean(value),
+#                                                   par_adj_value=mean(par_adj_value),
+#                                                   pop=mean(pop),
+#                                                   par=mean(par),
+#                                                   par_prop=mean(par_prop)), 
+#                                            by=list(iso3, type, year, quarter)]
+
+cube_nat_level_annual <- cube_nat_level[is.na(month)]
+cube_nat_level_annual[, time:=year]
+cube_nat_level_annual[, month:=NULL]
 
 
-continental_nets <- cube_nat_level_annual[iso3=="AFR" & type %in%  c("net_crop", "access", "use")]
-continental_nets[, par_adj_value:=ifelse(type=="net_crop", par_adj_value/1000000, value*100)]
-continental_nets[, metric:= ifelse(type=="net_crop", "Net Count (Millions)", "Access and Use (%)")]
+continental_nets <- cube_nat_level_annual[iso3=="AFR" & variable %in%  c("net_crop", "access", "use")]
+continental_nets[, par_adj_mean:=ifelse(variable=="net_crop", par_adj_mean/1000000, mean*100)]
+continental_nets[, par_adj_lower:=ifelse(variable=="net_crop", par_adj_lower/1000000, lower*100)]
+continental_nets[, par_adj_upper:=ifelse(variable=="net_crop", par_adj_upper/1000000, upper*100)]
+continental_nets[, metric:= ifelse(variable=="net_crop", "Net Count (Millions)", "Access and Use (%)")]
 
-continental_nets_plot <- ggplot(continental_nets[year %in% years], aes(x=year, y=par_adj_value, color=type)) + 
+continental_nets_plot <- ggplot(continental_nets[year %in% years], aes(x=year, y=par_adj_mean, color=variable, fill=variable)) + 
+  geom_ribbon(aes(ymin=par_adj_lower, ymax=par_adj_upper), alpha=0.5) + 
   geom_line() + 
   # geom_vline(xintercept=2019) +
   theme(legend.position = "none") +
@@ -246,20 +257,14 @@ continental_nets_plot <- ggplot(continental_nets[year %in% years], aes(x=year, y
        x="",
        y="")
 
-# moving averages
-cube_nat_level_annual <- cube_nat_level_annual[year %in% years]
-moving_avgs <- rbindlist(lapply(years, function(this_year){
-  return(cube_nat_level_annual[year %in% (this_year-2):(this_year+2),
-                                  list(time=this_year,
-                                       moving_avg_value=weighted.mean(par_adj_value, par)),
-                                  by=list(iso3, type)])
-}))
 
+cube_nat_level <- cube_nat_level[!is.na(time)]
 
-
-access_use_timeseries <- ggplot(cube_nat_level_annual[type %in% c("access", "use") & year %in% years],
-                                aes(x=time, y=par_adj_value*100, color=type)) + 
+access_use_timeseries <- ggplot(cube_nat_level_annual[variable %in% c("access", "use") & year %in% years],
+                                aes(x=time, y=par_adj_mean*100, color=variable, fill=variable)) + 
+  geom_ribbon(aes(ymin=par_adj_lower*100, ymax=par_adj_upper*100), alpha=0.5) + 
   geom_hline(yintercept = 80) + 
+  geom_hline(yintercept=c(50, 30), linetype="dashed") + 
   geom_line(size=1) + 
   # geom_point(data=cube_survey[type %in% c("access", "use")], aes(x=date, y=mean*100)) + 
   facet_wrap(.~iso3) + 
@@ -270,11 +275,11 @@ access_use_timeseries <- ggplot(cube_nat_level_annual[type %in% c("access", "use
        x="Time",
        y="Access or Use (%)")
 
-access_use_seasonal <- ggplot(cube_nat_level[type %in% c("access", "use") & year %in% years & year>=2015],
-                                aes(x=time, y=par_adj_value*100, color=type)) + 
+access_use_seasonal <- ggplot(cube_nat_level[variable %in% c("access", "use") & year %in% years & year>=2015],
+                                aes(x=time, y=par_adj_mean*100, color=variable, fill=variable)) + 
+  geom_ribbon(aes(ymin=par_adj_lower*100, ymax=par_adj_upper*100), alpha=0.5) + 
   geom_hline(yintercept = 80) + 
   geom_line(size=1) + 
-  # geom_point(data=cube_survey[type %in% c("access", "use")], aes(x=date, y=mean*100)) + 
   facet_wrap(.~iso3, scales="free_y") + 
   theme(legend.title = element_blank(),
         axis.text.x = element_text(angle=45, hjust=1)) + 
@@ -282,8 +287,9 @@ access_use_seasonal <- ggplot(cube_nat_level[type %in% c("access", "use") & year
        x="Time",
        y="Access or Use (%)")
 
-net_crop_timeseries <- ggplot(cube_nat_level_quarterly[type %in% c("percapita_nets", "access") & year %in% years],
-                                aes(x=time, y=par_adj_value, color=type)) + 
+net_crop_timeseries <- ggplot(cube_nat_level[variable %in% c("percapita_nets", "access") & year %in% years],
+                                aes(x=time, y=par_adj_mean, color=variable, fill=variable)) + 
+  geom_ribbon(aes(ymin=par_adj_lower, ymax=par_adj_upper), alpha=0.5) + 
   geom_hline(yintercept=0.8, color=gg_color_hue(2)[1]) + 
   geom_hline(yintercept=0.5, color=gg_color_hue(2)[2]) + 
   geom_line() + 
@@ -296,10 +302,10 @@ net_crop_timeseries <- ggplot(cube_nat_level_quarterly[type %in% c("percapita_ne
 
 
 ## use rate
-cube_nat_level_wide <- dcast.data.table(cube_nat_level, country_name + iso3 + year + month + time~ type, value.var = "par_adj_value")
-cube_nat_level_wide[, use_ratio:=use/access]
+
 use_rate_timeseries <- 
-  ggplot(cube_nat_level_wide[year %in% years &  time>=2015], aes(x=time, y=use_ratio, group=iso3))+ 
+  ggplot(cube_nat_level[year %in% years &  time>=2015 & variable=="use_rate"], aes(x=time, y=par_adj_mean, group=iso3))+ 
+  geom_ribbon(aes(ymin=par_adj_lower, ymax=par_adj_upper), alpha=0.5) + 
   geom_hline(yintercept=0.8, color="#00BFC4") + 
   geom_line() + 
   geom_point(data=cube_survey[type=="use_rate" & date>=2015], aes(x=date, y=mean)) + 
@@ -316,7 +322,8 @@ use_rate_timeseries <-
 
 
 # use gap line plot
-use_gap_timeseries <- ggplot(cube_nat_level_quarterly[type=="use_gap" & year %in% years], aes(x=time, y=value)) + 
+use_gap_timeseries <- ggplot(cube_nat_level[variable=="use_gap" & year %in% years], aes(x=time, y=mean)) + 
+  geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.5) + 
   geom_line() + 
   geom_point(data=cube_survey[type=="use_gap"], aes(x=date, y=mean)) + 
   facet_wrap(.~iso3) + 
@@ -327,7 +334,8 @@ use_gap_timeseries <- ggplot(cube_nat_level_quarterly[type=="use_gap" & year %in
        y="Use Gap")
 
 # access deviation line plot 
-acc_dev_timeseries <- ggplot(cube_nat_level_quarterly[type=="access_dev" & year %in% years], aes(x=time, y=value)) + 
+acc_dev_timeseries <- ggplot(cube_nat_level[variable=="access_dev" & year %in% years], aes(x=time, y=mean)) + 
+  geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.5) + 
   geom_line() + 
   geom_point(data=cube_survey[type=="access_deviation"], aes(x=date, y=mean)) + 
   facet_wrap(.~iso3) + 
@@ -338,7 +346,8 @@ acc_dev_timeseries <- ggplot(cube_nat_level_quarterly[type=="access_dev" & year 
        y="Access Deviation")
 
 # percapita net deviation line plot
-npc_dev_timeseries <- ggplot(cube_nat_level_quarterly[type=="percapita_net_dev" & year %in% years], aes(x=time, y=value)) + 
+npc_dev_timeseries <- ggplot(cube_nat_level[variable=="percapita_net_dev" & year %in% years], aes(x=time, y=mean)) + 
+  geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.5) + 
   geom_line() + 
   geom_point(data=cube_survey[type=="percapita_net_deviation"], aes(x=date, y=mean)) + 
   facet_wrap(.~iso3) + 
