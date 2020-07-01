@@ -29,7 +29,10 @@ survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_inpu
 nmcp_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020/20200507/ITN_C0.00_R0.00/"
 data_fname <- "../02_data_covariates.csv"
 
+
 shape_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/shapefiles/"
+gaul_tif_fname <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/african_cn5km_2013_no_disputes.tif"
+iso_gaul_fname <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/iso_gaul_map.csv"
 
 setwd(cube_indir)
 out_dir <- file.path(cube_indir, "../final_plots")
@@ -180,7 +183,7 @@ npc_time_series_plot <- ggplot(access_npc[year %in% years], aes(x=time, y=nat_pe
        y="Nets per Capita")
 
 ############ ----------------------------------------------------------------------------------------------------------------------
-## ITN Cube  ----------------------------------------------------------------------------------------------------------------------
+## ITN Cube: Time series  ---------------------------------------------------------------------------------------------------------
 ############ ----------------------------------------------------------------------------------------------------------------------
 
 cube_survey <- fread(file.path(cube_indir, "../01_survey_summary.csv"))
@@ -226,16 +229,6 @@ net_crop <- cube_nat_level[variable=="percapita_nets", list(iso3, country_name, 
                                                             )]
 
 cube_nat_level <- rbind(net_crop, cube_nat_level)
-
-# cube_nat_level[, quarter:=floor((month-1)/3)+1]
-# cube_nat_level_quarterly <- cube_nat_level[, list(time=mean(time),
-#                                                   value=mean(value),
-#                                                   par_adj_value=mean(par_adj_value),
-#                                                   pop=mean(pop),
-#                                                   par=mean(par),
-#                                                   par_prop=mean(par_prop)), 
-#                                            by=list(iso3, type, year, quarter)]
-
 cube_nat_level_annual <- cube_nat_level[is.na(month)]
 cube_nat_level_annual[, time:=year]
 cube_nat_level_annual[, month:=NULL]
@@ -358,6 +351,10 @@ npc_dev_timeseries <- ggplot(cube_nat_level[variable=="percapita_net_dev" & year
        y="NPC Deviation")
 
 
+############ ----------------------------------------------------------------------------------------------------------------------
+## ITN Cube: maps  ----------------------------------------------------------------------------------------------------------------
+############ ----------------------------------------------------------------------------------------------------------------------
+
 main_colors <- wpal("seaside", noblack = T)
 use_rate_colors <- c("#722503", "#AB0002", "#F2A378", "#F4CA7D", "#C8D79E", "#70A800")
 npc_colors <- rev(pnw_palette("Mushroom", 30))
@@ -366,38 +363,81 @@ max_pixels <- 5e5
 Africa<-readOGR(file.path(shape_dir, "Africa.shp"))
 Africa <- gSimplify(Africa, tol=0.1, topologyPreserve=TRUE)
 
-# time series of itn use 
-use_stack <- stack(paste0("ITN_", years, "_use.tif"))
-access_stack <- stack(paste0("ITN_", years, "_access.tif"))
-npc_stack <- stack(paste0("ITN_", years, "_percapita_nets.tif"))
+background_raster <- raster(gaul_tif_fname)
+NAvalue(background_raster) <- -9999
+iso_gaul_map<-fread(iso_gaul_fname)
+modeled_gauls <- iso_gaul_map[COUNTRY_ID %in% unique(nets_in_houses_all$iso3)]$GAUL_CODE
 
-use_rate <- stack(lapply(1:nlayers(use_stack), function(idx){
-  min(use_stack[[idx]]/access_stack[[idx]], 1)
-}))  
-names(use_rate) <- paste0("ITN_", years, "_use_rate")
+background_raster[background_raster%in% modeled_gauls] <- NA
+background_raster[!is.na(background_raster)] <- 1
+background_mask_dt <- data.table(rasterToPoints(background_raster))
+names(background_mask_dt) <- c("long", "lat", "mask")
 
-id_vals <- c(6, 11, 16, 20)
-id_labels <- c("2005", "2010", "2015", "2019")
+background_plot_single <- levelplot(background_raster,
+                                    par.settings=rasterTheme(region=c("gray80")),
+                                    xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F 
+)
 
-use_plot <- levelplot(use_stack[[id_vals]],
-                      par.settings=rasterTheme(region= main_colors), at= seq(0, 1, 0.025),
-                      xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(length(id_vals), 1))  +
-  latticeExtra::layer(sp.polygons(Africa))
 
-access_plot <- levelplot(access_stack[[id_vals]],
-                         par.settings=rasterTheme(region= main_colors), at= seq(0, 1, 0.025),
-                         xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(length(id_vals),1))  +
-  latticeExtra::layer(sp.polygons(Africa))
+plot_map <- function(rasters, metric, variable, maxpixels=5e5){
+  
+  if (metric %like% "Exceed"){
+    if (metric %like% "Positive"){
+      pal <- brewer.pal(4, "YlGnBu")
+    }else{
+      pal <- brewer.pal(4, "YlOrBr")
+    }
+    breaks <- seq(0, 1, 0.25)
+  }else{
+    if (variable %in% c("Access", "Use")){
+      pal <- wpal("seaside", noblack = T)
+    }else if (variable=="Use Rate"){
+      pal <- c("#722503", "#AB0002", "#F2A378", "#F4CA7D", "#C8D79E", "#70A800")
+    }else if (variable == "Percapita Nets"){
+      pal <- rev(pnw_palette("Mushroom", 30))
+    }
+    breaks <- seq(0, 1, 0.025)
+  }
+  
+  names(rasters) <- gsub("(ITN_[0-9]{4})_.*", "\\1", names(rasters))
+  
+  return(levelplot(rasters,
+                   par.settings=rasterTheme(region= pal), at= breaks,
+                   xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(nlayers(rasters), 1), 
+                   main=ifelse(metric=="Mean", variable, metric))
+  )
+  
+}
 
-use_rate_plot <- levelplot(use_rate[[id_vals]],
-                           par.settings=rasterTheme(region= use_rate_colors), at= seq(0, 1, 0.025),
-                           xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(length(id_vals),1))  +
-  latticeExtra::layer(sp.polygons(Africa))
+uncert_year <- 2019
+variables_to_plot <- c("percapita_nets", "access", "use_rate")
+raster_metrics <- data.table(var=variables_to_plot,
+                             pos_exceed=c(0.3, 0.5, 0.8),
+                             neg_exceed=c(0.1, 0.3, 0.7))
+raster_fnames <- list.files("rasters")
 
-npc_plot <- levelplot(npc_stack[[id_vals]],
-                      par.settings=rasterTheme(region= npc_colors), at= seq(0, 0.95, 0.025),
-                      xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(length(id_vals),1))  +
-  latticeExtra::layer(sp.polygons(Africa))
+label_df <- rbindlist(lapply(variables_to_plot, function(this_var){
+  this_df <- raster_metrics[var==this_var]
+  new_df <- data.table(var=this_var,
+                       var_label=tools::toTitleCase(gsub("_", " ", this_var)),
+                       metric=c("mean", "pos_exceed", "neg_exceed"),
+                       cutoff=c(NA, this_df$pos_exceed, this_df$neg_exceed),
+                       metric_label= c("Mean", paste("Positive Exceed:", this_df$pos_exceed), paste("Negative Exceed:", this_df$neg_exceed))
+                       )
+}))
+# label_df <- label_df[order(metric)]
+
+map_plot_list <- lapply(1:nrow(label_df), function(idx){
+  print(idx)
+  this_df <- label_df[idx]
+  
+  this_raster <- raster(file.path("rasters", paste0("ITN_", uncert_year, "_", this_df$var, "_", this_df$metric, ifelse(is.na(this_df$cutoff), "", paste0("_", this_df$cutoff)), ".tif")))
+  this_plot <- plot_map(this_raster, this_df$metric_label, this_df$var_label) + 
+               background_plot_single + 
+               latticeExtra::layer(sp.polygons(Africa))
+  return(this_plot)
+})
+
 
 
 # relative gain for latest year
@@ -405,9 +445,9 @@ main_colors <- rev(terrain.colors(255))
 relgain_colors <- wpal("cool_stormy", noblack = T)
 
 rel_gain_plots <- lapply(years_for_rel_gain, function(this_year){
-  rel_gain_year_idx <- which(years==this_year)
-  this_use <- use_stack[[rel_gain_year_idx]]*100
-  this_access <- access_stack[[rel_gain_year_idx]]*100
+  
+  this_use <- raster(file.path("rasters", paste0("ITN_", this_year, "_use_mean.tif")))*100
+  this_access <- raster(file.path("rasters", paste0("ITN_", this_year, "_access_mean.tif")))*100
   
   # remove non-modeled countries
   this_use[this_use==0] <- NA
@@ -469,7 +509,7 @@ pdf(file.path(out_dir, "results_plots.pdf"), width=11, height=10)
 print(half_life_iso_plot)
 print(continental_nets_plot)
 print(access_use_timeseries)
-grid.arrange(access_plot, use_rate_plot, npc_plot, nrow=3)
+do.call("grid.arrange", c(map_plot_list, ncol=3))
 for (this_plot in rel_gain_plots){
   grid.arrange(this_plot)
 }
