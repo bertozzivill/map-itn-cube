@@ -95,7 +95,6 @@ graphics.off()
 
 ### Comparing mean to mean of draws rasters #################################---------------------------------------------------------------------------
 
-
 raster_files <- list.files(file.path(cube_indir, "rasters"), full.names = T)
 
 years <- c(2011, 2015, 2019)
@@ -234,8 +233,10 @@ for (idx  in 1:nrow(raster_metrics)){
     full_dt <- merge(merge(mean_dt, ci_width_dt), pop_dt)
     names(full_dt) <- c("long", "lat", "mean", "cirange", "pop")
     
-    full_dt[, mean_quart := cut(mean, breaks = wtd.quantile(mean, pop, c(0, 0.25, 0.5, 0.75, 1), na.rm = T), labels = F, include.lowest = T)]
-    full_dt[, uncert_quart := cut(cirange, breaks = wtd.quantile(cirange, pop, c(0, 0.25, 0.5, 0.75, 1), na.rm = T), labels = F, include.lowest = T)]
+    # full_dt[, mean_quart := cut(mean, breaks = wtd.quantile(mean, pop, c(0, 0.25, 0.5, 0.75, 1), na.rm = T), labels = F, include.lowest = T)]
+    # full_dt[, uncert_quart := cut(cirange, breaks = wtd.quantile(cirange, pop, c(0, 0.25, 0.5, 0.75, 1), na.rm = T), labels = F, include.lowest = T)]
+    full_dt[, mean_quart := cut(mean, breaks = quantile(mean, c(0, 0.25, 0.5, 0.75, 1), na.rm = T), labels = F, include.lowest = T)]
+    full_dt[, uncert_quart := cut(cirange, breaks = quantile(cirange, c(0, 0.25, 0.5, 0.75, 1), na.rm = T), labels = F, include.lowest = T)]
     full_dt$mean_quart[which(is.na(full_dt$mean_quart))] <- 4
     full_dt$uncert_quart[which(is.na(full_dt$uncert_quart))] <- 4
     

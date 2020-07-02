@@ -31,6 +31,7 @@ data_fname <- "../02_data_covariates.csv"
 
 
 shape_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/shapefiles/"
+pop_tif_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/gbd_populations"
 gaul_tif_fname <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/african_cn5km_2013_no_disputes.tif"
 iso_gaul_fname <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/iso_gaul_map.csv"
 
@@ -188,11 +189,12 @@ npc_time_series_plot <- ggplot(access_npc[year %in% years], aes(x=time, y=nat_pe
 
 cube_survey <- fread(file.path(cube_indir, "../01_survey_summary.csv"))
 cube_survey[, use_rate_mean:=use_mean/access_mean]
-cube_survey <- melt(cube_survey, id.vars = c("surveyid", "iso3", "date", "min_date", "max_date"), variable.name = "type")
-cube_survey[, metric:=ifelse(type %like% "_se", "se", "mean")]
-cube_survey[, type:=gsub("_se", "", type)]
-cube_survey[, type:=gsub("_mean", "", type)]
-cube_survey <- dcast.data.table(cube_survey, surveyid + iso3 + date + min_date + max_date + type ~ metric)
+cube_survey <- melt(cube_survey, id.vars = c("surveyid", "iso3", "date", "min_date", "max_date"), variable.name = "variable")
+cube_survey[, metric:=ifelse(variable %like% "_se", "se", "mean")]
+cube_survey[, variable:=gsub("_se", "", variable)]
+cube_survey[, variable:=gsub("_mean", "", variable)]
+cube_survey <- dcast.data.table(cube_survey, surveyid + iso3 + date + min_date + max_date + variable ~ metric)
+cube_survey[, type:=variable]
 
 # access and use line plots
 cube_nat_level_fnames <- list.files(file.path(cube_indir, "aggregated"), full.names = T)
@@ -214,6 +216,11 @@ cube_nat_level[, par_adj_mean:=mean*(1/par_prop)]
 cube_nat_level[, par_adj_lower:=lower*(1/par_prop)]
 cube_nat_level[, par_adj_upper:=upper*(1/par_prop)]
 
+# also adjust survey data for PAR
+cube_survey[, year:=floor(date)]
+cube_survey <- merge(cube_survey, pop, by=c("iso3", "year"), all.x=T)
+cube_survey[, adj_mean:=mean*(1/par_prop)]
+
 # convert npc to net crop
 net_crop <- cube_nat_level[variable=="percapita_nets", list(iso3, country_name, year, month, time, 
                                                             variable="net_crop",
@@ -232,7 +239,7 @@ cube_nat_level <- rbind(net_crop, cube_nat_level)
 cube_nat_level_annual <- cube_nat_level[is.na(month)]
 cube_nat_level_annual[, time:=year]
 cube_nat_level_annual[, month:=NULL]
-
+cube_nat_level <- cube_nat_level[!is.na(time)]
 
 continental_nets <- cube_nat_level_annual[iso3=="AFR" & variable %in%  c("net_crop", "access", "use")]
 continental_nets[, par_adj_mean:=ifelse(variable=="net_crop", par_adj_mean/1000000, mean*100)]
@@ -240,8 +247,8 @@ continental_nets[, par_adj_lower:=ifelse(variable=="net_crop", par_adj_lower/100
 continental_nets[, par_adj_upper:=ifelse(variable=="net_crop", par_adj_upper/1000000, upper*100)]
 continental_nets[, metric:= ifelse(variable=="net_crop", "Net Count (Millions)", "Access and Use (%)")]
 
-continental_nets_plot <- ggplot(continental_nets[year %in% years], aes(x=year, y=par_adj_mean, color=variable, fill=variable)) + 
-  geom_ribbon(aes(ymin=par_adj_lower, ymax=par_adj_upper), alpha=0.5) + 
+continental_nets_plot <- ggplot(continental_nets[year %in% years], aes(x=time, y=par_adj_mean, color=variable, fill=variable)) + 
+  geom_ribbon(aes(ymin=par_adj_lower, ymax=par_adj_upper), color=NA, alpha=0.35) + 
   geom_line() + 
   # geom_vline(xintercept=2019) +
   theme(legend.position = "none") +
@@ -251,15 +258,16 @@ continental_nets_plot <- ggplot(continental_nets[year %in% years], aes(x=year, y
        y="")
 
 
-cube_nat_level <- cube_nat_level[!is.na(time)]
 
-access_use_timeseries <- ggplot(cube_nat_level_annual[variable %in% c("access", "use") & year %in% years],
-                                aes(x=time, y=par_adj_mean*100, color=variable, fill=variable)) + 
-  geom_ribbon(aes(ymin=par_adj_lower*100, ymax=par_adj_upper*100), alpha=0.5) + 
+
+access_use_timeseries <- ggplot(cube_nat_level[variable %in% c("access", "use") & year %in% years],
+                                aes(x=time, color=variable, fill=variable)) + 
   geom_hline(yintercept = 80) + 
   geom_hline(yintercept=c(50, 30), linetype="dashed") + 
-  geom_line(size=1) + 
-  # geom_point(data=cube_survey[type %in% c("access", "use")], aes(x=date, y=mean*100)) + 
+  geom_ribbon(aes(ymin=par_adj_lower*100, ymax=par_adj_upper*100), color=NA, alpha=0.35) + 
+  geom_line(aes(y=par_adj_mean*100), size=1) + 
+  geom_linerange(data=cube_survey[variable %in% c("access", "use")], aes(x=date, ymin=(adj_mean-1.96*se)*100, ymax=(adj_mean+1.96*se)*100)) + 
+  geom_point(data=cube_survey[variable %in% c("access", "use")], aes(x=date, y=adj_mean*100), shape=1, size=2) + 
   facet_wrap(.~iso3) + 
   # ylim(0, 100) + 
   theme(legend.title = element_blank(),
@@ -297,8 +305,8 @@ net_crop_timeseries <- ggplot(cube_nat_level[variable %in% c("percapita_nets", "
 ## use rate
 
 use_rate_timeseries <- 
-  ggplot(cube_nat_level[year %in% years &  time>=2015 & variable=="use_rate"], aes(x=time, y=par_adj_mean, group=iso3))+ 
-  geom_ribbon(aes(ymin=par_adj_lower, ymax=par_adj_upper), alpha=0.5) + 
+  ggplot(cube_nat_level[year %in% years &  time>=2015 & variable=="use_rate"], aes(x=time, y=mean, group=iso3))+ 
+  geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.5) + 
   geom_hline(yintercept=0.8, color="#00BFC4") + 
   geom_line() + 
   geom_point(data=cube_survey[type=="use_rate" & date>=2015], aes(x=date, y=mean)) + 
@@ -311,7 +319,6 @@ use_rate_timeseries <-
        x="Time",
        y="Use Rate",
        title="ITN Use Rate by Country")
-
 
 
 # use gap line plot
@@ -360,8 +367,8 @@ use_rate_colors <- c("#722503", "#AB0002", "#F2A378", "#F4CA7D", "#C8D79E", "#70
 npc_colors <- rev(pnw_palette("Mushroom", 30))
   
 max_pixels <- 5e5
-Africa<-readOGR(file.path(shape_dir, "Africa.shp"))
-Africa <- gSimplify(Africa, tol=0.1, topologyPreserve=TRUE)
+Africa <- readOGR(file.path(shape_dir, "Africa_simplified.shp"))
+Africa_dt <- data.table(fortify(Africa, region = "COUNTRY_ID"))
 
 background_raster <- raster(gaul_tif_fname)
 NAvalue(background_raster) <- -9999
@@ -378,6 +385,107 @@ background_plot_single <- levelplot(background_raster,
                                     xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F 
 )
 
+
+## Means and Relative Uncertainty  ----------------------------------------------------------------------------------------------------------------
+
+uncert_year <- 2019
+variables_to_plot <- c("percapita_nets", "access", "use_rate")
+
+
+rel_uncert_maps <- lapply(variables_to_plot, function(this_var){
+  print(this_var)
+  
+  plot_label <- tools::toTitleCase(gsub("_", " ", this_var))
+  
+  if (this_var %in% c("access", "use")){
+    pal <- wpal("seaside", noblack = T)
+  }else if (this_var=="use_rate"){
+    pal <- c("#722503", "#AB0002", "#F2A378", "#F4CA7D", "#C8D79E", "#70A800")
+  }else if (this_var == "percapita_nets"){
+    pal <- rev(pnw_palette("Mushroom", 30))
+  }
+  
+  mean_raster <- raster(file.path("rasters", paste0("ITN_", uncert_year, "_", this_var, "_mean.tif")))
+  lower_raster <- raster(file.path("rasters", paste0("ITN_", uncert_year, "_", this_var, "_lower.tif")))
+  upper_raster <- raster(file.path("rasters", paste0("ITN_", uncert_year, "_", this_var, "_upper.tif")))
+  pop_raster <- raster(file.path(pop_tif_dir, paste0("ihme_corrected_frankenpop_All_Ages_3_", uncert_year, ".tif")))
+  pop_raster <- crop(pop_raster, mean_raster)
+  pop_raster <- setExtent(pop_raster, mean_raster)
+  
+  mean_dt <- data.table(rasterToPoints(mean_raster))
+  names(mean_dt) <- c("long", "lat", "value")
+  mean_plot <- ggplot() +
+    geom_raster(data = mean_dt, aes(fill = value, y = lat, x = long)) +
+    annotate(geom = "raster", x = background_mask_dt$long, y = background_mask_dt$lat, fill = "gray80") +
+    geom_path(data = Africa_dt, aes(x = long, y = lat, group = group), color = "black", size = 0.3) + 
+    scale_fill_gradientn(colors= pal, limits=c(0, 1)) +
+    coord_equal(xlim = c(-18, 52), ylim = c(-35, 38)) +
+    labs(x = NULL, y = NULL, title = paste("Mean Values:", plot_label)) +
+    theme_classic(base_size = 12) +
+    theme(axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(),
+          plot.margin = unit(c(0, 0, 0, 0), "in"), legend.title=element_blank())
+  
+  
+  rel_uncert_colors <- c("#EA818F", "#E7A184", "#88C7E2", "#8AB5DF",
+                         "#EDAAB3", "#EEBEAA", "#ADD8EB", "#B1CBE6",
+                         "#EFD4DB", "#EEDBD2", "#CBE2EB", "#CDD8EC",
+                         "#F9F4F8", "#FAF7F5", "#EEF4F7", "#EDF1F7")
+  ci_width <- upper_raster - lower_raster
+  
+  round_vals <- function(dt, sig=6){
+    dt[, x:=round(x, sig)]
+    dt[, y:=round(y, sig)]
+    return(dt)
+  }
+  
+  mean_raster[background_raster==1] <- NA
+  ci_width[background_raster==1] <- NA
+  pop_raster <- raster::mask(pop_raster, mean_raster)
+  
+  pop_dt <- round_vals(data.table(rasterToPoints(pop_raster)))
+  mean_dt <- round_vals(data.table(rasterToPoints(mean_raster)))
+  ci_width_dt <- round_vals(data.table(rasterToPoints(ci_width)))
+  full_dt <- merge(merge(mean_dt, ci_width_dt), pop_dt)
+  names(full_dt) <- c("long", "lat", "mean", "cirange", "pop")
+  
+  full_dt[, mean_quart := cut(mean, breaks = wtd.quantile(mean, pop, c(0, 0.25, 0.5, 0.75, 1), na.rm = T), labels = F, include.lowest = T)]
+  full_dt[, uncert_quart := cut(cirange, breaks = wtd.quantile(cirange, pop, c(0, 0.25, 0.5, 0.75, 1), na.rm = T), labels = F, include.lowest = T)]
+  full_dt$mean_quart[which(is.na(full_dt$mean_quart))] <- 4
+  full_dt$uncert_quart[which(is.na(full_dt$uncert_quart))] <- 4
+  
+  # make legend
+  levels <- CJ(uncert_quart = unique(full_dt$uncert_quart),
+               mean_quart = unique(full_dt$mean_quart))
+  levels[, comb := factor(paste(uncert_quart, mean_quart))]
+  full_dt[, comb := factor(paste(uncert_quart, mean_quart), levels = levels(levels$comb))]
+  full_dt[, year:= uncert_year]
+  
+  rel_unc_plot <- ggplot() +
+    geom_raster(data = full_dt, aes(fill = comb, y = lat, x = long), show.legend = F) +
+    annotate(geom = "raster", x = background_mask_dt$long, y = background_mask_dt$lat, fill = "gray80") +
+    geom_path(data = Africa_dt, aes(x = long, y = lat, group = group), color = "black", size = 0.3) + 
+    scale_fill_manual(values = rel_uncert_colors) +
+    coord_equal(xlim = c(-18, 52), ylim = c(-35, 38)) +
+    labs(x = NULL, y = NULL, title = paste("Relative Uncertainty:", plot_label)) +
+    theme_classic(base_size = 12) +
+    theme(axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(),
+          plot.margin = unit(c(0, 0, 0, 0), "in"))
+  
+  return(list(mean_plot, rel_unc_plot))
+  
+})
+
+rel_uncert_maps <- unlist(rel_uncert_maps, recursive=F)
+
+
+
+## Means and Relative Uncertainty  ----------------------------------------------------------------------------------------------------------------
+
+
+raster_metrics <- data.table(var=variables_to_plot,
+                             pos_exceed=c(0.3, 0.5, 0.8),
+                             neg_exceed=c(0.1, 0.3, 0.7))
+raster_fnames <- list.files("rasters")
 
 plot_map <- function(rasters, metric, variable, maxpixels=5e5){
   
@@ -409,12 +517,7 @@ plot_map <- function(rasters, metric, variable, maxpixels=5e5){
   
 }
 
-uncert_year <- 2019
-variables_to_plot <- c("percapita_nets", "access", "use_rate")
-raster_metrics <- data.table(var=variables_to_plot,
-                             pos_exceed=c(0.3, 0.5, 0.8),
-                             neg_exceed=c(0.1, 0.3, 0.7))
-raster_fnames <- list.files("rasters")
+
 
 label_df <- rbindlist(lapply(variables_to_plot, function(this_var){
   this_df <- raster_metrics[var==this_var]
@@ -509,6 +612,7 @@ pdf(file.path(out_dir, "results_plots.pdf"), width=11, height=10)
 print(half_life_iso_plot)
 print(continental_nets_plot)
 print(access_use_timeseries)
+do.call("grid.arrange", c(rel_uncert_maps, nrow=3))
 do.call("grid.arrange", c(map_plot_list, ncol=3))
 for (this_plot in rel_gain_plots){
   grid.arrange(this_plot)
