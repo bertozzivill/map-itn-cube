@@ -13,6 +13,7 @@ library(gridExtra)
 library(MapSuite)
 library(maptools)
 library(PNWColors)
+library(Hmisc)
 
 rm(list=ls())
 
@@ -263,13 +264,13 @@ continental_nets_plot <- ggplot(continental_nets[year %in% years], aes(x=time, y
 access_use_timeseries <- ggplot(cube_nat_level[variable %in% c("access", "use") & year %in% years],
                                 aes(x=time, color=variable, fill=variable)) + 
   geom_hline(yintercept = 80) + 
-  geom_hline(yintercept=c(50, 30), linetype="dashed") + 
+  # geom_hline(yintercept=c(50, 30), linetype="dashed") + 
   geom_ribbon(aes(ymin=par_adj_lower*100, ymax=par_adj_upper*100), color=NA, alpha=0.35) + 
-  geom_line(aes(y=par_adj_mean*100), size=1) + 
-  geom_linerange(data=cube_survey[variable %in% c("access", "use")], aes(x=date, ymin=(adj_mean-1.96*se)*100, ymax=(adj_mean+1.96*se)*100)) + 
-  geom_point(data=cube_survey[variable %in% c("access", "use")], aes(x=date, y=adj_mean*100), shape=1, size=2) + 
+  geom_line(aes(y=par_adj_mean*100), size=0.75) + 
+  # geom_linerange(data=cube_survey[variable %in% c("access", "use")], aes(x=date, ymin=(adj_mean-1.96*se)*100, ymax=(adj_mean+1.96*se)*100)) + 
+  geom_point(data=cube_survey[variable %in% c("access", "use")], aes(x=date, y=adj_mean*100, shape=variable), color="black") + 
   facet_wrap(.~iso3) + 
-  # ylim(0, 100) + 
+  scale_shape_manual(values=c(0,2)) + 
   theme(legend.title = element_blank(),
         axis.text.x = element_text(angle=45, hjust=1)) + 
   labs(title="ITN Access and Use by Country",
@@ -389,7 +390,7 @@ background_plot_single <- levelplot(background_raster,
 ## Means and Relative Uncertainty  ----------------------------------------------------------------------------------------------------------------
 
 uncert_year <- 2019
-variables_to_plot <- c("percapita_nets", "access", "use_rate")
+variables_to_plot <- c("access", "use_rate", "percapita_nets")
 
 
 rel_uncert_maps <- lapply(variables_to_plot, function(this_var){
@@ -483,8 +484,8 @@ rel_uncert_maps <- unlist(rel_uncert_maps, recursive=F)
 
 
 raster_metrics <- data.table(var=variables_to_plot,
-                             pos_exceed=c(0.3, 0.5, 0.8),
-                             neg_exceed=c(0.1, 0.3, 0.7))
+                             pos_exceed=c(0.5, 0.8, 0.3),
+                             neg_exceed=c(0.3, 0.7, 0.1))
 raster_fnames <- list.files("rasters")
 
 plot_map <- function(rasters, metric, variable, maxpixels=5e5){
