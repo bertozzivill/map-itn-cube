@@ -257,18 +257,45 @@ mean_net_output[, model_type:="mean_net_count"]
 all_outputs <- rbind(no_net_outputs, mean_net_output, fill=T)
 write.csv(all_outputs, file=file.path(main_dir, "indicator_priors.csv"), row.names = F)
 
-# todo: diagnostic plots
-# lp1<-var1[i1] + var1[b1]*data1$y1 
-# lp2<-var1[i2] + var1[b2]*data1$y2 
-# lp3<-var1[i3] + var1[b3]*data1$y3 
-# lp4<-var1[i4] + var1[b4]*data1$y4 
-# lp5<-var1[i5] + var1[b5]*data1$y5 
-# lp6<-var1[i6] + var1[b6]*data1$y6 
-# lp7<-var1[i7] + var1[b7]*data1$y7 
-# lp8<-var1[i8] + var1[b8]*data1$y8 
-# lp9<-var1[i9] + var1[b9]*data1$y9 
-# lp10<-var1[i10] + var1[b10]*data1$y10 
-# 
-# plot(c(lp1,lp2,lp3,lp4,lp5,lp6,lp7,lp8,lp9,lp10),z)
+# Diagnostic plots
+
+all_outputs <- fread(file.path(main_dir, "indicator_priors.csv"))
+all_outputs <- all_outputs[, list(value=mean(value)), by=.(model_type, variable)]
+
+no_net_outputs <- dcast.data.table(all_outputs[model_type=="no_net_prob"], model_type ~ variable)
+
+net_template <- data.table(expand.grid(1:10, seq(0, 0.75, 0.05)))
+names(net_template) <- c("hhsize", "nets_percapita")
+
+no_nets_prediction <- copy(net_template)
+no_nets_prediction[, emplogit_prop_no_net:= no_net_outputs$alpha_nonet_prop + 
+                     no_net_outputs$p1_nonet_prop*hhsize + 
+                     no_net_outputs$p2_nonet_prop*(hhsize^2) +
+                     no_net_outputs$b1_nonet_prop*nets_percapita + 
+                     no_net_outputs$b2_nonet_prop*(nets_percapita^2) +
+                     no_net_outputs$b3_nonet_prop*(nets_percapita^3)]
+  
+ggplot(svy_indicators, aes(x=nets_percapita, y=emplogit_prop_no_net, color=factor(hhsize))) +
+  geom_point() + 
+  geom_line(data=no_nets_prediction) + 
+  facet_wrap(~hhsize) +
+  theme(legend.position = "none")
+
+
+mean_net_outputs <- all_outputs[model_type=="mean_net_count", list(variable=gsub("(.*_hhsize)_.*", "\\1", variable),
+                                                                   hhsize=as.integer(gsub(".*_hhsize_(.*)", "\\1", variable)),
+                                                                   value)]
+mean_net_outputs <- dcast.data.table(mean_net_outputs, hhsize ~ variable)
+mean_net_outputs <- merge(mean_net_outputs, net_template)
+mean_net_outputs[, adj_mean_nets:= intercept_hhsize + nets_percapita_slope_hhsize*nets_percapita]
+
+ggplot(svy_indicators, aes(x=nets_percapita, y=adj_mean_nets, color=factor(hhsize))) +
+  geom_point() + 
+  geom_line(data=mean_net_outputs) + 
+  facet_wrap(~hhsize) +
+  theme(legend.position = "none")
+
+
+
 
 
