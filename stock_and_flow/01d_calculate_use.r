@@ -17,7 +17,7 @@ library(rstan)
 
 rm(list=ls())
 
-subdir <- "20200618"
+subdir <- "20200707"
 
 main_dir <- file.path("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep", subdir)
 code_dir <-"/Users/bertozzivill/repos/map-itn-cube/stock_and_flow"
@@ -39,10 +39,10 @@ survey_data <- fread(file.path(main_dir, "itn_aggregated_survey_data.csv"))
 # compare_to_sam <- rbind(compare_to_sam, sam_survey_data[surveyid %in% compare_to_sam$surveyid])
 # compare_to_sam <- dcast.data.table(melt(compare_to_sam, id.vars = c("surveyid", "type")), variable + surveyid ~ type)
 
-ggplot(compare_to_sam[!variable %like% "_se"], aes(x=old, y=new, color=variable)) +
-  geom_abline() + 
-  geom_point() + 
-  facet_wrap(~variable, scales="free")
+# ggplot(compare_to_sam[!variable %like% "_se"], aes(x=old, y=new, color=variable)) +
+#   geom_abline() + 
+#   geom_point() + 
+#   facet_wrap(~variable, scales="free")
 
 
 all_data <- fread(file.path(main_dir, "itn_hh_data_all.csv"))
@@ -100,17 +100,18 @@ all_traces <- rbindlist(lapply(c("use", "preg_use", "u5_use"), function(this_out
 write.csv(all_traces, file.path(main_dir, "access_use_relationship.csv"), row.names=F)
 
 
-new_traces <- fread(file.path(main_dir, "access_use_relationship.csv"))
-new_traces[, list(mean=mean(`chain:1.beta`)), by="metric"]
-
-sam_fnames <- list.files("~/Desktop", full.names = T)[list.files("~/Desktop") %like% "useage"]
-old_traces <- rbindlist(lapply(sam_fnames, function(fname){
-  subset <- fread(fname)
-  subset[, metric := ifelse(fname %like% "preg", "preg_use", 
-                            ifelse(fname %like% "chu5", "u5_use", "use"))]
-  return(subset)
-}))
-old_traces[, list(mean=mean(x)), by="metric"]
+# more checking against sam
+# new_traces <- fread(file.path(main_dir, "access_use_relationship.csv"))
+# new_traces[, list(mean=mean(`chain:1.beta`)), by="metric"]
+# 
+# sam_fnames <- list.files("~/Desktop", full.names = T)[list.files("~/Desktop") %like% "useage"]
+# old_traces <- rbindlist(lapply(sam_fnames, function(fname){
+#   subset <- fread(fname)
+#   subset[, metric := ifelse(fname %like% "preg", "preg_use", 
+#                             ifelse(fname %like% "chu5", "u5_use", "use"))]
+#   return(subset)
+# }))
+# old_traces[, list(mean=mean(x)), by="metric"]
 
 
 

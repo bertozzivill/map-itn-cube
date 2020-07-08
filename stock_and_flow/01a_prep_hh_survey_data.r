@@ -1,11 +1,17 @@
-###############################################################################################################
+######################################################################################################################
 ## 01a_prep_hh_survey_data.r
 ## Amelia Bertozzi-Villa
 ## Samir Bhatt
 ## October 2019
 ## 
-## Prepare survey data for the stock and flow and itn cube models
-##############################################################################################################
+## Prepare survey data for the stock and flow and itn cube models. This includes:
+## 1. Collecting cleaned DHS data from the saved location on the shared drive.
+## 2. Appending older/miscellaneous DHS and MICS3/4 surveys extracted by Bonnie Mappin (see mics_data_cleanin folder)
+## 3. Appending MICS5 surveys extracted by ABV (see mics_data_cleanin folder)
+
+## Once surveys are collated, geolocated data points are saved for the ITN cube analysis, household size 
+## distributions are saved for the access calculation, and all surveys are aggregated for the stock and flow model. 
+######################################################################################################################
 
 library(survey)
 library(zoo)
@@ -16,11 +22,11 @@ library(lubridate)
 
 rm(list=ls())
 
-out_subdir <- "20200618"
+out_subdir <- "20200707"
 
 main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/household_surveys"
 out_dir <- file.path("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep", out_subdir)
-dhs_dir <- "/Volumes/GoogleDrive/Shared drives/dhs-outputs/Standard_MAP_DHS_Outputs/DHS_ITN_Data/Output/2019-11-28/standard_tables"
+dhs_dir <- "/Volumes/GoogleDrive/Shared drives/dhs-outputs/Standard_MAP_DHS_Outputs/DHS_ITN_Data/Output/2020-06-25/standard_tables"
 code_dir <-"/Users/bertozzivill/repos/map-itn-cube/stock_and_flow"
 
 dir.create(out_dir, showWarnings = F, recursive = T)

@@ -4,7 +4,8 @@
 ## Samir Bhatt
 ## September 2019
 ## 
-## A lot of the prep work for stock and flow isn't country-specific-- front-load it here.
+## Some surveys do not have microdata availabe, so stock and flow-related input variables were extracted from 
+## survey reports. Add these to the full dataset here. 
 ##############################################################################################################
 
 library(data.table)
@@ -21,7 +22,7 @@ n.iter=50000
 thin=10
 
 source("jags_functions.r")
-main_subdir <- "20200408"
+main_subdir <- "20200707"
 main_dir <- file.path("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep", main_subdir)
 input_dir <- file.path(main_dir, "../../00_survey_nmcp_manufacturer")
 
