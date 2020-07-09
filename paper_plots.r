@@ -184,7 +184,56 @@ npc_time_series_plot <- ggplot(access_npc[year %in% years], aes(x=time, y=nat_pe
        x="Time",
        y="Nets per Capita")
 
-############ ----------------------------------------------------------------------------------------------------------------------
+
+
+## individual country plot for Figure 1
+fig_1_country <- "BFA"
+fig_one_dist_dt <- stock_all[model==stockflow_model_name & iso3==fig_1_country &
+                               metric!="nmcp_count_llin_est" &
+                               year %in% years]
+fig_one_dist_dt[, bound:=ifelse(metric=="adjusted_llins_distributed", 0, 1)]
+fig_one_dist_dt[, value:=value/1000000]
+color_blue <- gg_color_hue(2)[2]
+color_red <- gg_color_hue(2)[1]
+fig_one_distplot <- ggplot(fig_one_dist_dt[bound==1], aes(x=year, y=value)) +
+                            geom_line(aes(linetype=metric)) +
+                            scale_linetype_manual(values=c(3,2)) + 
+                            # scale_color_manual(values=colors) + 
+                            geom_point(data=fig_one_dist_dt[bound==0], color=color_blue) + 
+                            ylim(0, 17.5) +
+                            xlim(2000, 2020) + 
+                            theme(legend.position = "none") + 
+                            labs(title= "",
+                                 x="",
+                                 y="Net count (millions)")
+
+
+fig_one_crop_dt <- nets_in_houses_all[iso3==fig_1_country &  model==stockflow_model_name & type=="llin" & date<(max(years)+1)]
+fig_one_crop_dt[, lower:=lower/1000000]
+fig_one_crop_dt[, upper:=upper/1000000]
+fig_one_crop_dt[, nets_houses:=nets_houses/1000000]
+fig_one_counterfact <- fig_one_dist_dt[metric=="adjusted_llins_distributed"]
+fig_one_counterfact[, cumulative:= cumsum(value)]
+fig_one_counterfact <- melt(fig_one_counterfact, id.vars = c("year"), measure.vars = c("value", "cumulative"))
+fig_one_counterfact[, year:=year+0.75]
+
+fig_one_cropplot <- ggplot(fig_one_crop_dt, aes(x=date)) +
+                            geom_line(data=fig_one_counterfact, aes(x=year, y=value, group=variable), color=color_red) + 
+                            geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.3,  fill=color_blue) +
+                            geom_line(aes(y=nets_houses), size=1, color=color_blue) +
+                            geom_pointrange(data=survey_data_all[model==stockflow_model_name & type=="llin" & iso3==fig_1_country],
+                                            aes(y=svy_net_count/1000000, ymin=svy_net_lower/1000000, ymax=svy_net_upper/1000000, shape=type), alpha=0.85, color="black") + 
+                            ylim(0, 17.5) +
+                            theme(legend.position = "none") +
+                            labs(title= "",
+                                 x="",
+                                 y="")
+
+pdf(file.path(out_dir, "fig_one_raw.pdf"), width=8, height=4)
+grid.arrange(fig_one_distplot, fig_one_cropplot, ncol=2)
+graphics.off()
+
+ ############ ----------------------------------------------------------------------------------------------------------------------
 ## ITN Cube: Time series  ---------------------------------------------------------------------------------------------------------
 ############ ----------------------------------------------------------------------------------------------------------------------
 
@@ -609,7 +658,6 @@ rel_gain_plots <- lapply(years_for_rel_gain, function(this_year){
 ############ ----------------------------------------------------------------------------------------------------------------------
 
 pdf(file.path(out_dir, "results_plots.pdf"), width=11, height=10)
-# grid.arrange(sigmoid_plot, half_life_iso_plot, ncol=2, top="LLIN Retention Half-Lives")
 print(half_life_iso_plot)
 print(continental_nets_plot)
 print(access_use_timeseries)
