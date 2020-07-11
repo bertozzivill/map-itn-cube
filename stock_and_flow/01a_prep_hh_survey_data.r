@@ -446,25 +446,29 @@ all_data[, preg_use:= n_preg_under_itn/n_preg_tot]
 all_data[is.na(preg_use) & n_preg_under_itn==0, preg_use:=0]
 all_data[preg_use>1, preg_use:=1]
 
+# calculate survey-level over-allocation of nets (the proportion of nets that are unnecessarily located in households)
+all_data[, over_alloc:= pmax(n_itn-ceiling(n_defacto_pop/2), 0)/n_itn]
+all_data[, n_itn==0, over_alloc:=0]
+
 print("Summarizing surveys")
 survey_summary <- lapply(unique(all_data$SurveyId), function(this_svy){
   
   print(this_svy)
   this_svy_data <- all_data[SurveyId==this_svy]
   
-  meanvals <- c("n_defacto_pop", "n_itn", "n_llin", "n_conv_itn", "access", "use", "u5_use", "preg_use")
+  meanvals <- c("n_defacto_pop", "n_itn", "n_llin", "n_conv_itn", "access", "use", "u5_use", "preg_use", "over_alloc")
   svy_means <- lapply(meanvals, function(this_val){
     # set up survey design
     if(this_val=="u5_use"){
       to_use_data <- this_svy_data[n_pop_u5>0]
-      to_use_strat<-svydesign(ids=~clusterid, data=to_use_data, weight=~hh_sample_wt) 
     }else if (this_val=="preg_use"){
       to_use_data <- this_svy_data[n_preg_tot>0]
-      to_use_strat<-svydesign(ids=~clusterid, data=to_use_data, weight=~hh_sample_wt) 
+    }else if (this_val=="over_alloc"){
+      to_use_data <- this_svy_data[n_itn>0 & n_defacto_pop>0]
     }else{
       to_use_data <- this_svy_data[n_defacto_pop>0]
-      to_use_strat<-svydesign(ids=~clusterid, data=to_use_data, weight=~hh_sample_wt) 
     }
+    to_use_strat<-svydesign(ids=~clusterid, data=to_use_data, weight=~hh_sample_wt) 
     
     uniques <- unique(to_use_data[[this_val]])
     if ( (length(uniques)==1 & is.na(uniques[1])) | nrow(to_use_data)==0 ){

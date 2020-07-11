@@ -195,11 +195,27 @@ fig_one_dist_dt[, bound:=ifelse(metric=="adjusted_llins_distributed", 0, 1)]
 fig_one_dist_dt[, value:=value/1000000]
 color_blue <- gg_color_hue(2)[2]
 color_red <- gg_color_hue(2)[1]
+
+
 fig_one_distplot <- ggplot(fig_one_dist_dt[bound==1], aes(x=year, y=value)) +
-                            geom_line(aes(linetype=metric)) +
-                            scale_linetype_manual(values=c(3,2)) + 
+                            geom_bar(data=fig_one_dist_dt[metric=="initial_stock"], stat="identity", color="black", fill=NA) + 
+                            geom_bar(data=fig_one_dist_dt[metric=="raw_llins_distributed"], stat="identity", alpha=0.75) +
+                            # scale_linetype_manual(values=c(3,2)) + 
                             # scale_color_manual(values=colors) + 
-                            geom_point(data=fig_one_dist_dt[bound==0], color=color_blue) + 
+                            geom_pointrange(data=fig_one_dist_dt[bound==0], aes(ymin=value, ymax=value), color=color_blue) + 
+                            # geom_point(data=fig_one_dist_dt[bound==0], shape=3, color=color_blue, size=8) + 
+                            ylim(0, 17.5) +
+                            xlim(2000, 2020) + 
+                            theme(legend.position = "none") + 
+                            labs(title= "",
+                                 x="",
+                                 y="Net count (millions)")
+
+
+fig_one_dist_dt_wide <- dcast.data.table(fig_one_dist_dt, year ~ metric, value.var="value")
+fig_one_distplot_alt <- ggplot(fig_one_dist_dt_wide, aes(x=year, y=adjusted_llins_distributed)) +
+                            geom_pointrange(aes(ymin=raw_llins_distributed, ymax=initial_stock), alpha=0.75, fill="black") + 
+                            # geom_pointrange(aes(ymin=adjusted_llins_distributed, ymax=adjusted_llins_distributed), color=color_blue, size=0.25) + 
                             ylim(0, 17.5) +
                             xlim(2000, 2020) + 
                             theme(legend.position = "none") + 
@@ -230,7 +246,7 @@ fig_one_cropplot <- ggplot(fig_one_crop_dt, aes(x=date)) +
                                  y="")
 
 pdf(file.path(out_dir, "fig_one_raw.pdf"), width=8, height=4)
-grid.arrange(fig_one_distplot, fig_one_cropplot, ncol=2)
+grid.arrange(fig_one_distplot_alt, fig_one_cropplot, ncol=2)
 graphics.off()
 
  ############ ----------------------------------------------------------------------------------------------------------------------

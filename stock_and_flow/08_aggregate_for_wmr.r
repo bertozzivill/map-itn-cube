@@ -16,7 +16,7 @@ aggregate_indicators <- function(reference_dir, list_out_dir, wmr_input_dir){
   countries <- countries[nchar(countries)==3]
   start_year <- 2000
   end_year <- 2020
-  nsamp <- 500
+  nsamp <- 100
   
   ### Country Loop  #####----------------------------------------------------------------------------------------------------------------------------------
   
@@ -99,10 +99,12 @@ aggregate_indicators <- function(reference_dir, list_out_dir, wmr_input_dir){
     
     # calculate overallocation-- proportion of all nets that are overallocated
     net_dist_draws[, tot_nets:=weighted_net_prob*net_count]
-    net_dist_draws[, over_alloc:=ifelse(net_count>ceiling(hh_size/2), 1, 0)]
+    net_dist_draws[, over_alloc_weight:=pmax(net_count-ceiling(hh_size/2), 0)/net_count]
+    net_dist_draws[is.na(over_alloc_weight), over_alloc_weight:=0]
     
-    over_alloc <- net_dist_draws[, list(prop_over_alloc=sum(tot_nets*over_alloc)/sum(tot_nets)), by=list(ITER, quarter)]
-    net_dist_draws[, c("tot_nets", "over_alloc"):=NULL]
+    over_alloc <- net_dist_draws[, list(prop_over_alloc=sum(tot_nets*over_alloc_weight)/sum(tot_nets)), by=list(ITER, quarter)]
+
+    net_dist_draws[, c("tot_nets", "over_alloc_weight"):=NULL]
     
     # Indicator 1: Proportion of households with at least one net
     ownership <- net_dist_draws[net_count>0, list(ind1_prop_own_net=sum(weighted_net_prob)), by=list(ITER, quarter)]
@@ -190,7 +192,7 @@ aggregate_indicators <- function(reference_dir, list_out_dir, wmr_input_dir){
   
 } 
 
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --preemptible --retries 1 --wait --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n2-highmem-32  --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive reference_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2 wmr_input_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20200618 CODE=gs://map_users/amelia/itn/code/ --output-recursive list_out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200624_test_wmr_agg --command 'cd ${CODE}; Rscript stock_and_flow/08_aggregate_for_wmr.r'
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --preemptible --retries 1 --wait --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n2-highmem-32  --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive reference_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2 wmr_input_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20200618 CODE=gs://map_users/amelia/itn/code/ --output-recursive list_out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200709_wmr_agg_overalloc_fix --command 'cd ${CODE}; Rscript stock_and_flow/08_aggregate_for_wmr.r'
 # --preemptible --retries 1 --wait
 
 package_load <- function(package_list){
@@ -217,6 +219,7 @@ if(Sys.getenv("reference_dir")=="") {
 
 source("stock_and_flow/jags_functions.r")
 source("generate_cube/01_data_functions.r")
+
 aggregate_indicators(reference_dir, list_out_dir, wmr_input_dir)
 
 
@@ -228,20 +231,26 @@ aggregate_indicators(reference_dir, list_out_dir, wmr_input_dir)
 # library(data.table)
 # library(ggplot2)
 # 
-# indir <- "~/Downloads/amelia_itn_stock_and_flow_results_20200624_test_wmr_agg_indicators_for_wmr.csv"
+# indir <- "~/Downloads/amelia_itn_stock_and_flow_results_20200709_wmr_agg_overalloc_fix_indicators_for_wmr.csv"
 # wmr_agg <- fread(indir)
 # 
 # 
 # subset <- wmr_agg[time_type=="quarterly" & (variable %like% "ind" & !variable %like% "ind4" | variable=="use")]
 # 
 # subset <- wmr_agg[time_type=="quarterly" & (variable %like% "alloc")]
+# subset[, time:= 2000 + (quarter-1)*0.25]
+# survey_data <- fread("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200707/itn_aggregated_survey_data.csv")
 # 
-# ggplot(subset, aes(x=quarter, color=variable, fill=variable)) +
-#   geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.5) +
-#   geom_line(aes(y=mean)) + 
-#   facet_wrap(~iso3)
-# 
-# 
+# ggplot(subset, aes(x=time)) +
+#   geom_ribbon(aes(ymin=lower, ymax=upper, fill=variable), alpha=0.5) +
+#   geom_line(aes(y=mean, color=variable)) +
+#   geom_pointrange(data=survey_data, aes(x=date, y=over_alloc_mean, ymin=over_alloc_mean-1.96*over_alloc_se, ymax=over_alloc_mean+1.96*over_alloc_se), size=0.25) + 
+#   facet_wrap(~iso3) +
+#   theme(legend.position = "none",
+#         axis.text.x = element_text(angle=45, hjust=1)) +
+#   labs(title="Proportion of Nets that are Over-Allocated")
+
+#
 # subset <- wmr_agg[time_type=="annual" & (variable %like% "use")]
 # 
 # ggplot(subset[year>=2010], aes(x=year, color=variable, fill=variable)) +
