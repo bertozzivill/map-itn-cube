@@ -244,11 +244,23 @@ aggregate_indicators(reference_dir, list_out_dir, wmr_input_dir)
 # ggplot(subset, aes(x=time)) +
 #   geom_ribbon(aes(ymin=lower, ymax=upper, fill=variable), alpha=0.5) +
 #   geom_line(aes(y=mean, color=variable)) +
-#   geom_pointrange(data=survey_data, aes(x=date, y=over_alloc_mean, ymin=over_alloc_mean-1.96*over_alloc_se, ymax=over_alloc_mean+1.96*over_alloc_se), size=0.25) + 
+#   geom_pointrange(data=survey_data, aes(x=date, y=over_alloc_mean, ymin=over_alloc_mean-1.96*over_alloc_se, ymax=over_alloc_mean+1.96*over_alloc_se), size=0.25) +
 #   facet_wrap(~iso3) +
 #   theme(legend.position = "none",
 #         axis.text.x = element_text(angle=45, hjust=1)) +
 #   labs(title="Proportion of Nets that are Over-Allocated")
+# 
+# subset <- wmr_agg[time_type=="quarterly" & (variable %like% "ind3")]
+# subset[, time:= 2000 + (quarter-1)*0.25]
+# ggplot(subset, aes(x=time)) +
+#   geom_ribbon(aes(ymin=lower, ymax=upper, fill=variable), alpha=0.5) +
+#   geom_line(aes(y=mean, color=variable)) +
+#   geom_pointrange(data=survey_data, aes(x=date, y=access_mean, ymin=access_mean-1.96*access_se, ymax=access_mean+1.96*access_se), size=0.25) +
+#   facet_wrap(~iso3) +
+#   theme(legend.position = "none",
+#         axis.text.x = element_text(angle=45, hjust=1)) +
+#   labs(title="Proportion of Nets that are Over-Allocated")
+# 
 
 #
 # subset <- wmr_agg[time_type=="annual" & (variable %like% "use")]

@@ -246,7 +246,7 @@ fig_one_cropplot <- ggplot(fig_one_crop_dt, aes(x=date)) +
                                  y="")
 
 pdf(file.path(out_dir, "fig_one_raw.pdf"), width=8, height=4)
-grid.arrange(fig_one_distplot_alt, fig_one_cropplot, ncol=2)
+grid.arrange(fig_one_distplot, fig_one_cropplot, ncol=2)
 graphics.off()
 
  ############ ----------------------------------------------------------------------------------------------------------------------
