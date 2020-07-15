@@ -24,8 +24,8 @@ rm(list=ls())
 years <- 2000:2019
 years_for_rel_gain <- c(2015, 2019)
 
-cube_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200501_BMGF_ITN_C1.00_R1.00_V2_with_uncertainty/04_predictions"
-stockflow_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2"
+cube_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200713_newdata_to_2019/04_predictions"
+stockflow_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200712_newdata_to_2019"
 survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200408"
 nmcp_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020/20200507/ITN_C0.00_R0.00/"
 data_fname <- "../02_data_covariates.csv"
@@ -129,14 +129,19 @@ descending_order <- country_lambdas[order(half_life, decreasing=T)]$iso3
 half_life_bounds <- fread(file.path(stockflow_indir, "trace_plots", "llin_bounds.csv"))
 half_life_bounds <- dcast.data.table(half_life_bounds, iso3 ~ type, value.var = "half_life")
 country_lambdas <- merge(country_lambdas, half_life_bounds, by="iso3")
+# color by survey count
+survey_count <- survey_summary[, list(svy_count=.N), by="iso3"]
+country_lambdas <- merge(country_lambdas, survey_count)
+country_lambdas[, high_svy:=ifelse(svy_count>=3, 1, 0)]
 country_lambdas[, iso3:= factor(iso3, levels = descending_order)]
 
 # todo: make this into a map instead of a lame text plot
-half_life_iso_plot <- ggplot(country_lambdas, aes(x=iso3)) +
+color_red <- gg_color_hue(2)[1]
+half_life_iso_plot <- ggplot(country_lambdas, aes(x=iso3, color=factor(high_svy))) +
   geom_linerange(aes(ymin=lower, ymax=upper)) + 
   geom_text(aes(label=iso3, y=half_life)) +
   geom_hline(yintercept=3) + 
-  # ylim(0, 4) +
+  scale_color_manual(values=c(color_red, "dimgrey")) +
   theme(axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
         legend.position = "none") +
@@ -200,9 +205,7 @@ color_red <- gg_color_hue(2)[1]
 fig_one_distplot <- ggplot(fig_one_dist_dt[bound==1], aes(x=year, y=value)) +
                             geom_bar(data=fig_one_dist_dt[metric=="initial_stock"], stat="identity", color="black", fill=NA) + 
                             geom_bar(data=fig_one_dist_dt[metric=="raw_llins_distributed"], stat="identity", alpha=0.75) +
-                            # scale_linetype_manual(values=c(3,2)) + 
-                            # scale_color_manual(values=colors) + 
-                            geom_pointrange(data=fig_one_dist_dt[bound==0], aes(ymin=value, ymax=value), color=color_blue) + 
+                            geom_pointrange(data=fig_one_dist_dt[bound==0], aes(ymin=value, ymax=value), alpha=0.99, fill=color_blue, color=color_blue) + 
                             # geom_point(data=fig_one_dist_dt[bound==0], shape=3, color=color_blue, size=8) + 
                             ylim(0, 17.5) +
                             xlim(2000, 2020) + 
