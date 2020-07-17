@@ -16,7 +16,7 @@ aggregate_indicators <- function(reference_dir, list_out_dir, wmr_input_dir){
   countries <- countries[nchar(countries)==3]
   start_year <- 2000
   end_year <- 2020
-  nsamp <- 100
+  nsamp <- 250
   
   ### Country Loop  #####----------------------------------------------------------------------------------------------------------------------------------
   
@@ -129,11 +129,33 @@ aggregate_indicators <- function(reference_dir, list_out_dir, wmr_input_dir){
     for_plotting[, access_lim:= ceiling(n_defacto_pop/2)]
     for_plotting[, net_weighted_hh_prop:= weighted_hh_prop*n_itn]
     for_plotting[, net_weighted_hh_prop:= net_weighted_hh_prop/sum(net_weighted_hh_prop), by="type"]
+    for_plotting[, over_alloc_weight:=pmax(n_itn-ceiling(n_defacto_pop/2), 0)/n_itn]
+    for_plotting[, over_alloc_prop:=net_weighted_hh_prop*over_alloc_weight]
+    for_plotting[, pop_weighted_hh_prop:= weighted_hh_prop*n_defacto_pop]
+    for_plotting[, pop_weighted_hh_prop:= pop_weighted_hh_prop/sum(pop_weighted_hh_prop), by="type"]
+    for_plotting[, access_weight:= pmin(2*n_itn/n_defacto_pop, 1)]
+    for_plotting[, access_prop:= pop_weighted_hh_prop*access_weight]
     
-    ggplot(for_plotting, aes(x=n_itn, y=weighted_hh_prop, color=type)) + 
-      geom_density(stat="identity") +
-      geom_vline(aes(xintercept = access_lim)) + 
-      facet_wrap(n_defacto_pop~.) 
+    for_plotting <- melt(for_plotting, id.vars = c("type", "n_defacto_pop", "n_itn", "access_lim"),
+                         measure.vars = c("weighted_hh_prop", "over_alloc_prop", "access_prop"))
+    
+    this_svy <- unique(hh_svy_data$SurveyId)
+    
+    
+    comparison_plot <- ggplot(for_plotting, aes(x=n_itn, y=value, color=type)) + 
+                            geom_density(stat="identity", size=0.75) +
+                            geom_vline(aes(xintercept = access_lim)) + 
+                            facet_grid(variable~n_defacto_pop, scales="free_y") +
+                            xlim(0, 10) + 
+                            theme(axis.text.x = element_text(angle=45, hjust=1),
+                                  legend.position="bottom") + 
+                            labs(title=paste("Modeled vs True Net Allocations,", this_svy),
+                                 x="ITN Count",
+                                 y="Proportion")    
+    
+    pdf(paste0("~/Desktop/distributions_", this_svy, ".pdf"), width=12, height=8)
+      print(comparison_plot)
+    graphics.off()
     
     over_alloc <- net_dist_draws[, list(prop_over_alloc=sum(tot_nets*over_alloc_weight)/sum(tot_nets)), by=list(ITER, quarter)]
 
@@ -292,7 +314,7 @@ aggregate_indicators(reference_dir, list_out_dir, wmr_input_dir)
 #   facet_wrap(~iso3) +
 #   theme(legend.position = "none",
 #         axis.text.x = element_text(angle=45, hjust=1)) +
-#   labs(title="Proportion of Nets that are Over-Allocated")
+#   labs(title="Access")
 # 
 
 #
