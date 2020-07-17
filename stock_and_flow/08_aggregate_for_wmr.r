@@ -102,6 +102,39 @@ aggregate_indicators <- function(reference_dir, list_out_dir, wmr_input_dir){
     net_dist_draws[, over_alloc_weight:=pmax(net_count-ceiling(hh_size/2), 0)/net_count]
     net_dist_draws[is.na(over_alloc_weight), over_alloc_weight:=0]
     
+    # to debug overallocation: load household-level survey data
+    hh_svy_data <- fread(file.path(wmr_input_dir, "itn_hh_data_all.csv"))
+    hh_svy_data <- hh_svy_data[iso3==this_country]
+    hh_svy_data[, count:= .N, by="SurveyId"]
+    hh_svy_data <- hh_svy_data[count==max(count)]
+    hh_svy_data[n_defacto_pop>10, n_defacto_pop:=10]
+    
+    svy_net_data <- hh_svy_data[n_defacto_pop>0, list(hh_count=.N, hh_count_weighted=sum(hh_sample_wt)), by=list(n_defacto_pop, n_itn)]
+    svy_net_data <- svy_net_data[order(n_defacto_pop, n_itn)]
+    svy_net_data[, hh_prop:=hh_count_weighted/sum(hh_count_weighted), by="n_defacto_pop"]
+    
+    svy_hh_props <- find_hh_distribution(hh_sizes[SurveyId==unique(hh_svy_data$SurveyId)]) 
+    names(svy_hh_props) <- c("n_defacto_pop", "hh_size_prop")
+    svy_net_data <- merge(svy_net_data, svy_hh_props)
+    svy_net_data[, weighted_hh_prop:=hh_prop * hh_size_prop]
+    
+    compare_to_model <- net_dist_draws[, list(weighted_net_prob= mean(weighted_net_prob), tot_nets=mean(tot_nets)), 
+                                       by=list(quarter, hh_size, net_count)]
+    compare_to_model[, time:= 2000 + (quarter-1)/4]
+    compare_to_model <- compare_to_model[time<mean(hh_svy_data$date) & time >= mean(hh_svy_data$date)-0.25,
+                                         list(n_defacto_pop=hh_size, n_itn=net_count, weighted_hh_prop=weighted_net_prob, type="modeled")]
+    
+    for_plotting <- rbind(svy_net_data[, list(n_defacto_pop, n_itn, weighted_hh_prop, type="data")],
+                          compare_to_model)
+    for_plotting[, access_lim:= ceiling(n_defacto_pop/2)]
+    for_plotting[, net_weighted_hh_prop:= weighted_hh_prop*n_itn]
+    for_plotting[, net_weighted_hh_prop:= net_weighted_hh_prop/sum(net_weighted_hh_prop), by="type"]
+    
+    ggplot(for_plotting, aes(x=n_itn, y=weighted_hh_prop, color=type)) + 
+      geom_density(stat="identity") +
+      geom_vline(aes(xintercept = access_lim)) + 
+      facet_wrap(n_defacto_pop~.) 
+    
     over_alloc <- net_dist_draws[, list(prop_over_alloc=sum(tot_nets*over_alloc_weight)/sum(tot_nets)), by=list(ITER, quarter)]
 
     net_dist_draws[, c("tot_nets", "over_alloc_weight"):=NULL]
