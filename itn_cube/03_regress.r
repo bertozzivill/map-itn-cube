@@ -4,7 +4,6 @@
 ## February 2020
 ## 
 ## Transform data and run inla models for 1. Access Deviation, 2. Use Gap, and 3. Nets-Per-Capita Deviation.
-
 ## NB: This code is designed to be run as part of a larger pipeline (see 00_generate_cube_master.r).
 ##      To run this script individually, see instructions at the bottom of the page. 
 ## 

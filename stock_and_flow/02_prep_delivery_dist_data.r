@@ -1,9 +1,12 @@
 ###############################################################################################################
-## assess_manu_nmcp_data.r
+## 02_prep_delivery_dist_data.r
 ## Amelia Bertozzi-Villa
+## Samir Bhatt
 ## April 2020
 ## 
-## Work for ITN update for BMGF covid-malaria asks
+## Running step 02 is only necessary if there are updated delivery or distribution data. 
+## This script takes in new delivery/distribution data and formats it for stock and flow.
+## Depending on the format of the data, you may need to customize the script to achieve the desired output.
 ##############################################################################################################
 
 library(ggplot2)

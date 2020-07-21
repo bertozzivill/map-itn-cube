@@ -6,7 +6,15 @@
 ## Functions to accompany 04_predict_rasters.r
 
 ## - get_prediction_objects: load the appropriate INLA outputs for prediction
-
+## - predict_by_sample: calculate the predicted model output for a single posterior draw.
+## - predict_by_model: when predicting for mean values only, calculate the predicted model output for the mean.
+## - format_stockflow: expand national stock and flow results to the relevant pixel ids
+## - nat_summary_stats: find means and quantiles for natinonal-level results.
+## - aggregate_to_nat: aggregated raster data to national level
+## - mean_of_matrices: for a list of matrices, calculate an elementwise mean.
+## - exceedence: calculate exceedance probabilities for a dataset of posterior draws, given a cutoff.
+## - pixel_summary_stats: find means and quantiles for rasters
+## - make_raster: convert a data.table to a raster
 ##############################################################################################################
 
 get_prediction_objects <- function(for_prediction_fname, metrics_to_extract, nsamp=NULL){

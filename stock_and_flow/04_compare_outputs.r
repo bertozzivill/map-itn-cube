@@ -1,10 +1,10 @@
 ###############################################################################################################
-## 04_compare_outputs
+## 04_compare_outputs.r
 ## Amelia Bertozzi-Villa
 ## Samir Bhatt
 ## September 2019
 ## 
-## Plot outputs from different stock and flow models
+## Plot net crop, distribution, and stock from different stock and flow models
 ##############################################################################################################
 
 compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir){

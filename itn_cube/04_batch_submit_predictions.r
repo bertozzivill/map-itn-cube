@@ -3,8 +3,8 @@
 ## Amelia Bertozzi-Villa
 ## July 2019
 ## 
-## Create and submit a dsube command for each year of predict_rasters
-
+## Especially when predicting uncertainty, prediction is too memory-intensive to run in a single job.
+## This script creates and submits a dsub command for each year for which we want predictions.
 ## NB: This script requires an immense amount of memory, only rerun it if you absolutely must.
 ##############################################################################################################
 library(data.table)

@@ -1,10 +1,13 @@
 ###############################################################################################################
-## 02_stock_and_flow.r
+## 03_stock_and_flow.r
 ## Amelia Bertozzi-Villa
 ## Samir Bhatt
 ## December 2019
 ## 
-## Main script for the stock and flow model
+## Main script for the stock and flow model. This code: 
+## 1. Sets up input data to go into the stock and flow model
+## 2. Defines the stock and flow model in JAGS
+## 3. Fits the model and predicts and saves outputs. 
 ##############################################################################################################
 
 run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmcp_manu_dir, out_dir, last_distribution_year=NA, sensitivity_survey_count=NA, sensitivity_type=NA){

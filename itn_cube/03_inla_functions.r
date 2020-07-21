@@ -14,7 +14,9 @@
 
 ## - ll_to_xyz: convert a set of lat-longs to cartesian gridpoints.
 ## - run_inla: return inla model object from data and covariates
-## - predict_inla: predict inla model from run_inla with new covariate values
+## - align_res: align the resolutions of two rasters
+## - aggregate_raster: calculate zonal statistics of one raster based on another
+## - conditional.samples.variance: Deprecated. code from Sam for calculating uncertainty.
 ##############################################################################################################
 
 # lifted from the docs of the empLogit function from the binomTools package

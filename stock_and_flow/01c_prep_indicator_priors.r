@@ -1,13 +1,15 @@
 ###############################################################################################################
-## prep_priors.r
+## 01c_prep_indicator_priors.r
 ## Amelia Bertozzi-Villa
 ## Samir Bhatt 
 ## September 2019
 ## 
-## Adapted from "indicator stan prior.r"-- find prior estimates for prop of people with no nets and 
-## mean # of nets per household
+## To convert from (stock-and-flow generated) nets-per-capita to net access, two indicator metrics are needed:
+## The proportion of households with no nets, and the mean number of nets per household (among households with
+## at least one net). These are calculated from nets-per-capita and household size via a polynomial regression
+## (for the first metric) and a linear regression (for the second). This script fits the coefficients of these 
+## regressions from survey data for use in the prediction stage of step 03. 
 ##############################################################################################################
-
 
 library(survey)
 library(zoo)
@@ -22,7 +24,6 @@ options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = TRUE)
 
 # set.seed(084)
-
 
 emplogit <- function (y, eps = 1e-3){
   log((eps + y)/(1 - y + eps))

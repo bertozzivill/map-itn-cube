@@ -3,8 +3,9 @@
 ## Amelia Bertozzi-Villa
 ## June 2020
 ## 
-## Using the inla objects from Step 4 and the covariates extracted from Step 3, predict monthly 
-## ITN rasters, transform them back to level space, and aggregate up to annual values
+## Using the inla objects from Step 3 and the covariates extracted from Step 2, predict monthly 
+## ITN rasters, transform them back to level space, and aggregate up to annual values. Also calculate 
+## uncertainty, relative uncertainty, and exceedance. 
 
 ## NB: This code is designed to be run as part of a larger pipeline (see 00_generate_cube_master.r).
 ##      To run this script individually, see instructions at the bottom of the page. 

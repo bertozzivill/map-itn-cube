@@ -1,10 +1,9 @@
-
 ###############################################################################################################
 ## view_changes.r
 ## Amelia Bertozzi-Villa
 ## June 2019
 ## 
-## For bug fix and update runs: see how these changes impact either the original, or any other, run. 
+## Compare two sets of ITN cube results.
 ## 
 ##############################################################################################################
 

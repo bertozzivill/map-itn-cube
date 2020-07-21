@@ -7,6 +7,7 @@
 
 ## -emplogit: 1-input empirical logit
 ## -emplogit2: 2-input empirical logit 
+## -calc_nets_by_hhsize: generate zero-truncated Poisson distributions of net count by houeshold size.
 ## -calc_access: calculate access metrics by household size from stock and flow outputs
 ## -reposition_points: assign impossibly-placed lat-longs to the nearest valid pixel
 

@@ -4,10 +4,10 @@
 ## Samir Bhatt
 ## October 2019
 ## 
-## Prepare survey data for the stock and flow and itn cube models. This includes:
+## Prepare household-level survey data for the stock and flow and itn cube models. This includes:
 ## 1. Collecting cleaned DHS data from the saved location on the shared drive.
-## 2. Appending older/miscellaneous DHS and MICS3/4 surveys extracted by Bonnie Mappin (see mics_data_cleanin folder)
-## 3. Appending MICS5 surveys extracted by ABV (see mics_data_cleanin folder)
+## 2. Appending older/miscellaneous DHS and MICS3/4 surveys extracted by Bonnie Mappin (see mics_data_cleaning folder)
+## 3. Appending MICS5 surveys extracted by ABV (see mics_data_cleaning folder)
 
 ## Once surveys are collated, geolocated data points are saved for the ITN cube analysis, household size 
 ## distributions are saved for the access calculation, and all surveys are aggregated for the stock and flow model. 

@@ -1,12 +1,12 @@
-###############################################################################################################
-## 02a_prep_stock_and_flow.r
+######################################################################################################################
+## 01b_prep_reportonly_survey_data.r
 ## Amelia Bertozzi-Villa
 ## Samir Bhatt
-## September 2019
+## October 2019
 ## 
 ## Some surveys do not have microdata availabe, so stock and flow-related input variables were extracted from 
-## survey reports. Add these to the full dataset here. 
-##############################################################################################################
+## survey reports. this script appends those report-level results to the aggregated dataset calculated in step 1a. 
+######################################################################################################################
 
 library(data.table)
 library(rjags)

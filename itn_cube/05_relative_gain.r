@@ -6,9 +6,6 @@
 ## Using the predicted rasters from Step 4, generate estimates of whether access or use is the biggest 
 ## barrier to net coverage. 
 
-## NB: This code is designed to be run as part of a larger pipeline (see 00_generate_cube_master.r).
-##      To run this script individually, see instructions at the bottom of the page. 
-## 
 ##############################################################################################################
 
 library(raster)

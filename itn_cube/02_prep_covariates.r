@@ -6,7 +6,6 @@
 ## Isolate covariates at the proper time points and pixels for the covariate model from the files generated
 ## in 000_extract_covariates.r
 ## 
-
 ## NB: This code is designed to be run as part of a larger pipeline (see 00_generate_cube_master.r).
 ##      To run this script locally or individually, see instructions at the bottom of the page. 
 ## 

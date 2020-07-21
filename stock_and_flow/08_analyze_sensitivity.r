@@ -1,10 +1,11 @@
 ###############################################################################################################
-## 06_analyze_sensitivity.r
+## 08_analyze_sensitivity.r
 ## Amelia Bertozzi-Villa
 ## Samir Bhatt
 ## December 2019
 ## 
-## Calculate out-of-sample MSE and plot the way excluding data impacts results
+## For those stock-and-flow model run with held-out survey data,
+## calculate out-of-sample MSE and plot the ways in which excluding data impacts results.
 ###############################################################################################################
 
 rm(list=ls())

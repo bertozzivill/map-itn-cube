@@ -1,12 +1,17 @@
 ###############################################################################################################
-## 08_aggregate_for_wmr.r
+## 06_aggregate_for_wmr.r
 ## Amelia Bertozzi-Villa
 ## Samir Bhatt
 ## June 2020
 ## 
-## Collate stock and flow outputs and calculate indicators for World Malaria Report
+## Collate stock and flow outputs and calculate indicators for World Malaria Report. 
+## Indicators are as follows: 
+## 1. Proportion of households with at least one net
+## 2. Proportion of households with sufficient nets (1 between 2)
+## 3. Population-level access
+## 4. Ownership gap: Proportion of households with a net, but without household-level access
+## Additionally, calculate ITN Use overall, among pregnant people, and among children under 5.
 ##############################################################################################################
-
 
 aggregate_indicators <- function(reference_dir, list_out_dir, wmr_input_dir){
   

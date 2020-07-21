@@ -3,7 +3,8 @@
 ## Amelia Bertozzi-Villa
 ## June 2019
 ## 
-## Master script for running all itn cube code, in sequence, on google cloud. 
+## Master script for generating ITN regressino outputs, in sequence, on google cloud. To predict from this 
+## output, run 04_batch_submit_predictions.r from your local machine.
 ##############################################################################################################
 
 rm(list=ls())
@@ -70,13 +71,8 @@ step_3_toc <- Sys.time()
 time_passed(step_3_tic, step_3_toc)
 
 
-# ## Predict Outputs: TODO: change this step to submitting a dsub for each year ## ------------------------------------------------------------
-# print("STEP 4: Predicting output rasters")
-# step_4_tic <- Sys.time()
-# source(file.path(func_dir, "04_predict_rasters.r"))
-# predict_rasters(input_dir, indicators_indir, main_indir=main_dir, cov_dir=cov_dir, main_outdir=main_dir, func_dir=func_dir, prediction_years=start_year:end_year)
-# step_4_toc <- Sys.time()
-# time_passed(step_4_tic, step_4_toc)
+# ## Predict Outputs: For this step you must run 04_batch_submit_predictions from your local machine. ## ------------------------------------------------------------
+
 
 ## Show time elapsed ## ------------------------------------------------------------
 print("Stepwise times:")
@@ -86,8 +82,6 @@ print("Step 2: Preparing Covariates")
 time_passed(step_2_tic, step_2_toc)
 print("Step 3: Running Regressions")
 time_passed(step_3_tic, step_3_toc)
-# print("Step 4: Input Data Prep")
-# time_passed(step_4_tic, step_4_toc)
 
 print("Full Time:")
 big_toc <- Sys.time()

@@ -4,7 +4,7 @@
 ## February 2020
 ## 
 ## Prepare net-based survey metrics for the ITN cube model.
-## This script calculatescluster-level metrics from survey data, and merges on national-level access
+## This script calculates cluster-level metrics from survey data, and merges on national-level access
 ## from 01_prep_stockandflow.r. 
 
 ## NB: This code is designed to be run as part of a larger pipeline (see 00_generate_cube_master.r).
