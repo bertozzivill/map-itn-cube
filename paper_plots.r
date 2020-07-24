@@ -333,28 +333,32 @@ continental_nets_plot <- ggplot(continental_nets[year %in% years], aes(x=time, y
        x="",
        y="")
 
-setnames(cube_nat_level, "country_name", "name")
+cube_nat_level[, code:=iso3]
+cube_survey[, code:=iso3]
+cube_nat_level[, label_year:= gsub("*20", "'", as.character(year))]
 
 ssa_grid <- fread(geofacet_fname)
 
 access_use_timeseries <- ggplot(cube_nat_level[variable %in% c("access", "use") & year %in% years],
-                                aes(x=time, color=variable, fill=variable)) + 
+                                aes(x=time-2000, color=variable, fill=variable)) + 
                           geom_hline(yintercept = 80) + 
                           geom_ribbon(aes(ymin=par_adj_lower*100, ymax=par_adj_upper*100), color=NA, alpha=0.35) + 
                           geom_line(aes(y=par_adj_mean*100), size=0.75) + 
-                          # geom_point(data=cube_survey[variable %in% c("access", "use")], aes(x=date, y=adj_mean*100, shape=variable), color="black") + 
-                          facet_geo(~name, grid = ssa_grid) + 
+                          geom_point(data=cube_survey[variable %in% c("access", "use")], aes(x=date-2000, y=adj_mean*100, shape=variable), color="black") + 
+                          facet_geo(~code, grid = ssa_grid, label="name") + 
                           scale_shape_manual(values=c(0,2)) + 
                           theme_classic() + 
+                          scale_x_continuous(breaks=seq(0,20,5))+
                           theme(legend.title = element_blank(),
-                                legend.position="none",
+                                legend.position="top",
                                 # axis.text.x = element_text(angle=45, hjust=1)
-                                axis.text.x = element_blank(),
+                                # axis.text.x = element_blank(),
                                 axis.line = element_blank(),
-                                axis.ticks.x = element_blank()
+                                axis.ticks.x = element_blank(),
+                                panel.grid.major.x = element_line(color = "darkgrey", size=0.25)
                                 ) + 
-                          labs(title="ITN Access and Use by Country",
-                               x="Time",
+                          labs(title="",
+                               x="",
                                y="Access or Use (%)")
 
 sf_for_ref <- ggplot(Africa_dt, aes(x = long, y = lat, group = group)) + 
@@ -369,7 +373,7 @@ sf_for_ref <- ggplot(Africa_dt, aes(x = long, y = lat, group = group)) +
                   
 # combine
 pdf(paste0("~/Desktop/geofacet.pdf"), width = (10), height = (10))
-vp <- viewport(width = 0.3, height = 0.3, x = 0.15, y = 0.15)
+vp <- viewport(width = 0.3, height = 0.3, x = 0.15, y = 0.2)
 print(access_use_timeseries)
 print(sf_for_ref, vp = vp)
 dev.off()

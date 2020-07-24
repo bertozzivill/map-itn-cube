@@ -1,6 +1,7 @@
 name,code,row,col
 Mauritania,MRT,1,2
 Eritrea,ERI,1,8
+All Countries,AFR,1,10
 Gambia,GMB,2,1
 Senegal,SEN,2,2
 Guinea-Bissau,GNB,2,3
@@ -14,7 +15,7 @@ Guinea,GIN,3,2
 Ghana,GHA,3,3
 Burkina Faso,BFA,3,4
 Benin,BEN,3,5
-Central African Republic,CAF,3,6
+Central Afr. Rep.,CAF,3,6
 South Sudan,SSD,3,7
 Ethiopia,ETH,3,8
 Somalia,SOM,3,9
@@ -25,18 +26,17 @@ Nigeria,NGA,4,5
 Cameroon,CMR,4,6
 Rwanda,RWA,4,7
 Kenya,KEN,4,8
-Equatorial Guinea,GNQ,5,5
-Republic Of Congo,COG,5,6
+Gabon,GAB,5,4
+Rep. of Congo,COG,5,5
+Eq. Guinea,GNQ,5,6
 Burundi,BDI,5,7
 Uganda,UGA,5,8
-SSA,SSA,6,2
-Gabon,GAB,6,5
-Democratic Republic Of The Congo,COD,6,6
-Tanzania,TZA,6,7
-Comoros,COM,6,9
-Angola,AGO,7,5
-Zambia,ZMB,7,6
-Malawi,MWI,7,7
+Angola,AGO,6,5
+DRC,COD,6,6
+Zambia,ZMB,6,7
+Tanzania,TZA,6,8
+Comoros,COM,5,10
+Zimbabwe,ZWE,7,5
+Malawi,MWI,7,6
+Mozambique,MOZ,7,7
 Madagascar,MDG,7,10
-Zimbabwe,ZWE,8,6
-Mozambique,MOZ,8,7
