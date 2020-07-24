@@ -33,6 +33,7 @@ data_fname <- "../02_data_covariates.csv"
 
 
 shape_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/shapefiles/"
+geofacet_fname <- "~/repos/map-itn-cube/geofacet_ssa_malaria.csv"
 pop_tif_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/gbd_populations"
 gaul_tif_fname <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/african_cn5km_2013_no_disputes.tif"
 iso_gaul_fname <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/iso_gaul_map.csv"
@@ -334,7 +335,7 @@ continental_nets_plot <- ggplot(continental_nets[year %in% years], aes(x=time, y
 
 setnames(cube_nat_level, "country_name", "name")
 
-ssa_grid <- fread("~/Desktop/geofacet_ssa_malaria_v2.csv")
+ssa_grid <- fread(geofacet_fname)
 
 access_use_timeseries <- ggplot(cube_nat_level[variable %in% c("access", "use") & year %in% years],
                                 aes(x=time, color=variable, fill=variable)) + 
