@@ -14,6 +14,7 @@ library(MapSuite)
 library(maptools)
 library(PNWColors)
 library(Hmisc)
+library(geofacet)
 
 rm(list=ls())
 
@@ -256,6 +257,7 @@ graphics.off()
 ## ITN Cube: Time series  ---------------------------------------------------------------------------------------------------------
 ############ ----------------------------------------------------------------------------------------------------------------------
 
+# survey data
 cube_survey <- fread(file.path(cube_indir, "../01_survey_summary.csv"))
 cube_survey[, use_rate_mean:=use_mean/access_mean]
 cube_survey <- melt(cube_survey, id.vars = c("surveyid", "iso3", "date", "min_date", "max_date"), variable.name = "variable")
@@ -271,6 +273,10 @@ cube_nat_level_fnames <- cube_nat_level_fnames[!cube_nat_level_fnames %like% "me
 cube_nat_level <- rbindlist(lapply(cube_nat_level_fnames, fread))
 cube_nat_level <- cube_nat_level[iso3 %in% c(unique(nets_in_houses_all$iso3), "AFR")]
 
+# shapefile
+Africa <- readOGR(file.path(shape_dir, "Africa_simplified.shp"))
+Africa_dt <- data.table(fortify(Africa, region = "COUNTRY_ID"))
+Africa_dt[, modeled:= ifelse(id %in% unique(cube_nat_level$iso3), "Yes", "No")]
 
 # merge on population-at-risk; adjust
 pop_all <- fread(file.path(nmcp_indir, "ihme_populations.csv"))
@@ -326,24 +332,47 @@ continental_nets_plot <- ggplot(continental_nets[year %in% years], aes(x=time, y
        x="",
        y="")
 
+setnames(cube_nat_level, "country_name", "name")
 
-
+ssa_grid <- fread("~/Desktop/geofacet_ssa_malaria_v2.csv")
 
 access_use_timeseries <- ggplot(cube_nat_level[variable %in% c("access", "use") & year %in% years],
                                 aes(x=time, color=variable, fill=variable)) + 
-  geom_hline(yintercept = 80) + 
-  # geom_hline(yintercept=c(50, 30), linetype="dashed") + 
-  geom_ribbon(aes(ymin=par_adj_lower*100, ymax=par_adj_upper*100), color=NA, alpha=0.35) + 
-  geom_line(aes(y=par_adj_mean*100), size=0.75) + 
-  # geom_linerange(data=cube_survey[variable %in% c("access", "use")], aes(x=date, ymin=(adj_mean-1.96*se)*100, ymax=(adj_mean+1.96*se)*100)) + 
-  geom_point(data=cube_survey[variable %in% c("access", "use")], aes(x=date, y=adj_mean*100, shape=variable), color="black") + 
-  facet_wrap(.~iso3) + 
-  scale_shape_manual(values=c(0,2)) + 
-  theme(legend.title = element_blank(),
-        axis.text.x = element_text(angle=45, hjust=1)) + 
-  labs(title="ITN Access and Use by Country",
-       x="Time",
-       y="Access or Use (%)")
+                          geom_hline(yintercept = 80) + 
+                          geom_ribbon(aes(ymin=par_adj_lower*100, ymax=par_adj_upper*100), color=NA, alpha=0.35) + 
+                          geom_line(aes(y=par_adj_mean*100), size=0.75) + 
+                          # geom_point(data=cube_survey[variable %in% c("access", "use")], aes(x=date, y=adj_mean*100, shape=variable), color="black") + 
+                          facet_geo(~name, grid = ssa_grid) + 
+                          scale_shape_manual(values=c(0,2)) + 
+                          theme_classic() + 
+                          theme(legend.title = element_blank(),
+                                legend.position="none",
+                                # axis.text.x = element_text(angle=45, hjust=1)
+                                axis.text.x = element_blank(),
+                                axis.line = element_blank(),
+                                axis.ticks.x = element_blank()
+                                ) + 
+                          labs(title="ITN Access and Use by Country",
+                               x="Time",
+                               y="Access or Use (%)")
+
+sf_for_ref <- ggplot(Africa_dt, aes(x = long, y = lat, group = group)) + 
+                  geom_polygon(aes(fill=modeled)) + 
+                  geom_path(color = "black", size = 0.3) +
+                  scale_fill_manual(values=c("gray80","#70A800")) + 
+                  coord_equal(xlim = c(-18, 52), ylim = c(-35, 38)) +
+                  labs(x = NULL, y = NULL, title = "") +
+                  theme_classic(base_size = 12) +
+                  theme(axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(),
+                        plot.margin = unit(c(0, 0, 0, 0), "in"), legend.title=element_blank(), legend.position = "none")
+                  
+# combine
+pdf(paste0("~/Desktop/geofacet.pdf"), width = (10), height = (10))
+vp <- viewport(width = 0.3, height = 0.3, x = 0.15, y = 0.15)
+print(access_use_timeseries)
+print(sf_for_ref, vp = vp)
+dev.off()
+
 
 access_use_seasonal <- ggplot(cube_nat_level[variable %in% c("access", "use") & year %in% years & year>=2015],
                                 aes(x=time, y=par_adj_mean*100, color=variable, fill=variable)) + 
@@ -436,8 +465,6 @@ use_rate_colors <- c("#722503", "#AB0002", "#F2A378", "#F4CA7D", "#C8D79E", "#70
 npc_colors <- rev(pnw_palette("Mushroom", 30))
   
 max_pixels <- 5e5
-Africa <- readOGR(file.path(shape_dir, "Africa_simplified.shp"))
-Africa_dt <- data.table(fortify(Africa, region = "COUNTRY_ID"))
 
 background_raster <- raster(gaul_tif_fname)
 NAvalue(background_raster) <- -9999
