@@ -379,6 +379,42 @@ print(sf_for_ref, vp = vp)
 dev.off()
 
 
+## nat level npc vs access 
+progress_to_goal <-  cube_nat_level[variable %in% c("access", "percapita_nets") & year %in% years]
+progress_to_goal[variable=="access", par_adj_mean:= par_adj_mean/0.8]
+progress_to_goal[variable=="access", par_adj_lower:= par_adj_lower/0.8]
+progress_to_goal[variable=="access", par_adj_upper:= par_adj_upper/0.8]
+progress_to_goal[variable=="percapita_nets", par_adj_mean:= par_adj_mean/0.5]
+progress_to_goal[variable=="percapita_nets", par_adj_lower:= par_adj_lower/0.5]
+progress_to_goal[variable=="percapita_nets", par_adj_upper:= par_adj_upper/0.5]
+
+access_npc_compare_plot <- ggplot(progress_to_goal,
+                               aes(x=time-2000, color=variable, fill=variable)) + 
+                          geom_hline(yintercept = 100) + 
+                          geom_ribbon(aes(ymin=par_adj_lower*100, ymax=par_adj_upper*100), color=NA, alpha=0.35) + 
+                          geom_line(aes(y=par_adj_mean*100), size=0.75) + 
+                          facet_geo(~code, grid = ssa_grid, label="name") + 
+                          scale_shape_manual(values=c(0,2)) + 
+                          theme_classic() + 
+                          scale_x_continuous(breaks=seq(0,20,5))+
+                          theme(legend.title = element_blank(),
+                                legend.position="top",
+                                # axis.text.x = element_text(angle=45, hjust=1)
+                                # axis.text.x = element_blank(),
+                                axis.line = element_blank(),
+                                axis.ticks.x = element_blank(),
+                                panel.grid.major.x = element_line(color = "darkgrey", size=0.25)
+                          ) + 
+                          labs(title="",
+                               x="",
+                               y="Progress to Goal (%)")
+
+pdf(paste0("~/Desktop/access_npc.pdf"), width = (10), height = (11))
+vp <- viewport(width = 0.3, height = 0.3, x = 0.15, y = 0.2)
+print(access_use_timeseries)
+print(sf_for_ref, vp = vp)
+dev.off()
+
 access_use_seasonal <- ggplot(cube_nat_level[variable %in% c("access", "use") & year %in% years & year>=2015],
                                 aes(x=time, y=par_adj_mean*100, color=variable, fill=variable)) + 
   geom_ribbon(aes(ymin=par_adj_lower*100, ymax=par_adj_upper*100), alpha=0.5) + 
@@ -487,7 +523,7 @@ background_plot_single <- levelplot(background_raster,
 )
 
 
-## Means and Relative Uncertainty  ----------------------------------------------------------------------------------------------------------------
+## Means and Uncertainty Quantiles  ----------------------------------------------------------------------------------------------------------------
 
 uncert_year <- 2019
 variables_to_plot <- c("access", "use_rate", "percapita_nets")
@@ -567,7 +603,7 @@ rel_uncert_maps <- lapply(variables_to_plot, function(this_var){
     geom_path(data = Africa_dt, aes(x = long, y = lat, group = group), color = "black", size = 0.3) + 
     scale_fill_manual(values = rel_uncert_colors) +
     coord_equal(xlim = c(-18, 52), ylim = c(-35, 38)) +
-    labs(x = NULL, y = NULL, title = paste("Relative Uncertainty:", plot_label)) +
+    labs(x = NULL, y = NULL, title = paste("Uncertainty Quartiles:", plot_label)) +
     theme_classic(base_size = 12) +
     theme(axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(),
           plot.margin = unit(c(0, 0, 0, 0), "in"))
@@ -580,7 +616,7 @@ rel_uncert_maps <- unlist(rel_uncert_maps, recursive=F)
 
 
 
-## Means and Relative Uncertainty  ----------------------------------------------------------------------------------------------------------------
+## Means and Exceedance  ----------------------------------------------------------------------------------------------------------------
 
 
 raster_metrics <- data.table(var=variables_to_plot,
@@ -619,7 +655,6 @@ plot_map <- function(rasters, metric, variable, maxpixels=5e5){
 }
 
 
-
 label_df <- rbindlist(lapply(variables_to_plot, function(this_var){
   this_df <- raster_metrics[var==this_var]
   new_df <- data.table(var=this_var,
@@ -631,7 +666,7 @@ label_df <- rbindlist(lapply(variables_to_plot, function(this_var){
 }))
 # label_df <- label_df[order(metric)]
 
-map_plot_list <- lapply(1:nrow(label_df), function(idx){
+exceed_plot_list <- lapply(1:nrow(label_df), function(idx){
   print(idx)
   this_df <- label_df[idx]
   
@@ -643,6 +678,25 @@ map_plot_list <- lapply(1:nrow(label_df), function(idx){
 })
 
 
+## Access vs NPC  ----------------------------------------------------------------------------------------------------------------
+
+access_mean <- stack(file.path("rasters", paste0("ITN_", c(2015, 2019), "_access_mean.tif")))
+percapita_mean <- stack(file.path("rasters", paste0("ITN_", c(2015, 2019), "_percapita_nets_mean.tif")))
+
+access_perc_of_target <- access_mean/0.8
+access_perc_of_target[access_perc_of_target>1] <- 1
+percapita_perc_of_target <- percapita_mean/0.5
+percapita_perc_of_target[percapita_perc_of_target>1] <- 1
+
+levelplot(percapita_perc_of_target-access_perc_of_target,
+          par.settings=rasterTheme(region= pnw_palette("Anemone", 30)), at= seq(-0.45, 0.45, 0.05),
+          xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, main="NPC-Access") +
+  latticeExtra::layer(sp.polygons(Africa))
+
+#plot(stack(access_perc_of_target, percapita_perc_of_target))
+
+
+## Relative Gain  ----------------------------------------------------------------------------------------------------------------
 
 # relative gain for latest year
 main_colors <- rev(terrain.colors(255))
@@ -708,12 +762,12 @@ rel_gain_plots <- lapply(years_for_rel_gain, function(this_year){
 ## Bring it all together  ----------------------------------------------------------------------------------------------------------------------
 ############ ----------------------------------------------------------------------------------------------------------------------
 
-pdf(file.path(out_dir, "results_plots.pdf"), width=11, height=10)
+pdf(file.path(out_dir, "results_plots.pdf"), width=13, height=12)
 print(half_life_iso_plot)
-print(continental_nets_plot)
+vp <- viewport(width = 0.3, height = 0.3, x = 0.15, y = 0.2)
 print(access_use_timeseries)
+print(sf_for_ref, vp = vp)
 do.call("grid.arrange", c(rel_uncert_maps, nrow=3))
-do.call("grid.arrange", c(map_plot_list, ncol=3))
 for (this_plot in rel_gain_plots){
   grid.arrange(this_plot)
 }
@@ -722,11 +776,9 @@ graphics.off()
 pdf(file.path(out_dir, "methods_and_supplement_plots.pdf"), width=14, height=8)
 print(survey_panel)
 print(nmcp_plot)
-# print(net_crop_timeseries_plot)
-# print(stock_and_dist_plot)
-print(access_use_seasonal)
 print(use_rate_timeseries)
 print(use_gap_timeseries)
 print(acc_dev_timeseries)
 print(npc_dev_timeseries)
+do.call("grid.arrange", c(exceed_plot_list, ncol=3))
 graphics.off()
