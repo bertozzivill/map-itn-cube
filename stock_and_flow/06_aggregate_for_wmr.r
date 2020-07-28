@@ -20,7 +20,7 @@ aggregate_indicators <- function(reference_dir, list_out_dir, wmr_input_dir){
   countries <- gsub("([A-Z]{3})_all_output\\.RData", "\\1", list.files(reference_dir)[list.files(reference_dir) %like% ".RData"])
   countries <- countries[nchar(countries)==3]
   start_year <- 2000
-  end_year <- 2020
+  end_year <- 2019
   nsamp <- 250
   
   ### Country Loop  #####----------------------------------------------------------------------------------------------------------------------------------
@@ -109,80 +109,85 @@ aggregate_indicators <- function(reference_dir, list_out_dir, wmr_input_dir){
     net_dist_draws[, over_alloc_weight:=pmax(net_count-ceiling(hh_size/2), 0)/net_count]
     net_dist_draws[is.na(over_alloc_weight), over_alloc_weight:=0]
     
-    # to debug overallocation: load household-level survey data
-    hh_svy_data <- fread(file.path(wmr_input_dir, "itn_hh_data_all.csv"))
-    hh_svy_data <- hh_svy_data[iso3==this_country]
-    if (nrow(hh_svy_data)>0){
-      print("comparing overallocation to surveys")
-      hh_svy_data[n_defacto_pop>10, n_defacto_pop:=10]
-      
-      svy_net_data <- hh_svy_data[n_defacto_pop>0, list(hh_count=.N, hh_count_weighted=sum(hh_sample_wt)), by=list(SurveyId, n_defacto_pop, n_itn)]
-      svy_net_data <- svy_net_data[order(SurveyId, n_defacto_pop, n_itn)]
-      svy_net_data[, hh_prop:=hh_count_weighted/sum(hh_count_weighted), by=list(SurveyId, n_defacto_pop)]
-      
-      svy_hh_props <- rbindlist(lapply(unique(svy_net_data$SurveyId), function(this_svy){
-        for_dists <- hh_sizes[SurveyId==this_svy]
-        if (nrow(for_dists)>0){
-          hh_dists <- find_hh_distribution(for_dists)
-        }else if (nrow(hh_sizes[iso3==this_country])>0){
-          hh_dists <- find_hh_distribution(hh_sizes[iso3==this_country])
-        }else{
-          hh_dists <- find_hh_distribution(hh_sizes)
+    explore_over_alloc <- F
+    
+    if (explore_over_alloc){
+      # to debug overallocation: load household-level survey data
+      hh_svy_data <- fread(file.path(wmr_input_dir, "itn_hh_data_all.csv"))
+      hh_svy_data <- hh_svy_data[iso3==this_country]
+      if (nrow(hh_svy_data)>0){
+        print("comparing overallocation to surveys")
+        hh_svy_data[n_defacto_pop>10, n_defacto_pop:=10]
+        
+        svy_net_data <- hh_svy_data[n_defacto_pop>0, list(hh_count=.N, hh_count_weighted=sum(hh_sample_wt)), by=list(SurveyId, n_defacto_pop, n_itn)]
+        svy_net_data <- svy_net_data[order(SurveyId, n_defacto_pop, n_itn)]
+        svy_net_data[, hh_prop:=hh_count_weighted/sum(hh_count_weighted), by=list(SurveyId, n_defacto_pop)]
+        
+        svy_hh_props <- rbindlist(lapply(unique(svy_net_data$SurveyId), function(this_svy){
+          for_dists <- hh_sizes[SurveyId==this_svy]
+          if (nrow(for_dists)>0){
+            hh_dists <- find_hh_distribution(for_dists)
+          }else if (nrow(hh_sizes[iso3==this_country])>0){
+            hh_dists <- find_hh_distribution(hh_sizes[iso3==this_country])
+          }else{
+            hh_dists <- find_hh_distribution(hh_sizes)
+          }
+          names(hh_dists) <- c("n_defacto_pop", "hh_size_prop")
+          hh_dists[, SurveyId:=this_svy]
+          return(hh_dists)
+        }))
+        
+        svy_net_data <- merge(svy_net_data, svy_hh_props)
+        svy_net_data[, weighted_hh_prop:=hh_prop * hh_size_prop]
+        
+        compare_to_model <- net_dist_draws[, list(weighted_net_prob= mean(weighted_net_prob), tot_nets=mean(tot_nets)), 
+                                           by=list(quarter, hh_size, net_count)]
+        compare_to_model[, time:= 2000 + (quarter-1)/4]
+        compare_to_model <- compare_to_model[time<mean(hh_svy_data$date) & time >= mean(hh_svy_data$date)-0.25,
+                                             list(n_defacto_pop=hh_size, n_itn=net_count, weighted_hh_prop=weighted_net_prob, type="modeled")]
+        
+        compare_to_model <- rbindlist(lapply(unique(svy_net_data$SurveyId), function(this_svy){
+          modeled <- copy(compare_to_model)
+          modeled[, SurveyId:= this_svy]
+        }))
+        
+        for_plotting <- rbind(svy_net_data[, list(SurveyId, n_defacto_pop, n_itn, weighted_hh_prop, type="data")],
+                              compare_to_model)
+        for_plotting[, access_lim:= ceiling(n_defacto_pop/2)]
+        for_plotting[, net_weighted_hh_prop:= weighted_hh_prop*n_itn]
+        for_plotting[, net_weighted_hh_prop:= net_weighted_hh_prop/sum(net_weighted_hh_prop), by=list(SurveyId, type)]
+        for_plotting[, over_alloc_weight:=pmax(n_itn-ceiling(n_defacto_pop/2), 0)/n_itn]
+        for_plotting[, over_alloc_prop:=net_weighted_hh_prop*over_alloc_weight]
+        for_plotting[, pop_weighted_hh_prop:= weighted_hh_prop*n_defacto_pop]
+        for_plotting[, pop_weighted_hh_prop:= pop_weighted_hh_prop/sum(pop_weighted_hh_prop), by=list(SurveyId, type)]
+        for_plotting[, access_weight:= pmin(2*n_itn/n_defacto_pop, 1)]
+        for_plotting[, access_prop:= pop_weighted_hh_prop*access_weight]
+        
+        for_plotting <- melt(for_plotting, id.vars = c("type", "SurveyId", "n_defacto_pop", "n_itn", "access_lim"),
+                             measure.vars = c("weighted_hh_prop", "over_alloc_prop", "access_prop"))
+        
+        pdf(file.path(list_out_dir, "overalloc_plots", paste0("distributions_", this_country, ".pdf")), width=12, height=8)
+        
+        for (this_svy in unique(svy_net_data$SurveyId)){
+          samp_size <- nrow(hh_svy_data[SurveyId==this_svy])
+          
+          comparison_plot <- ggplot(for_plotting[SurveyId==this_svy], aes(x=n_itn, y=value, color=type)) + 
+            geom_density(stat="identity", size=0.75) +
+            geom_vline(aes(xintercept = access_lim)) + 
+            facet_grid(variable~n_defacto_pop, scales="free_y") +
+            xlim(0, 10) + 
+            theme(axis.text.x = element_text(angle=45, hjust=1),
+                  legend.position="bottom") + 
+            labs(title=paste(this_country, "Modeled vs True Net Allocations,", this_svy, "\nHH Count:", samp_size),
+                 x="ITN Count",
+                 y="Proportion")    
+          
+          print(comparison_plot)
         }
-        names(hh_dists) <- c("n_defacto_pop", "hh_size_prop")
-        hh_dists[, SurveyId:=this_svy]
-        return(hh_dists)
-      }))
-      
-      svy_net_data <- merge(svy_net_data, svy_hh_props)
-      svy_net_data[, weighted_hh_prop:=hh_prop * hh_size_prop]
-      
-      compare_to_model <- net_dist_draws[, list(weighted_net_prob= mean(weighted_net_prob), tot_nets=mean(tot_nets)), 
-                                         by=list(quarter, hh_size, net_count)]
-      compare_to_model[, time:= 2000 + (quarter-1)/4]
-      compare_to_model <- compare_to_model[time<mean(hh_svy_data$date) & time >= mean(hh_svy_data$date)-0.25,
-                                           list(n_defacto_pop=hh_size, n_itn=net_count, weighted_hh_prop=weighted_net_prob, type="modeled")]
-      
-      compare_to_model <- rbindlist(lapply(unique(svy_net_data$SurveyId), function(this_svy){
-        modeled <- copy(compare_to_model)
-        modeled[, SurveyId:= this_svy]
-      }))
-      
-      for_plotting <- rbind(svy_net_data[, list(SurveyId, n_defacto_pop, n_itn, weighted_hh_prop, type="data")],
-                            compare_to_model)
-      for_plotting[, access_lim:= ceiling(n_defacto_pop/2)]
-      for_plotting[, net_weighted_hh_prop:= weighted_hh_prop*n_itn]
-      for_plotting[, net_weighted_hh_prop:= net_weighted_hh_prop/sum(net_weighted_hh_prop), by=list(SurveyId, type)]
-      for_plotting[, over_alloc_weight:=pmax(n_itn-ceiling(n_defacto_pop/2), 0)/n_itn]
-      for_plotting[, over_alloc_prop:=net_weighted_hh_prop*over_alloc_weight]
-      for_plotting[, pop_weighted_hh_prop:= weighted_hh_prop*n_defacto_pop]
-      for_plotting[, pop_weighted_hh_prop:= pop_weighted_hh_prop/sum(pop_weighted_hh_prop), by=list(SurveyId, type)]
-      for_plotting[, access_weight:= pmin(2*n_itn/n_defacto_pop, 1)]
-      for_plotting[, access_prop:= pop_weighted_hh_prop*access_weight]
-      
-      for_plotting <- melt(for_plotting, id.vars = c("type", "SurveyId", "n_defacto_pop", "n_itn", "access_lim"),
-                           measure.vars = c("weighted_hh_prop", "over_alloc_prop", "access_prop"))
-      
-      pdf(file.path(list_out_dir, "overalloc_plots", paste0("distributions_", this_country, ".pdf")), width=12, height=8)
-      
-      for (this_svy in unique(svy_net_data$SurveyId)){
-        samp_size <- nrow(hh_svy_data[SurveyId==this_svy])
         
-        comparison_plot <- ggplot(for_plotting[SurveyId==this_svy], aes(x=n_itn, y=value, color=type)) + 
-          geom_density(stat="identity", size=0.75) +
-          geom_vline(aes(xintercept = access_lim)) + 
-          facet_grid(variable~n_defacto_pop, scales="free_y") +
-          xlim(0, 10) + 
-          theme(axis.text.x = element_text(angle=45, hjust=1),
-                legend.position="bottom") + 
-          labs(title=paste(this_country, "Modeled vs True Net Allocations,", this_svy, "\nHH Count:", samp_size),
-               x="ITN Count",
-               y="Proportion")    
-        
-        print(comparison_plot)
+        graphics.off()
       }
       
-      graphics.off()
     }
     
     over_alloc <- net_dist_draws[, list(prop_over_alloc=sum(tot_nets*over_alloc_weight)/sum(tot_nets)), by=list(ITER, quarter)]
@@ -277,7 +282,7 @@ aggregate_indicators <- function(reference_dir, list_out_dir, wmr_input_dir){
   
 }
 
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --preemptible --retries 1 --wait --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n2-highmem-32  --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive reference_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200712_newdata_to_2019 wmr_input_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20200707 CODE=gs://map_users/amelia/itn/code/ --output-recursive list_out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200712_newdata_to_2019 --command 'cd ${CODE}; Rscript stock_and_flow/08_aggregate_for_wmr.r'
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --preemptible --retries 1 --wait --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n2-highmem-32  --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive reference_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200712_newdata_to_2019 wmr_input_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20200707 CODE=gs://map_users/amelia/itn/code/ --output-recursive list_out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200712_newdata_to_2019 --command 'cd ${CODE}; Rscript stock_and_flow/06_aggregate_for_wmr.r'
 # --preemptible --retries 1 --wait
 
 package_load <- function(package_list){
@@ -303,7 +308,7 @@ if(Sys.getenv("reference_dir")=="") {
 }
 
 source("stock_and_flow/jags_functions.r")
-source("generate_cube/01_data_functions.r")
+source("itn_cube/01_data_functions.r")
 dir.create(file.path(list_out_dir, "overalloc_plots"))
 
 aggregate_indicators(reference_dir, list_out_dir, wmr_input_dir)

@@ -372,44 +372,7 @@ sf_for_ref <- ggplot(Africa_dt, aes(x = long, y = lat, group = group)) +
                         plot.margin = unit(c(0, 0, 0, 0), "in"), legend.title=element_blank(), legend.position = "none")
                   
 # combine
-pdf(paste0("~/Desktop/geofacet.pdf"), width = (10), height = (10))
-vp <- viewport(width = 0.3, height = 0.3, x = 0.15, y = 0.2)
-print(access_use_timeseries)
-print(sf_for_ref, vp = vp)
-dev.off()
-
-
-## nat level npc vs access 
-progress_to_goal <-  cube_nat_level[variable %in% c("access", "percapita_nets") & year %in% years]
-progress_to_goal[variable=="access", par_adj_mean:= par_adj_mean/0.8]
-progress_to_goal[variable=="access", par_adj_lower:= par_adj_lower/0.8]
-progress_to_goal[variable=="access", par_adj_upper:= par_adj_upper/0.8]
-progress_to_goal[variable=="percapita_nets", par_adj_mean:= par_adj_mean/0.5]
-progress_to_goal[variable=="percapita_nets", par_adj_lower:= par_adj_lower/0.5]
-progress_to_goal[variable=="percapita_nets", par_adj_upper:= par_adj_upper/0.5]
-
-access_npc_compare_plot <- ggplot(progress_to_goal,
-                               aes(x=time-2000, color=variable, fill=variable)) + 
-                          geom_hline(yintercept = 100) + 
-                          geom_ribbon(aes(ymin=par_adj_lower*100, ymax=par_adj_upper*100), color=NA, alpha=0.35) + 
-                          geom_line(aes(y=par_adj_mean*100), size=0.75) + 
-                          facet_geo(~code, grid = ssa_grid, label="name") + 
-                          scale_shape_manual(values=c(0,2)) + 
-                          theme_classic() + 
-                          scale_x_continuous(breaks=seq(0,20,5))+
-                          theme(legend.title = element_blank(),
-                                legend.position="top",
-                                # axis.text.x = element_text(angle=45, hjust=1)
-                                # axis.text.x = element_blank(),
-                                axis.line = element_blank(),
-                                axis.ticks.x = element_blank(),
-                                panel.grid.major.x = element_line(color = "darkgrey", size=0.25)
-                          ) + 
-                          labs(title="",
-                               x="",
-                               y="Progress to Goal (%)")
-
-pdf(paste0("~/Desktop/access_npc.pdf"), width = (10), height = (11))
+pdf(paste0("~/Desktop/geofacet.pdf"), width = (10), height = (11))
 vp <- viewport(width = 0.3, height = 0.3, x = 0.15, y = 0.2)
 print(access_use_timeseries)
 print(sf_for_ref, vp = vp)
@@ -444,11 +407,11 @@ net_crop_timeseries <- ggplot(cube_nat_level[variable %in% c("percapita_nets", "
 ## use rate
 
 use_rate_timeseries <- 
-  ggplot(cube_nat_level[year %in% years &  time>=2015 & variable=="use_rate"], aes(x=time, y=mean, group=iso3))+ 
+  ggplot(cube_nat_level[year %in% years &  time>=2005 & variable=="use_rate"], aes(x=time, y=mean, group=iso3))+ 
   geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.5) + 
   geom_hline(yintercept=0.8, color="#00BFC4") + 
   geom_line() + 
-  geom_point(data=cube_survey[type=="use_rate" & date>=2015], aes(x=date, y=mean)) + 
+  geom_point(data=cube_survey[type=="use_rate" & date>=2005], aes(x=date, y=mean)) + 
   facet_wrap(~iso3) +
   theme_minimal() +
   theme(legend.title = element_blank(),
@@ -528,6 +491,11 @@ background_plot_single <- levelplot(background_raster,
 uncert_year <- 2019
 variables_to_plot <- c("access", "use_rate", "percapita_nets")
 
+round_vals <- function(dt, sig=6){
+  dt[, x:=round(x, sig)]
+  dt[, y:=round(y, sig)]
+  return(dt)
+}
 
 rel_uncert_maps <- lapply(variables_to_plot, function(this_var){
   print(this_var)
@@ -568,12 +536,6 @@ rel_uncert_maps <- lapply(variables_to_plot, function(this_var){
                          "#EFD4DB", "#EEDBD2", "#CBE2EB", "#CDD8EC",
                          "#F9F4F8", "#FAF7F5", "#EEF4F7", "#EDF1F7")
   ci_width <- upper_raster - lower_raster
-  
-  round_vals <- function(dt, sig=6){
-    dt[, x:=round(x, sig)]
-    dt[, y:=round(y, sig)]
-    return(dt)
-  }
   
   mean_raster[background_raster==1] <- NA
   ci_width[background_raster==1] <- NA
@@ -680,8 +642,26 @@ exceed_plot_list <- lapply(1:nrow(label_df), function(idx){
 
 ## Access vs NPC  ----------------------------------------------------------------------------------------------------------------
 
-access_mean <- stack(file.path("rasters", paste0("ITN_", c(2015, 2019), "_access_mean.tif")))
-percapita_mean <- stack(file.path("rasters", paste0("ITN_", c(2015, 2019), "_percapita_nets_mean.tif")))
+access_mean <- stack(file.path("rasters", paste0("ITN_", c(2019), "_access_mean.tif")))
+percapita_mean <- stack(file.path("rasters", paste0("ITN_", c(2019), "_percapita_nets_mean.tif")))
+
+access_dt <- round_vals(data.table(rasterToPoints(access_mean)))
+percapita_dt <- round_vals(data.table(rasterToPoints(percapita_mean)))
+
+access_npc_dt <- merge(access_dt, percapita_dt)
+access_npc_dt <- access_npc_dt[ITN_2019_access_mean>0 & ITN_2019_percapita_nets_mean>0]
+
+nat_pixel_dt <- round_vals(data.table(rasterToPoints(raster(gaul_tif_fname))))
+setnames(nat_pixel_dt, "african_cn5km_2013_no_disputes", "gaul")
+nat_pixel_dt <- merge(nat_pixel_dt, iso_gaul_map[, list(gaul=GAUL_CODE, iso3=COUNTRY_ID)])
+access_npc_dt <- merge(access_npc_dt, nat_pixel_dt, by=c("x", "y"), all.x=T)
+
+ggplot(access_npc_dt, aes(x=ITN_2019_access_mean, y=ITN_2019_percapita_nets_mean)) + 
+  geom_hline(yintercept=0.5) + 
+  geom_vline(xintercept=0.8) + 
+  geom_point(alpha=0.75) + 
+  facet_wrap(~iso3, scales="free")
+
 
 access_perc_of_target <- access_mean/0.8
 access_perc_of_target[access_perc_of_target>1] <- 1

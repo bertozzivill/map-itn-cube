@@ -9,7 +9,7 @@
 ##############################################################################################################
 library(data.table)
 rm(list=ls())
-# dsub --provider google-v2 --project map-special-0001 --disk-size 400 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial  --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-1  --logging gs://map_users/amelia/itn/itn_cube/logs --input CODE=gs://map_users/amelia/itn/code/generate_cube/test_dsub_from_instance.r --command 'Rscript ${CODE}'
+# dsub --provider google-v2 --project map-special-0001 --disk-size 400 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial  --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-1  --logging gs://map_users/amelia/itn/itn_cube/logs --input CODE=gs://map_users/amelia/itn/code/itn_cube/test_dsub_from_instance.r --command 'Rscript ${CODE}'
 
 
 years <- 2000:2019
@@ -25,7 +25,7 @@ to_submit <- data.table(expand.grid(years, orig_cube_labels))
 names(to_submit) <- c("year", "cube_label")
 to_submit <- merge(to_submit, stockflow_map)
 
-func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
+func_dir <- "/Users/bertozzivill/repos/map-itn-cube/itn_cube/"
 
 # options
 # machine_type <- "n1-standard-8"
@@ -36,7 +36,7 @@ label <- "'type=itn_cube'"
 disk_size <- 400
 boot_disk_size <- 50
 
-cloud_func_dir <- "gs://map_users/amelia/itn/code/generate_cube/"
+cloud_func_dir <- "gs://map_users/amelia/itn/code/itn_cube/"
 
 core_cov_dir <- "gs://map_users/amelia/itn/itn_cube/results/covariates"
 cov_label <- "20200401"

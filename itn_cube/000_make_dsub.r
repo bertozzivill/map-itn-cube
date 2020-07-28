@@ -12,7 +12,7 @@ library(data.table)
 
 rm(list=ls())
 
-func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
+func_dir <- "/Users/bertozzivill/repos/map-itn-cube/itn_cube/"
 
 # options 
 machine_type <- "n1-highmem-64"
@@ -21,7 +21,7 @@ disk_size <- 400
 boot_disk_size <- 50
 
 core_dir <- "gs://map_users/amelia/itn/itn_cube/"
-cloud_func_dir <- "gs://map_users/amelia/itn/code/generate_cube/"
+cloud_func_dir <- "gs://map_users/amelia/itn/code/itn_cube/"
 cov_dir <- "gs://mastergrids_5km/"
 pop_dir <- "gs://gbd2020/Populations/Output_Pop_Unmasked"
 cov_outlabel <- "20200401"

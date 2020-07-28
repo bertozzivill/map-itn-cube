@@ -774,7 +774,7 @@ if(Sys.getenv("main_dir")=="") {
 }
 
 source("stock_and_flow/jags_functions.r")
-source("generate_cube/01_data_functions.r")
+source("itn_cube/01_data_functions.r")
 start_year <- 2000
 end_year<- 2019
 last_distribution_year <- 2019

@@ -6,10 +6,6 @@
 ## Using the inla objects from Step 3 and the covariates extracted from Step 2, predict monthly 
 ## ITN rasters, transform them back to level space, and aggregate up to annual values. Also calculate 
 ## uncertainty, relative uncertainty, and exceedance. 
-
-## NB: This code is designed to be run as part of a larger pipeline (see 00_generate_cube_master.r).
-##      To run this script individually, see instructions at the bottom of the page. 
-## 
 ##############################################################################################################
 
 print("Loading Packages")
@@ -36,7 +32,7 @@ if(Sys.getenv("input_dir")=="") {
   static_cov_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/20200401/static_covariates.csv"
   annual_cov_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/20200401/annual_covariates.csv"
   dynamic_cov_dir <- paste0("/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/20200401/dynamic_covariates/dynamic_", this_year, ".csv")
-  func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
+  func_dir <- "/Users/bertozzivill/repos/map-itn-cube/itn_cube/"
   testing <- T
 } else {
   this_year <- commandArgs(trailingOnly=TRUE)[1]

@@ -258,7 +258,7 @@ run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, sta
 
 if (Sys.getenv("run_individually")!=""){
   
-  # dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-itn-spatial:1.1.0 --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-64 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data main_indir=gs://map_users/amelia/itn/itn_cube/results/20190729_new_covariates/ func_dir=gs://map_users/amelia/itn/code/generate_cube/ --input run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/03_regressions.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20190729_new_covariates/ --command 'Rscript ${CODE}'
+  # dsub --provider google-v2 --project map-special-0001 --image eu.gcr.io/map-special-0001/map-itn-spatial:1.1.0 --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-64 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data main_indir=gs://map_users/amelia/itn/itn_cube/results/20190729_new_covariates/ func_dir=gs://map_users/amelia/itn/code/itn_cube/ --input run_individually=gs://map_users/amelia/itn/code/itn_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/itn_cube/03_regressions.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/20190729_new_covariates/ --command 'Rscript ${CODE}'
   
   
   package_load <- function(package_list){
@@ -274,7 +274,7 @@ if (Sys.getenv("run_individually")!=""){
     input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
     main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200418_BMGF_ITN_C1.00_R1.00_V2/"
     main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200418_BMGF_ITN_C1.00_R1.00_V2/"
-    func_dir <- "/Users/bertozzivill/repos/map-itn-cube/generate_cube/"
+    func_dir <- "/Users/bertozzivill/repos/map-itn-cube/itn_cube/"
   } else {
     input_dir <- Sys.getenv("input_dir")
     main_indir <- Sys.getenv("main_indir")
