@@ -364,7 +364,7 @@ access_use_timeseries <- ggplot(cube_nat_level[variable %in% c("access", "use") 
 sf_for_ref <- ggplot(Africa_dt, aes(x = long, y = lat, group = group)) + 
                   geom_polygon(aes(fill=modeled)) + 
                   geom_path(color = "black", size = 0.3) +
-                  scale_fill_manual(values=c("gray80","#70A800")) + 
+                  scale_fill_manual(values=c("white","gray80")) + 
                   coord_equal(xlim = c(-18, 52), ylim = c(-35, 38)) +
                   labs(x = NULL, y = NULL, title = "") +
                   theme_classic(base_size = 12) +
@@ -377,6 +377,10 @@ vp <- viewport(width = 0.3, height = 0.3, x = 0.15, y = 0.2)
 print(access_use_timeseries)
 print(sf_for_ref, vp = vp)
 dev.off()
+
+
+compare_npc_access <- dcast.data.table(cube_nat_level[variable %in% c("access", "percapita_nets")],
+                                       iso3 + year + month + time ~ variable, value.var ="mean")
 
 access_use_seasonal <- ggplot(cube_nat_level[variable %in% c("access", "use") & year %in% years & year>=2015],
                                 aes(x=time, y=par_adj_mean*100, color=variable, fill=variable)) + 
@@ -742,7 +746,7 @@ rel_gain_plots <- lapply(years_for_rel_gain, function(this_year){
 ## Bring it all together  ----------------------------------------------------------------------------------------------------------------------
 ############ ----------------------------------------------------------------------------------------------------------------------
 
-pdf(file.path(out_dir, "results_plots.pdf"), width=13, height=12)
+pdf(file.path(out_dir, "results_plots.pdf"), width=12, height=11)
 print(half_life_iso_plot)
 vp <- viewport(width = 0.3, height = 0.3, x = 0.15, y = 0.2)
 print(access_use_timeseries)
