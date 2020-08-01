@@ -22,7 +22,7 @@ n.iter=50000
 thin=10
 
 source("jags_functions.r")
-main_subdir <- "20200707"
+main_subdir <- "20200731"
 main_dir <- file.path("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep", main_subdir)
 input_dir <- file.path(main_dir, "../../00_survey_nmcp_manufacturer")
 

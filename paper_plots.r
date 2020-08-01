@@ -27,7 +27,7 @@ years_for_rel_gain <- c(2015, 2019)
 
 cube_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200713_newdata_to_2019/04_predictions"
 stockflow_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200712_newdata_to_2019"
-survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200408"
+survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200707"
 nmcp_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020/20200507/ITN_C0.00_R0.00/"
 data_fname <- "../02_data_covariates.csv"
 
@@ -747,11 +747,11 @@ rel_gain_plots <- lapply(years_for_rel_gain, function(this_year){
 ############ ----------------------------------------------------------------------------------------------------------------------
 
 pdf(file.path(out_dir, "results_plots.pdf"), width=12, height=11)
-print(half_life_iso_plot)
 vp <- viewport(width = 0.3, height = 0.3, x = 0.15, y = 0.2)
 print(access_use_timeseries)
 print(sf_for_ref, vp = vp)
 do.call("grid.arrange", c(rel_uncert_maps, nrow=3))
+print(half_life_iso_plot)
 for (this_plot in rel_gain_plots){
   grid.arrange(this_plot)
 }

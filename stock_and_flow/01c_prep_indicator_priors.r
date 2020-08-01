@@ -29,7 +29,7 @@ emplogit <- function (y, eps = 1e-3){
   log((eps + y)/(1 - y + eps))
 } 
 
-main_subdir <- "20200707"
+main_subdir <- "20200731"
 main_dir <- file.path("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep", main_subdir)
 
 ### Read in all data #####----------------------------------------------------------------------------------------------------------------------------------
@@ -280,6 +280,7 @@ ggplot(svy_indicators, aes(x=nets_percapita, y=emplogit_prop_no_net, color=facto
   geom_point() + 
   geom_line(data=no_nets_prediction) + 
   facet_wrap(~hhsize) +
+  theme_minimal() + 
   theme(legend.position = "none")
 
 
