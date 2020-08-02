@@ -14,8 +14,8 @@ rm(list=ls())
 
 years <- 2000:2019
 preempt <- T
-orig_cube_labels <- c("20200713_newdata_to_2019")
-orig_stockflow_labels <- c("20200712_newdata_to_2019")
+orig_cube_labels <- c("20200801_final_for_wmr2020")
+orig_stockflow_labels <- c("20200731_final_for_wmr2020")
 
 stockflow_map <- data.table(cube_label=orig_cube_labels,
                             stockflow_label=orig_stockflow_labels)
