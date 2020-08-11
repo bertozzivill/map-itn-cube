@@ -25,9 +25,9 @@ rm(list=ls())
 years <- 2000:2019
 years_for_rel_gain <- c(2015, 2019)
 
-cube_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200713_newdata_to_2019/04_predictions"
-stockflow_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200712_newdata_to_2019"
-survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200707"
+cube_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200801_final_for_wmr2020/04_predictions"
+stockflow_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200731_final_for_wmr2020"
+survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200731"
 nmcp_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020/20200507/ITN_C0.00_R0.00/"
 data_fname <- "../02_data_covariates.csv"
 
@@ -137,7 +137,6 @@ country_lambdas <- merge(country_lambdas, survey_count)
 country_lambdas[, high_svy:=ifelse(svy_count>=3, 1, 0)]
 country_lambdas[, iso3:= factor(iso3, levels = descending_order)]
 
-# todo: make this into a map instead of a lame text plot
 color_red <- gg_color_hue(2)[1]
 half_life_iso_plot <- ggplot(country_lambdas, aes(x=iso3, color=factor(high_svy))) +
   geom_linerange(aes(ymin=lower, ymax=upper)) + 
@@ -149,6 +148,10 @@ half_life_iso_plot <- ggplot(country_lambdas, aes(x=iso3, color=factor(high_svy)
         legend.position = "none") +
   labs(x="",
        y="LLIN Half-life (years)")
+
+pdf(file.path(out_dir, "fig_4_half_lives.pdf"), width=14, height=9)
+  print(half_life_iso_plot)
+graphics.off()
 
 # time series of net crop vs survey data
 net_crop_timeseries_plot <- ggplot(nets_in_houses_all[model==stockflow_model_name & date<(max(years)+1)], aes(x=date, color=type, fill=type)) +
@@ -180,17 +183,6 @@ stock_and_dist_plot <- ggplot(stock_all[model==stockflow_model_name &
   labs(title= "LLIN Stock and Distribution by Country",
        x="Time",
        y="Net count")
-
-# nets per capita (be lazy and use means for now, will need to add uncertainty in agg code later)
-access_npc <- fread(file.path(stockflow_indir, "for_cube", "stock_and_flow_access_npc.csv"))
-
-npc_time_series_plot <- ggplot(access_npc[year %in% years], aes(x=time, y=nat_percapita_nets)) + 
-  geom_line() + 
-  facet_wrap(.~iso3) + 
-  labs(title="Stock and Flow Nets Per Capita by Country",
-       x="Time",
-       y="Nets per Capita")
-
 
 
 ## individual country plot for Figure 1
@@ -250,8 +242,8 @@ fig_one_cropplot <- ggplot(fig_one_crop_dt, aes(x=date)) +
                                  x="",
                                  y="")
 
-pdf(file.path(out_dir, "fig_one_raw.pdf"), width=8, height=4)
-grid.arrange(fig_one_distplot, fig_one_cropplot, ncol=2)
+pdf(file.path(out_dir, "fig_1_raw.pdf"), width=8, height=4)
+  grid.arrange(fig_one_distplot, fig_one_cropplot, ncol=2)
 graphics.off()
 
  ############ ----------------------------------------------------------------------------------------------------------------------
@@ -372,40 +364,11 @@ sf_for_ref <- ggplot(Africa_dt, aes(x = long, y = lat, group = group)) +
                         plot.margin = unit(c(0, 0, 0, 0), "in"), legend.title=element_blank(), legend.position = "none")
                   
 # combine
-pdf(paste0("~/Desktop/geofacet.pdf"), width = (10), height = (11))
-vp <- viewport(width = 0.3, height = 0.3, x = 0.15, y = 0.2)
-print(access_use_timeseries)
-print(sf_for_ref, vp = vp)
-dev.off()
-
-
-compare_npc_access <- dcast.data.table(cube_nat_level[variable %in% c("access", "percapita_nets")],
-                                       iso3 + year + month + time ~ variable, value.var ="mean")
-
-access_use_seasonal <- ggplot(cube_nat_level[variable %in% c("access", "use") & year %in% years & year>=2015],
-                                aes(x=time, y=par_adj_mean*100, color=variable, fill=variable)) + 
-  geom_ribbon(aes(ymin=par_adj_lower*100, ymax=par_adj_upper*100), alpha=0.5) + 
-  geom_hline(yintercept = 80) + 
-  geom_line(size=1) + 
-  facet_wrap(.~iso3, scales="free_y") + 
-  theme(legend.title = element_blank(),
-        axis.text.x = element_text(angle=45, hjust=1)) + 
-  labs(title="ITN Access and Use by Country",
-       x="Time",
-       y="Access or Use (%)")
-
-net_crop_timeseries <- ggplot(cube_nat_level[variable %in% c("percapita_nets", "access") & year %in% years],
-                                aes(x=time, y=par_adj_mean, color=variable, fill=variable)) + 
-  geom_ribbon(aes(ymin=par_adj_lower, ymax=par_adj_upper), alpha=0.5) + 
-  geom_hline(yintercept=0.8, color=gg_color_hue(2)[1]) + 
-  geom_hline(yintercept=0.5, color=gg_color_hue(2)[2]) + 
-  geom_line() + 
-  facet_wrap(.~iso3, scales="free_y") + 
-  theme(# legend.position = "none",
-        axis.text.x = element_text(angle=45, hjust=1)) + 
-  labs(title="ITN Access and Percapita Nets by Country",
-       x="Time",
-       y="Nets Per Capita")
+pdf(file.path(out_dir, "fig_2_access_use_geofacet.pdf"), width = (10), height = (11))
+  vp <- viewport(width = 0.3, height = 0.3, x = 0.15, y = 0.2)
+  print(access_use_timeseries)
+  print(sf_for_ref, vp = vp)
+graphics.off()
 
 
 ## use rate
@@ -462,6 +425,34 @@ npc_dev_timeseries <- ggplot(cube_nat_level[variable=="percapita_net_dev" & year
   labs(title="Nets-per-Capita Deviation by Country",
        x="Time",
        y="NPC Deviation")
+
+
+## Look at access-npc relationship by country-month
+nat_level_for_compare_uncert <- melt(cube_nat_level[iso3!="AFR"], id.vars = c("iso3", "country_name", "year", "month", "variable"), 
+                                     measure.vars=c("mean", "lower", "upper"), variable.name = "metric")
+nat_level_for_compare_uncert[, full_var:= paste0(variable, "_", metric)]
+nat_level_for_compare_uncert <- dcast.data.table(nat_level_for_compare_uncert, iso3 + country_name + year + month  ~ full_var, value.var="value")
+
+ggplot(nat_level_for_compare_uncert, aes(x=percapita_nets_mean, y=access_mean, color=factor(year))) + 
+  geom_errorbar(aes(ymin=access_lower, ymax=access_upper)) + 
+  geom_errorbarh(aes(xmin=percapita_nets_lower, xmax=percapita_nets_upper)) + 
+  geom_point(color="black") + 
+  facet_wrap(~year) +
+  theme(legend.position = "none")
+
+
+nat_level_for_compare_uncert <- melt(cube_nat_level_annual[iso3!="AFR"], id.vars = c("iso3", "country_name", "year", "variable"), 
+                                     measure.vars=c("mean", "lower", "upper"), variable.name = "metric")
+nat_level_for_compare_uncert[, full_var:= paste0(variable, "_", metric)]
+nat_level_for_compare_uncert <- dcast.data.table(nat_level_for_compare_uncert, iso3 + country_name + year  ~ full_var, value.var="value")
+
+ggplot(nat_level_for_compare_uncert, aes(x=percapita_nets_mean, y=access_mean, color=factor(year))) + 
+  geom_errorbar(aes(ymin=access_lower, ymax=access_upper)) + 
+  geom_errorbarh(aes(xmin=percapita_nets_lower, xmax=percapita_nets_upper)) + 
+  geom_point(color="black") + 
+  facet_wrap(~year) +
+  theme(legend.position = "none")
+
 
 
 ############ ----------------------------------------------------------------------------------------------------------------------
@@ -580,6 +571,11 @@ rel_uncert_maps <- lapply(variables_to_plot, function(this_var){
 
 rel_uncert_maps <- unlist(rel_uncert_maps, recursive=F)
 
+pdf(file.path(out_dir, "fig_3_maps_with_uncert_quart.pdf"), width = (12), height = (10))
+  do.call("grid.arrange", c(rel_uncert_maps, nrow=3))
+dev.off()
+
+
 
 
 ## Means and Exceedance  ----------------------------------------------------------------------------------------------------------------
@@ -646,38 +642,43 @@ exceed_plot_list <- lapply(1:nrow(label_df), function(idx){
 
 ## Access vs NPC  ----------------------------------------------------------------------------------------------------------------
 
-access_mean <- stack(file.path("rasters", paste0("ITN_", c(2019), "_access_mean.tif")))
-percapita_mean <- stack(file.path("rasters", paste0("ITN_", c(2019), "_percapita_nets_mean.tif")))
+explore_access_npc <- F
 
-access_dt <- round_vals(data.table(rasterToPoints(access_mean)))
-percapita_dt <- round_vals(data.table(rasterToPoints(percapita_mean)))
-
-access_npc_dt <- merge(access_dt, percapita_dt)
-access_npc_dt <- access_npc_dt[ITN_2019_access_mean>0 & ITN_2019_percapita_nets_mean>0]
-
-nat_pixel_dt <- round_vals(data.table(rasterToPoints(raster(gaul_tif_fname))))
-setnames(nat_pixel_dt, "african_cn5km_2013_no_disputes", "gaul")
-nat_pixel_dt <- merge(nat_pixel_dt, iso_gaul_map[, list(gaul=GAUL_CODE, iso3=COUNTRY_ID)])
-access_npc_dt <- merge(access_npc_dt, nat_pixel_dt, by=c("x", "y"), all.x=T)
-
-ggplot(access_npc_dt, aes(x=ITN_2019_access_mean, y=ITN_2019_percapita_nets_mean)) + 
-  geom_hline(yintercept=0.5) + 
-  geom_vline(xintercept=0.8) + 
-  geom_point(alpha=0.75) + 
-  facet_wrap(~iso3, scales="free")
-
-
-access_perc_of_target <- access_mean/0.8
-access_perc_of_target[access_perc_of_target>1] <- 1
-percapita_perc_of_target <- percapita_mean/0.5
-percapita_perc_of_target[percapita_perc_of_target>1] <- 1
-
-levelplot(percapita_perc_of_target-access_perc_of_target,
-          par.settings=rasterTheme(region= pnw_palette("Anemone", 30)), at= seq(-0.45, 0.45, 0.05),
-          xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, main="NPC-Access") +
-  latticeExtra::layer(sp.polygons(Africa))
-
-#plot(stack(access_perc_of_target, percapita_perc_of_target))
+if (explore_access_npc){
+  access_mean <- stack(file.path("rasters", paste0("ITN_", c(2019), "_access_mean.tif")))
+  percapita_mean <- stack(file.path("rasters", paste0("ITN_", c(2019), "_percapita_nets_mean.tif")))
+  
+  access_dt <- round_vals(data.table(rasterToPoints(access_mean)))
+  percapita_dt <- round_vals(data.table(rasterToPoints(percapita_mean)))
+  
+  access_npc_dt <- merge(access_dt, percapita_dt)
+  access_npc_dt <- access_npc_dt[ITN_2019_access_mean>0 & ITN_2019_percapita_nets_mean>0]
+  
+  nat_pixel_dt <- round_vals(data.table(rasterToPoints(raster(gaul_tif_fname))))
+  setnames(nat_pixel_dt, "african_cn5km_2013_no_disputes", "gaul")
+  nat_pixel_dt <- merge(nat_pixel_dt, iso_gaul_map[, list(gaul=GAUL_CODE, iso3=COUNTRY_ID)])
+  access_npc_dt <- merge(access_npc_dt, nat_pixel_dt, by=c("x", "y"), all.x=T)
+  
+  ggplot(access_npc_dt, aes(x=ITN_2019_access_mean, y=ITN_2019_percapita_nets_mean)) + 
+    geom_hline(yintercept=0.5) + 
+    geom_vline(xintercept=0.8) + 
+    geom_point(alpha=0.75) + 
+    facet_wrap(~iso3, scales="free")
+  
+  
+  access_perc_of_target <- access_mean/0.8
+  access_perc_of_target[access_perc_of_target>1] <- 1
+  percapita_perc_of_target <- percapita_mean/0.5
+  percapita_perc_of_target[percapita_perc_of_target>1] <- 1
+  
+  levelplot(percapita_perc_of_target-access_perc_of_target,
+            par.settings=rasterTheme(region= pnw_palette("Anemone", 30)), at= seq(-0.45, 0.45, 0.05),
+            xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, main="NPC-Access") +
+    latticeExtra::layer(sp.polygons(Africa))
+  
+  #plot(stack(access_perc_of_target, percapita_perc_of_target))
+  
+}
 
 
 ## Relative Gain  ----------------------------------------------------------------------------------------------------------------
@@ -739,23 +740,15 @@ rel_gain_plots <- lapply(years_for_rel_gain, function(this_year){
   
 })
 
+names(rel_gain_plots) <- years_for_rel_gain
 
-
+pdf(file.path(out_dir, "fig_5_relgain_2019.pdf"), width=12, height=10)
+  grid.arrange(rel_gain_plots[["2019"]])
+graphics.off()
 
 ############ ----------------------------------------------------------------------------------------------------------------------
 ## Bring it all together  ----------------------------------------------------------------------------------------------------------------------
 ############ ----------------------------------------------------------------------------------------------------------------------
-
-pdf(file.path(out_dir, "results_plots.pdf"), width=12, height=11)
-vp <- viewport(width = 0.3, height = 0.3, x = 0.15, y = 0.2)
-print(access_use_timeseries)
-print(sf_for_ref, vp = vp)
-do.call("grid.arrange", c(rel_uncert_maps, nrow=3))
-print(half_life_iso_plot)
-for (this_plot in rel_gain_plots){
-  grid.arrange(this_plot)
-}
-graphics.off()
 
 pdf(file.path(out_dir, "methods_and_supplement_plots.pdf"), width=14, height=8)
 print(survey_panel)
@@ -765,4 +758,5 @@ print(use_gap_timeseries)
 print(acc_dev_timeseries)
 print(npc_dev_timeseries)
 do.call("grid.arrange", c(exceed_plot_list, ncol=3))
+grid.arrange(rel_gain_plots[["2015"]])
 graphics.off()
