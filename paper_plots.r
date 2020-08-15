@@ -365,7 +365,7 @@ sf_for_ref <- ggplot(Africa_dt, aes(x = long, y = lat, group = group)) +
                   
 # combine
 pdf(file.path(out_dir, "fig_2_access_use_geofacet.pdf"), width = (10), height = (11))
-  vp <- viewport(width = 0.3, height = 0.3, x = 0.15, y = 0.2)
+  vp <- viewport(width = 0.15, height = 0.15, x = 0.175, y = 0.075)
   print(access_use_timeseries)
   print(sf_for_ref, vp = vp)
 graphics.off()
@@ -433,25 +433,29 @@ nat_level_for_compare_uncert <- melt(cube_nat_level[iso3!="AFR"], id.vars = c("i
 nat_level_for_compare_uncert[, full_var:= paste0(variable, "_", metric)]
 nat_level_for_compare_uncert <- dcast.data.table(nat_level_for_compare_uncert, iso3 + country_name + year + month  ~ full_var, value.var="value")
 
-ggplot(nat_level_for_compare_uncert, aes(x=percapita_nets_mean, y=access_mean, color=factor(year))) + 
-  geom_errorbar(aes(ymin=access_lower, ymax=access_upper)) + 
-  geom_errorbarh(aes(xmin=percapita_nets_lower, xmax=percapita_nets_upper)) + 
-  geom_point(color="black") + 
-  facet_wrap(~year) +
+
+nat_level_subset <- nat_level_for_compare_uncert[year==2019]
+nat_level_subset_afr <- copy(nat_level_subset)
+nat_level_subset_afr[, code:="AFR"]
+nat_level_subset[, code:=iso3]
+nat_level_subset <- rbind(nat_level_subset, nat_level_subset_afr)
+
+ggplot(nat_level_subset, aes(x=percapita_nets_mean, y=access_mean)) + 
+  geom_errorbar(aes(ymin=access_lower, ymax=access_upper), color="grey") + 
+  geom_errorbarh(aes(xmin=percapita_nets_lower, xmax=percapita_nets_upper), color="grey") + 
+  geom_point(size=2) + 
+  geom_abline(slope=1.8) +
+  facet_geo(~code, grid = ssa_grid, label="name") +
+  theme_classic() + 
   theme(legend.position = "none")
 
 
-nat_level_for_compare_uncert <- melt(cube_nat_level_annual[iso3!="AFR"], id.vars = c("iso3", "country_name", "year", "variable"), 
-                                     measure.vars=c("mean", "lower", "upper"), variable.name = "metric")
-nat_level_for_compare_uncert[, full_var:= paste0(variable, "_", metric)]
-nat_level_for_compare_uncert <- dcast.data.table(nat_level_for_compare_uncert, iso3 + country_name + year  ~ full_var, value.var="value")
+ggplot(nat_level_subset[code!="AFR"], aes(x=percapita_nets_mean, y=access_mean)) + 
+  geom_errorbar(aes(ymin=access_lower, ymax=access_upper), color="grey") + 
+  geom_errorbarh(aes(xmin=percapita_nets_lower, xmax=percapita_nets_upper), color="grey") + 
+  geom_point(size=2) + 
+  geom_abline(slope=1.8)
 
-ggplot(nat_level_for_compare_uncert, aes(x=percapita_nets_mean, y=access_mean, color=factor(year))) + 
-  geom_errorbar(aes(ymin=access_lower, ymax=access_upper)) + 
-  geom_errorbarh(aes(xmin=percapita_nets_lower, xmax=percapita_nets_upper)) + 
-  geom_point(color="black") + 
-  facet_wrap(~year) +
-  theme(legend.position = "none")
 
 
 
