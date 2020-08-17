@@ -149,7 +149,7 @@ half_life_iso_plot <- ggplot(country_lambdas, aes(x=iso3, color=factor(high_svy)
   labs(x="",
        y="LLIN Half-life (years)")
 
-pdf(file.path(out_dir, "fig_4_half_lives.pdf"), width=14, height=9)
+pdf(file.path(out_dir, "fig_5_half_lives.pdf"), width=14, height=9)
   print(half_life_iso_plot)
 graphics.off()
 
@@ -440,22 +440,32 @@ nat_level_subset_afr[, code:="AFR"]
 nat_level_subset[, code:=iso3]
 nat_level_subset <- rbind(nat_level_subset, nat_level_subset_afr)
 
-ggplot(nat_level_subset, aes(x=percapita_nets_mean, y=access_mean)) + 
-  geom_errorbar(aes(ymin=access_lower, ymax=access_upper), color="grey") + 
-  geom_errorbarh(aes(xmin=percapita_nets_lower, xmax=percapita_nets_upper), color="grey") + 
-  geom_point(size=2) + 
-  geom_abline(slope=1.8) +
-  facet_geo(~code, grid = ssa_grid, label="name") +
-  theme_classic() + 
-  theme(legend.position = "none")
+access_npc_plot <- ggplot(nat_level_subset[code!="AFR"], aes(x=percapita_nets_mean, y=access_mean)) + 
+                    geom_errorbar(aes(ymin=access_lower, ymax=access_upper), color="grey") + 
+                    geom_errorbarh(aes(xmin=percapita_nets_lower, xmax=percapita_nets_upper), color="lightgrey") + 
+                    geom_point(size=2) + 
+                    geom_abline(slope=1.8) + 
+                    coord_equal(ratio=1, xlim=c(0, 0.9), ylim=c(0, 0.9)) + 
+                    geom_smooth(color=color_blue, size=2, se=F) + 
+                    labs(x="Nets Per Capita",
+                         y="Access (Proportion)")
 
 
-ggplot(nat_level_subset[code!="AFR"], aes(x=percapita_nets_mean, y=access_mean)) + 
-  geom_errorbar(aes(ymin=access_lower, ymax=access_upper), color="grey") + 
-  geom_errorbarh(aes(xmin=percapita_nets_lower, xmax=percapita_nets_upper), color="grey") + 
-  geom_point(size=2) + 
-  geom_abline(slope=1.8)
+pdf(file.path(out_dir, "fig_4_access_npc.pdf"), width=9, height=9)
+  print(access_npc_plot)
+graphics.off()
 
+# nat_level_for_compare_uncert <- melt(cube_nat_level_annual[iso3!="AFR"], id.vars = c("iso3", "country_name", "year", "variable"), 
+#                                      measure.vars=c("mean", "lower", "upper"), variable.name = "metric")
+# nat_level_for_compare_uncert[, full_var:= paste0(variable, "_", metric)]
+# nat_level_for_compare_uncert <- dcast.data.table(nat_level_for_compare_uncert, iso3 + country_name + year  ~ full_var, value.var="value")
+# 
+# ggplot(nat_level_for_compare_uncert, aes(x=percapita_nets_mean, y=access_mean, color=factor(year))) + 
+#   geom_errorbar(aes(ymin=access_lower, ymax=access_upper)) + 
+#   geom_errorbarh(aes(xmin=percapita_nets_lower, xmax=percapita_nets_upper)) + 
+#   geom_point(color="black") + 
+#   facet_wrap(~year) +
+#   theme(legend.position = "none")
 
 
 
@@ -558,6 +568,18 @@ rel_uncert_maps <- lapply(variables_to_plot, function(this_var){
   full_dt[, comb := factor(paste(uncert_quart, mean_quart), levels = levels(levels$comb))]
   full_dt[, year:= uncert_year]
   
+  legend <- ggplot(levels) +
+    geom_raster(aes(x = factor(mean_quart), y = factor(uncert_quart), fill = comb), show.legend = F) +
+    scale_fill_manual(values = rel_uncert_colors) +
+    scale_x_discrete(labels = c("Low", "", "", "High"), expand = c(0, 0)) +
+    scale_y_discrete(labels = c("Low", "", "", "High"), expand = c(0, 0)) +
+    coord_equal() +
+    labs(x = paste0(" \n", plot_label), y = "Uncertainty\n ", title = NULL) +
+    theme_minimal() +
+    theme(axis.line = element_blank(), axis.ticks = element_blank(),
+          panel.grid = element_blank(), axis.text.y = element_text(angle = 90, hjust = 0.5),
+          plot.margin = unit(c(0, 0, 0, 0), "in"), panel.border = element_rect(fill = NA, color = "black"))
+  
   rel_unc_plot <- ggplot() +
     geom_raster(data = full_dt, aes(fill = comb, y = lat, x = long), show.legend = F) +
     annotate(geom = "raster", x = background_mask_dt$long, y = background_mask_dt$lat, fill = "gray80") +
@@ -569,14 +591,14 @@ rel_uncert_maps <- lapply(variables_to_plot, function(this_var){
     theme(axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(),
           plot.margin = unit(c(0, 0, 0, 0), "in"))
   
-  return(list(mean_plot, rel_unc_plot))
+  return(list(mean_plot, rel_unc_plot, legend))
   
 })
 
 rel_uncert_maps <- unlist(rel_uncert_maps, recursive=F)
 
 pdf(file.path(out_dir, "fig_3_maps_with_uncert_quart.pdf"), width = (12), height = (10))
-  do.call("grid.arrange", c(rel_uncert_maps, nrow=3))
+  do.call("grid.arrange", c(rel_uncert_maps, nrow=length(variables_to_plot)))
 dev.off()
 
 
@@ -644,51 +666,10 @@ exceed_plot_list <- lapply(1:nrow(label_df), function(idx){
 })
 
 
-## Access vs NPC  ----------------------------------------------------------------------------------------------------------------
-
-explore_access_npc <- F
-
-if (explore_access_npc){
-  access_mean <- stack(file.path("rasters", paste0("ITN_", c(2019), "_access_mean.tif")))
-  percapita_mean <- stack(file.path("rasters", paste0("ITN_", c(2019), "_percapita_nets_mean.tif")))
-  
-  access_dt <- round_vals(data.table(rasterToPoints(access_mean)))
-  percapita_dt <- round_vals(data.table(rasterToPoints(percapita_mean)))
-  
-  access_npc_dt <- merge(access_dt, percapita_dt)
-  access_npc_dt <- access_npc_dt[ITN_2019_access_mean>0 & ITN_2019_percapita_nets_mean>0]
-  
-  nat_pixel_dt <- round_vals(data.table(rasterToPoints(raster(gaul_tif_fname))))
-  setnames(nat_pixel_dt, "african_cn5km_2013_no_disputes", "gaul")
-  nat_pixel_dt <- merge(nat_pixel_dt, iso_gaul_map[, list(gaul=GAUL_CODE, iso3=COUNTRY_ID)])
-  access_npc_dt <- merge(access_npc_dt, nat_pixel_dt, by=c("x", "y"), all.x=T)
-  
-  ggplot(access_npc_dt, aes(x=ITN_2019_access_mean, y=ITN_2019_percapita_nets_mean)) + 
-    geom_hline(yintercept=0.5) + 
-    geom_vline(xintercept=0.8) + 
-    geom_point(alpha=0.75) + 
-    facet_wrap(~iso3, scales="free")
-  
-  
-  access_perc_of_target <- access_mean/0.8
-  access_perc_of_target[access_perc_of_target>1] <- 1
-  percapita_perc_of_target <- percapita_mean/0.5
-  percapita_perc_of_target[percapita_perc_of_target>1] <- 1
-  
-  levelplot(percapita_perc_of_target-access_perc_of_target,
-            par.settings=rasterTheme(region= pnw_palette("Anemone", 30)), at= seq(-0.45, 0.45, 0.05),
-            xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, main="NPC-Access") +
-    latticeExtra::layer(sp.polygons(Africa))
-  
-  #plot(stack(access_perc_of_target, percapita_perc_of_target))
-  
-}
-
-
 ## Relative Gain  ----------------------------------------------------------------------------------------------------------------
 
 # relative gain for latest year
-main_colors <- rev(terrain.colors(255))
+main_colors <- wpal("seaside", noblack = T)
 relgain_colors <- wpal("cool_stormy", noblack = T)
 
 rel_gain_plots <- lapply(years_for_rel_gain, function(this_year){
@@ -746,7 +727,7 @@ rel_gain_plots <- lapply(years_for_rel_gain, function(this_year){
 
 names(rel_gain_plots) <- years_for_rel_gain
 
-pdf(file.path(out_dir, "fig_5_relgain_2019.pdf"), width=12, height=10)
+pdf(file.path(out_dir, "fig_6_relgain_2019.pdf"), width=12, height=10)
   grid.arrange(rel_gain_plots[["2019"]])
 graphics.off()
 
