@@ -333,7 +333,7 @@ ssa_grid <- fread(geofacet_fname)
 
 access_use_timeseries <- ggplot(cube_nat_level[variable %in% c("access", "use") & year %in% years],
                                 aes(x=time-2000, color=variable, fill=variable)) + 
-                          geom_hline(yintercept = 80) + 
+                          geom_hline(yintercept = 80, size=1, linetype="longdash") + 
                           geom_ribbon(aes(ymin=par_adj_lower*100, ymax=par_adj_upper*100), color=NA, alpha=0.35) + 
                           geom_line(aes(y=par_adj_mean*100), size=0.75) + 
                           geom_point(data=cube_survey[variable %in% c("access", "use")], aes(x=date-2000, y=adj_mean*100, shape=variable), color="black") + 
@@ -342,7 +342,7 @@ access_use_timeseries <- ggplot(cube_nat_level[variable %in% c("access", "use") 
                           theme_classic() + 
                           scale_x_continuous(breaks=seq(0,20,5))+
                           theme(legend.title = element_blank(),
-                                legend.position="top",
+                                legend.position="none",
                                 # axis.text.x = element_text(angle=45, hjust=1)
                                 # axis.text.x = element_blank(),
                                 axis.line = element_blank(),
@@ -352,6 +352,28 @@ access_use_timeseries <- ggplot(cube_nat_level[variable %in% c("access", "use") 
                           labs(title="",
                                x="",
                                y="Access or Use (%)")
+
+access_timeseries <- ggplot(cube_nat_level[variable %in% c("access") & year %in% years],
+                                aes(x=time-2000, color=variable, fill=variable)) + 
+  geom_hline(yintercept = 80, size=0.75, linetype="longdash") + 
+  geom_ribbon(aes(ymin=par_adj_lower*100, ymax=par_adj_upper*100), color=NA, alpha=0.35) + 
+  geom_line(aes(y=par_adj_mean*100), size=0.5) + 
+  geom_point(data=cube_survey[variable %in% c("access")], aes(x=date-2000, y=adj_mean*100, shape=variable), color="black") + 
+  facet_geo(~code, grid = ssa_grid, label="name") + 
+  scale_shape_manual(values=c(0,2)) + 
+  theme_classic() + 
+  scale_x_continuous(breaks=seq(0,20,5))+
+  theme(legend.title = element_blank(),
+        legend.position="none",
+        # axis.text.x = element_text(angle=45, hjust=1)
+        # axis.text.x = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks.x = element_blank(),
+        panel.grid.major.x = element_line(color = "darkgrey", size=0.25)
+  ) + 
+  labs(title="",
+       x="",
+       y="Access (%)")
 
 sf_for_ref <- ggplot(Africa_dt, aes(x = long, y = lat, group = group)) + 
                   geom_polygon(aes(fill=modeled)) + 
@@ -370,6 +392,11 @@ pdf(file.path(out_dir, "fig_2_access_use_geofacet.pdf"), width = (10), height = 
   print(sf_for_ref, vp = vp)
 graphics.off()
 
+pdf(file.path(out_dir, "fig_2_access_only_for_gr.pdf"), width = (10), height = (11))
+  vp <- viewport(width = 0.15, height = 0.15, x = 0.175, y = 0.075)
+  print(access_timeseries)
+  print(sf_for_ref, vp = vp)
+graphics.off()
 
 ## use rate
 
@@ -520,8 +547,12 @@ rel_uncert_maps <- lapply(variables_to_plot, function(this_var){
   }
   
   mean_raster <- raster(file.path("rasters", paste0("ITN_", uncert_year, "_", this_var, "_mean.tif")))
+  mean_raster[mean_raster==0] <- NA
   lower_raster <- raster(file.path("rasters", paste0("ITN_", uncert_year, "_", this_var, "_lower.tif")))
   upper_raster <- raster(file.path("rasters", paste0("ITN_", uncert_year, "_", this_var, "_upper.tif")))
+  lower_raster <- raster::mask(lower_raster, mean_raster)
+  upper_raster <- raster::mask(upper_raster, mean_raster)
+  
   pop_raster <- raster(file.path(pop_tif_dir, paste0("ihme_corrected_frankenpop_All_Ages_3_", uncert_year, ".tif")))
   pop_raster <- crop(pop_raster, mean_raster)
   pop_raster <- setExtent(pop_raster, mean_raster)
@@ -551,10 +582,12 @@ rel_uncert_maps <- lapply(variables_to_plot, function(this_var){
   pop_raster <- raster::mask(pop_raster, mean_raster)
   
   pop_dt <- round_vals(data.table(rasterToPoints(pop_raster)))
+  names(pop_dt) <- c("long", "lat", "pop")
   mean_dt <- round_vals(data.table(rasterToPoints(mean_raster)))
+  names(mean_dt) <- c("long", "lat", "mean")
   ci_width_dt <- round_vals(data.table(rasterToPoints(ci_width)))
+  names(ci_width_dt) <- c("long", "lat", "cirange")
   full_dt <- merge(merge(mean_dt, ci_width_dt), pop_dt)
-  names(full_dt) <- c("long", "lat", "mean", "cirange", "pop")
   
   full_dt[, mean_quart := cut(mean, breaks = wtd.quantile(mean, pop, c(0, 0.25, 0.5, 0.75, 1), na.rm = T), labels = F, include.lowest = T)]
   full_dt[, uncert_quart := cut(cirange, breaks = wtd.quantile(cirange, pop, c(0, 0.25, 0.5, 0.75, 1), na.rm = T), labels = F, include.lowest = T)]
@@ -659,6 +692,7 @@ exceed_plot_list <- lapply(1:nrow(label_df), function(idx){
   this_df <- label_df[idx]
   
   this_raster <- raster(file.path("rasters", paste0("ITN_", uncert_year, "_", this_df$var, "_", this_df$metric, ifelse(is.na(this_df$cutoff), "", paste0("_", this_df$cutoff)), ".tif")))
+  this_raster[this_raster==0] <- NA
   this_plot <- plot_map(this_raster, this_df$metric_label, this_df$var_label) + 
                background_plot_single + 
                latticeExtra::layer(sp.polygons(Africa))
