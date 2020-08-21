@@ -478,9 +478,8 @@ access_npc_plot <- ggplot(nat_level_subset[code!="AFR"], aes(x=percapita_nets_me
                          y="Access (Proportion)")
 
 
-pdf(file.path(out_dir, "fig_4_access_npc.pdf"), width=9, height=9)
-  print(access_npc_plot)
-graphics.off()
+ggsave(plot=access_npc_plot, height=9,width=9, filename=file.path(out_dir, "fig_4_access_npc.pdf"), useDingbats=FALSE)
+
 
 # nat_level_for_compare_uncert <- melt(cube_nat_level_annual[iso3!="AFR"], id.vars = c("iso3", "country_name", "year", "variable"), 
 #                                      measure.vars=c("mean", "lower", "upper"), variable.name = "metric")
