@@ -387,13 +387,13 @@ sf_for_ref <- ggplot(Africa_dt, aes(x = long, y = lat, group = group)) +
                   
 # combine
 pdf(file.path(out_dir, "fig_2_access_use_geofacet.pdf"), width = (10), height = (11))
-  vp <- viewport(width = 0.15, height = 0.15, x = 0.175, y = 0.075)
+  vp <- viewport(width = 0.13, height = 0.13, x = 0.05, y = 0.225)
   print(access_use_timeseries)
   print(sf_for_ref, vp = vp)
 graphics.off()
 
 pdf(file.path(out_dir, "fig_2_access_only_for_gr.pdf"), width = (10), height = (11))
-  vp <- viewport(width = 0.15, height = 0.15, x = 0.175, y = 0.075)
+  vp <- viewport(width = 0.13, height = 0.13, x = 0.05, y = 0.225)
   print(access_timeseries)
   print(sf_for_ref, vp = vp)
 graphics.off()
