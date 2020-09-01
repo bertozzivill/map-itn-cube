@@ -139,12 +139,13 @@ country_lambdas[, iso3:= factor(iso3, levels = descending_order)]
 
 color_red <- gg_color_hue(2)[1]
 half_life_iso_plot <- ggplot(country_lambdas, aes(x=iso3, color=factor(high_svy))) +
-  geom_hline(yintercept=3) + 
+  geom_hline(yintercept=3, linetype="dotted") + 
   geom_linerange(aes(ymin=lower, ymax=upper)) + 
   geom_text(aes(label=iso3, y=half_life)) +
   scale_color_manual(values=c(color_red, "dimgrey")) +
   theme(axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
         legend.position = "none") +
   labs(x="",
        y="LLIN Median Retention Time (years)")
@@ -333,7 +334,7 @@ ssa_grid <- fread(geofacet_fname)
 
 access_use_timeseries <- ggplot(cube_nat_level[variable %in% c("access", "use") & year %in% years],
                                 aes(x=time-2000, color=variable, fill=variable)) + 
-                          geom_hline(yintercept = 80, size=1, linetype="longdash") + 
+                          geom_hline(yintercept = 80, size=1, linetype="dotted") + 
                           geom_ribbon(aes(ymin=par_adj_lower*100, ymax=par_adj_upper*100), color=NA, alpha=0.35) + 
                           geom_line(aes(y=par_adj_mean*100), size=0.75) + 
                           geom_point(data=cube_survey[variable %in% c("access", "use")], aes(x=date-2000, y=adj_mean*100, shape=variable), color="black") + 
@@ -355,7 +356,7 @@ access_use_timeseries <- ggplot(cube_nat_level[variable %in% c("access", "use") 
 
 access_timeseries <- ggplot(cube_nat_level[variable %in% c("access") & year %in% years],
                                 aes(x=time-2000, color=variable, fill=variable)) + 
-  geom_hline(yintercept = 80, size=0.75, linetype="longdash") + 
+  geom_hline(yintercept = 80, size=0.75, linetype="dotted") + 
   geom_ribbon(aes(ymin=par_adj_lower*100, ymax=par_adj_upper*100), color=NA, alpha=0.35) + 
   geom_line(aes(y=par_adj_mean*100), size=0.5) + 
   geom_point(data=cube_survey[variable %in% c("access")], aes(x=date-2000, y=adj_mean*100, shape=variable), color="black") + 

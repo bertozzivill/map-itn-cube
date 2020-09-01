@@ -8,7 +8,9 @@
 ## Assumptions: 
 ##  - Net use rates stays at 2019 levels for all countries
 ##  - When converting from access to NPC, use the 2019 loess curve fit of access-NPC at the country-month level.
-################################################################################################################
+##  - When determining the number of nets to distribute in each mass campaign, assume mass campaigns occur every 
+##    three years.
+##################################################################################################################
 
 rm(list=ls())
 
@@ -21,15 +23,13 @@ library(pracma)
 ############ ----------------------------------------------------------------------------------------------------------------------
 
 analysis_year <- 2019
-
 cube_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200801_final_for_wmr2020/04_predictions"
-
 
 ############ ----------------------------------------------------------------------------------------------------------------------
 ## Data Prep  ---------------------------------------------------------------------------------------------------------
 ############ ----------------------------------------------------------------------------------------------------------------------
 
-# TODO: ask Pete if he needs pop at risk conversion
+# TODO: Do we need to convert to population-at-risk?
 
 cube_nat_level_fnames <- list.files(file.path(cube_indir, "aggregated"), full.names = T)
 cube_nat_level_fnames <- cube_nat_level_fnames[!cube_nat_level_fnames %like% "mean_ONLY"]
@@ -57,9 +57,8 @@ rm(cube_nat_level_fnames, cube_nat_level, curve_fit)
 
 target_uses <- seq(0.1, 0.9, 0.1)
 
-
 targets_all <- lapply(target_uses, function(this_use){
-  targets_dt <- cube_nat_level_annual[, list(iso3, year, use, use_rate, percapita_nets, target_use=this_use)]
+  targets_dt <- cube_nat_level_annual[, list(iso3, year, access, use, use_rate, percapita_nets, target_use=this_use)]
   targets_dt[, target_access:= target_use/use_rate] # TODO: what if target_access > 1?
   targets_dt <- targets_dt[order(target_access)]
   targets_dt[target_access<=max(loess_for_prediction$loess), target_percapita_nets:= interp1(loess_for_prediction$loess, loess_for_prediction$percapita_nets, target_access)] 
@@ -69,17 +68,21 @@ targets_all <- lapply(target_uses, function(this_use){
 targets_all <- rbindlist(targets_all)
 targets_all[, target_use:=factor(target_use)]
 
-ggplot(targets_all, aes(x=use, y=target_percapita_nets, color=target_use)) +
-  geom_text(aes(label=iso3)) +
-  theme_bw()
+targets_plot <- ggplot(targets_all, aes(x=use, y=target_percapita_nets, color=target_use)) +
+                  geom_text(aes(label=iso3)) +
+                  theme_bw()
+
+write.csv(targets_all, "~/Desktop/use_to_npc_targets.csv", row.names = F)
 
 ############ ----------------------------------------------------------------------------------------------------------------------
 ## Find number of nets to distribute  ---------------------------------------------------------------------------------------------------------
 ############ ----------------------------------------------------------------------------------------------------------------------
 
 ## For this step, you would need to: 
-## 1. Take your target NPC and the LLIN half-life for each country
-## 2. Integrate the net loss function from 0-3, solving for N
+## 1. Read in a dataset of LLIN half-lives for each country.
+## 2. Integrate the net loss function (see Bhatt eLife 2015 supplement) from 0-3 years and calculate the initial 
+##    nets-per-capita such that the average NPC is equal to the target value found above. 
+## 3. Convert this initial NPC to a net count, choosing a population denominator that accounts for expected population growth. 
 
 
 
