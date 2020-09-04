@@ -31,7 +31,9 @@ stockflow_scenarios <- c("20200418_BMGF_ITN_C1.00_R1.00_V2",
                         "20200418_BMGF_ITN_C0.00_R1.00_V2",
                         "20200418_BMGF_ITN_C0.00_R0.75_V2",
                         "20200418_BMGF_ITN_C0.00_R0.50_V2",
-                        "20200418_BMGF_ITN_C0.00_R0.25_V2")
+                        "20200418_BMGF_ITN_C0.00_R0.25_V2",
+                        "20200507_BMGF_ITN_C0.00_R0.00_V2"
+                        )
 
 if (run_stockflow){
   all_stockflow <- lapply(stockflow_scenarios, function(this_stockflow){
@@ -69,7 +71,8 @@ scenario_names <- c(ITN_C1.00_R1.00_V2="20200418_BMGF_ITN_C1.00_R1.00_V2",
                    ITN_C0.00_R1.00_V2="20200418_BMGF_ITN_C0.00_R1.00_V2",
                    ITN_C0.00_R0.75_V2="20200418_BMGF_ITN_C0.00_R0.75_V2",
                    ITN_C0.00_R0.50_V2="20200418_BMGF_ITN_C0.00_R0.50_V2",
-                   ITN_C0.00_R0.25_V2="20200418_BMGF_ITN_C0.00_R0.25_V2"
+                   ITN_C0.00_R0.25_V2="20200418_BMGF_ITN_C0.00_R0.25_V2",
+                   ITN_C0.00_R0.00_V2="20200507_BMGF_ITN_C0.00_R0.00_V2"
                    )
 
 # scenario_names <- c(ITN_C0.00_R0.00="20200412_BMGF_ITN_C0.00_R0.00",
@@ -100,17 +103,78 @@ all_scenarios_annual <- all_scenarios[, list(value=mean(value)),
                                     by=list(scenario,iso3, type, year)]
 all_scenarios_annual[, time:=year]
 
-annual_comparison_plot <- ggplot(all_scenarios_annual[type=="use" & year>2000 &  year<2021], aes(x=time))+
-                                              geom_line(aes(color=scenario, y=value), size=1) +
-                                              # geom_linerange(data=survey_data, aes(x=date, ymin=use_mean-1.96*use_se, ymax=use_mean+1.96*use_se)) + 
-                                              # geom_point(data=survey_data, aes(x=date, y=use_mean)) +
-                                              facet_wrap(~iso3) +
-                                              theme_minimal() +
-                                              theme(legend.title=element_blank(),
-                                                    axis.text.x = element_text(angle=45, hjust=1))  +
-                                              labs(title="INLA Use: Scenario Comparison",
-                                                   x="Time",
-                                                   y="Use")
+library(geofacet)
+library(maptools)
+
+shape_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/shapefiles/"
+Africa <- readOGR(file.path(shape_dir, "Africa_simplified.shp"))
+Africa_dt <- data.table(fortify(Africa, region = "COUNTRY_ID"))
+Africa_dt[, modeled:= ifelse(id %in% unique(all_scenarios_quarterly$iso3), "Yes", "No")]
+
+geofacet_fname <- "~/repos/map-itn-cube/geofacet_ssa_malaria.csv"
+ssa_grid <- fread(geofacet_fname)
+all_scenarios_quarterly[, code:=iso3]
+
+annual_comparison_plot_full <- ggplot(all_scenarios_quarterly[type=="use" & year>2015 &  year<2021 & scenario %in% c("ITN_C0.00_R0.00_V2", "ITN_C1.00_R1.00_V2")], aes(x=time))+
+                                              geom_line(aes(color=scenario, y=value*100), size=1) +
+                                              facet_geo(~code, grid = ssa_grid, label="name") +
+                                              theme_classic() + 
+                                              scale_x_continuous(breaks=seq(2016,2021,1))+
+                                              ylim(c(0, 95)) +
+                                              scale_color_manual(values=c("#00BFC4", "#006265")) + 
+                                              theme(legend.title = element_blank(),
+                                                    legend.position="none",
+                                                    axis.text.x = element_text(angle=45, hjust=1),
+                                                    # axis.text.x = element_blank(),
+                                                    axis.line = element_blank(),
+                                                    axis.ticks.x = element_blank(),
+                                                    panel.grid.major.x = element_line(color = "darkgrey", size=0.25)
+                                              ) + 
+                                              labs(title="",
+                                                   x="",
+                                                   y="")
+
+annual_comparison_plot_half <- ggplot(all_scenarios_quarterly[type=="use" & year>2015 &  year<2021 & scenario %in% c("ITN_C0.00_R0.00_V2")], aes(x=time))+
+                                        geom_line(aes(color=scenario, y=value*100), size=1) +
+                                        facet_geo(~code, grid = ssa_grid, label="name") +
+                                        theme_classic() + 
+                                        scale_x_continuous(breaks=seq(2016,2021,1))+
+                                        ylim(c(0, 95)) +
+                                        scale_color_manual(values=c("#00BFC4")) + 
+                                        theme(legend.title = element_blank(),
+                                              legend.position="none",
+                                              axis.text.x = element_text(angle=45, hjust=1),
+                                              # axis.text.x = element_blank(),
+                                              axis.line = element_blank(),
+                                              axis.ticks.x = element_blank(),
+                                              panel.grid.major.x = element_line(color = "darkgrey", size=0.25)
+                                        ) + 
+                                        labs(title="",
+                                             x="",
+                                             y="")
+
+sf_for_ref <- ggplot(Africa_dt, aes(x = long, y = lat, group = group)) + 
+                      geom_polygon(aes(fill=modeled)) + 
+                      geom_path(color = "black", size = 0.3) +
+                      scale_fill_manual(values=c("white","gray80")) + 
+                      coord_equal(xlim = c(-18, 52), ylim = c(-35, 38)) +
+                      labs(x = NULL, y = NULL, title = "") +
+                      theme_classic(base_size = 12) +
+                      theme(axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(),
+                            plot.margin = unit(c(0, 0, 0, 0), "in"), legend.title=element_blank(), legend.position = "none")
+
+pdf("/Users/bertozzivill/Dropbox (IDM)/Malaria Team Folder/slide_decks/MMC/2020_virtual_MMC/abv_lightning/counterfactual_lineplots_full.pdf", width = (10), height = (11))
+    vp <- viewport(width = 0.13, height = 0.13, x = 0.05, y = 0.225)
+    print(annual_comparison_plot_full)
+    print(sf_for_ref, vp = vp)
+graphics.off()
+
+pdf("/Users/bertozzivill/Dropbox (IDM)/Malaria Team Folder/slide_decks/MMC/2020_virtual_MMC/abv_lightning/counterfactual_lineplots_half.pdf", width = (10), height = (11))
+    vp <- viewport(width = 0.13, height = 0.13, x = 0.05, y = 0.225)
+    print(annual_comparison_plot_half)
+    print(sf_for_ref, vp = vp)
+graphics.off()
+
 
 for_noor <- all_scenarios_annual[type=="use" & year>=2015 & year<2021 & !scenario %like% "C0.00_R1.00",
                                  list(scenario, iso3, year, itn_coverage=value)]
