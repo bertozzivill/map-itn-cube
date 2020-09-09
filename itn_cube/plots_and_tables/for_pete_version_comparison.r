@@ -116,6 +116,7 @@ ssa_grid <- fread(geofacet_fname)
 all_scenarios_quarterly[, code:=iso3]
 
 annual_comparison_plot_full <- ggplot(all_scenarios_quarterly[type=="use" & year>2015 &  year<2021 & scenario %in% c("ITN_C0.00_R0.00_V2", "ITN_C1.00_R1.00_V2")], aes(x=time))+
+                                              geom_vline(xintercept = 2020, color="#95c400", size=1) + 
                                               geom_line(aes(color=scenario, y=value*100), size=1) +
                                               facet_geo(~code, grid = ssa_grid, label="name") +
                                               theme_classic() + 
@@ -135,6 +136,7 @@ annual_comparison_plot_full <- ggplot(all_scenarios_quarterly[type=="use" & year
                                                    y="")
 
 annual_comparison_plot_half <- ggplot(all_scenarios_quarterly[type=="use" & year>2015 &  year<2021 & scenario %in% c("ITN_C0.00_R0.00_V2")], aes(x=time))+
+                                        geom_vline(xintercept = 2020, color="#95c400", size=1) +
                                         geom_line(aes(color=scenario, y=value*100), size=1) +
                                         facet_geo(~code, grid = ssa_grid, label="name") +
                                         theme_classic() + 

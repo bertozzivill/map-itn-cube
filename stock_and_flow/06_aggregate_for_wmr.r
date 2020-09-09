@@ -254,10 +254,13 @@ aggregate_indicators <- function(reference_dir, list_out_dir, wmr_input_dir){
   # Aggregate and save
   
   ## Aggregate to continent level: take weighted means of all values
-  continent <- all_indicators[, lapply(.SD, weighted.mean, w=pop_at_risk_pf), by=list(year, quarter, ITER), .SDcols=names(all_indicators)[!names(all_indicators) %in% c("year", "quarter", "ITER", "country_name", "iso3")]]
+  continent <- all_indicators[, lapply(.SD, weighted.mean, w=pop_at_risk_pf), by=list(year, quarter, ITER), .SDcols=names(all_indicators)[!names(all_indicators) %in% c("year", "quarter", "ITER", "country_name", "iso3", "net_crop")]]
+  continent_net_crop <- all_indicators[, list(net_crop=sum(net_crop)), by=list(year, quarter, ITER)]
+  continent <- merge(continent, continent_net_crop)
   continent[, iso3:="SSA"]
   continent[, country_name:="Sub-Saharan Africa"]
-  all_indicators <- rbind(all_indicators, continent)
+
+  all_indicators <- rbind(all_indicators, continent, fill=T)
   
   # Aggregate to annual level
   all_indicators_long <- melt(all_indicators, id.vars = c("iso3", "country_name", "year", "quarter", "ITER"))
@@ -282,6 +285,9 @@ aggregate_indicators <- function(reference_dir, list_out_dir, wmr_input_dir){
   
   wmr_subset <- indicator_summary[time_type=="annual" & variable!="prop_over_alloc"]
   wmr_subset[, c("time_type", "quarter"):=NULL]
+  
+  wmr_subset <- rbind(wmr_subset[iso3=="SSA"], wmr_subset[iso3!="SSA"])
+  
   write.csv(wmr_subset, file.path(list_out_dir, "indicators_for_wmr.csv"), row.names=F)
 }
 
