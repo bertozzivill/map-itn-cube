@@ -547,6 +547,36 @@ background_plot_single <- levelplot(background_raster,
 
 ## Means and Uncertainty Quantiles  ----------------------------------------------------------------------------------------------------------------
 
+# quick use rate time series for bruno
+pal <- c("#722503", "#AB0002", "#F2A378", "#F4CA7D", "#C8D79E", "#70A800")
+this_var <- "use_rate"
+plot_label <- tools::toTitleCase(gsub("_", " ", this_var))
+
+mean_raster <- stack(file.path("rasters", paste0("ITN_", 2008:2019, "_", this_var, "_mean.tif")))
+
+mean_dt <- data.table(rasterToPoints(mean_raster))
+mean_dt <- melt(mean_dt, id.vars = c("x", "y"), value.name = this_var)
+mean_dt[, year:=as.integer(gsub("ITN_([0-9]{4})_.*", "\\1", variable))]
+mean_dt[, variable:=NULL]
+
+names(mean_dt) <- c("long", "lat", "value", "year")
+
+mean_plot <- ggplot() +
+  geom_raster(data = mean_dt, aes(fill = value, y = lat, x = long)) +
+  annotate(geom = "raster", x = background_mask_dt$long, y = background_mask_dt$lat, fill = "gray80") +
+  geom_path(data = Africa_dt, aes(x = long, y = lat, group = group), color = "black", size = 0.3) + 
+  facet_wrap(~year) + 
+  scale_fill_gradientn(colors= pal, limits=c(0, 1)) +
+  coord_equal(xlim = c(-18, 52), ylim = c(-35, 38)) +
+  labs(x = NULL, y = NULL, title = paste("Mean Values:", plot_label)) +
+  theme_classic(base_size = 12) +
+  theme(axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(),
+        plot.margin = unit(c(0, 0, 0, 0), "in"), legend.title=element_blank())
+
+ggsave(plot=mean_plot, height=9,width=12, filename=file.path(out_dir, "use_rate_timeseries.pdf"), useDingbats=FALSE)
+
+
+
 uncert_year <- 2019
 variables_to_plot <- c("access", "use_rate", "percapita_nets")
 
