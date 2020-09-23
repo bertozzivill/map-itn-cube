@@ -303,9 +303,10 @@ hh_survey_data <- fread(file.path(cube_indir, "../01_survey_data.csv"))
 
 ggplot(hh_survey_data, aes(x=percapita_nets, y=access_count/pixel_pop)) + 
   geom_abline(slope=1.8) + 
-  geom_point() + 
+  geom_point(aes(size=pixel_pop), alpha=0.5) + 
   facet_wrap(~year) + 
-  geom_smooth(color=color_blue, size=2, se=F) + 
+  geom_smooth(color=color_red, size=2, se=F) + 
+  geom_smooth(color=color_blue, size=2, se=F, aes(weight=pixel_pop)) + 
   labs(x="Nets Per Capita",
        y="Access (Proportion)", 
        title="NPC vs Access on the Survey Cluster Level")
