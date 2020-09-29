@@ -493,7 +493,7 @@ nat_level_subset <- rbind(nat_level_subset, nat_level_subset_afr)
 access_npc_plot <- ggplot(nat_level_subset[code!="AFR"], aes(x=percapita_nets_mean, y=access_mean)) + 
                     geom_errorbar(aes(ymin=access_lower, ymax=access_upper), color="lightgrey") + 
                     geom_errorbarh(aes(xmin=percapita_nets_lower, xmax=percapita_nets_upper), color="lightgrey") + 
-                    geom_point(size=2) + 
+                    geom_point(size=2) +
                     geom_abline(slope=1.8) + 
                     coord_equal(ratio=1, xlim=c(0, 0.9), ylim=c(0, 0.9), expand=F) + 
                     geom_smooth(color=color_blue, size=2, se=F) + 
@@ -502,6 +502,28 @@ access_npc_plot <- ggplot(nat_level_subset[code!="AFR"], aes(x=percapita_nets_me
 
 
 ggsave(plot=access_npc_plot, height=9,width=9, filename=file.path(out_dir, "fig_4_access_npc.pdf"), useDingbats=FALSE)
+
+# view household size dists
+hhsize_dist <- fread("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200731/hhsize_from_surveys.csv")
+
+# compare to survey clusters
+nat_level_subset <- nat_level_for_compare_uncert[year>=2003]
+
+ggplot() + 
+      geom_abline(slope=1.8) +
+      geom_point(data=hh_survey_data, color=color_red, aes(x=percapita_nets, y=access_count/pixel_pop), alpha=0.1) + 
+      geom_smooth(data=hh_survey_data, aes(x=percapita_nets, y=access_count/pixel_pop), color=color_red, size=2, se=F) + 
+      geom_point(data=nat_level_subset, color=color_blue, aes(x=percapita_nets_mean, y=access_mean), alpha=0.1) + 
+      geom_smooth(data=nat_level_subset, aes(x=percapita_nets_mean, y=access_mean), color=color_blue, size=2, se=F) + 
+      facet_wrap(~year) + 
+      labs(x="Nets Per Capita",
+           y="Access (Proportion)", 
+           title="")
+
+# test 1.8 slope
+hh_survey_data[, access:=access_count/pixel_pop]
+find_npc_slope <- lm(access ~ percapita_nets, data=hh_survey_data[percapita_nets<0.5 & year<2010])
+
 
 # build of access-npc plot for gates review
 access_npc_plot_bare <- ggplot(nat_level_subset[code!="AFR"], aes(x=percapita_nets_mean, y=access_mean)) + 
