@@ -10,7 +10,7 @@
 ## 3. Fits the model and predicts and saves outputs. 
 ##############################################################################################################
 
-run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmcp_manu_dir, out_dir, last_distribution_year=NA, sensitivity_survey_count=NA, sensitivity_type=NA){
+run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmcp_manu_dir, out_dir, projection_year=NA, sensitivity_survey_count=NA, sensitivity_type=NA){
   
   print(paste("RUNNING STOCK AND FLOW FOR", this_country))
   
@@ -20,11 +20,11 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
   # The extra "+1" is to allow for interpolation in the final quarter of the time series.
   quarter_timesteps <- seq(start_year, end_year + 1, 0.25)
   
-  # last_distribution_year refers to a scenario in which we run the model into the future, "turning off" distributions for at least a year. 
-  # hence, last_distribution_year is the final year in which distributions actually occur. In the current example, it is 2019
-  last_distribution_year <- ifelse(is.na(last_distribution_year), end_year, last_distribution_year)
+  # projection_year refers to a scenario in which we run the model into the future, without net delivery data. 
+  # Here, projection_year is the final year for which we have delivery data. In the current example, it is 2019
+  projection_year <- ifelse(is.na(projection_year), end_year, projection_year)
   
-  print(paste("End year is", end_year, "last distribution year is", last_distribution_year))
+  print(paste("End year is", end_year, "last distribution year is", projection_year))
   
   # set.seed(084)
   
@@ -232,7 +232,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
   main_input_list$time_since_distribution <- time_since_distribution
   
   # for restricting the NMCP priors in no-distribution years
-  main_input_list$last_distribution_year_count <- which(years==last_distribution_year)
+  main_input_list$projection_year_count <- which(years==projection_year)
   
   ### load indicator priors #####----------------------------------------------------------------------------------------------------------------------------------
   extract_prior <- function(varname, data){
@@ -266,7 +266,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
   annual_stock_and_flow <- "
           
           # Manufacturer and NMCP counts
-					for(year_idx in 1:last_distribution_year_count){
+					for(year_idx in 1:projection_year_count){
 						
 						manufacturer_sigma[year_idx] ~ dunif(0, 0.075) 	 # error in llin manufacturer	
 						manufacturer_llins_est[year_idx] ~ dnorm(manufacturer_llins[year_idx], ((manufacturer_llins[year_idx]+1e-12)*manufacturer_sigma[year_idx])^-2) T(0,)
@@ -307,7 +307,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
 				
 				
 					##### loop over years to get stock and capped llin distributions
-					for(year_idx in 2:last_distribution_year_count){
+					for(year_idx in 2:projection_year_count){
 					  
 					  # initial stock: last year's final stock + nets from manufacturer 
 						initial_stock[year_idx] <- final_stock[year_idx-1] + manufacturer_llins_est[year_idx]
@@ -331,11 +331,11 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
 
   "
   
-  annual_stock_and_flow_no_distributions <- 
+  annual_stock_and_flow_projected <- 
     "
     
     # Set NMCP distributions to their table value exactly
-    for(year_idx in ((last_distribution_year_count+1):year_count)){
+    for(year_idx in ((projection_year_count+1):year_count)){
 						
 						manufacturer_sigma[year_idx] ~ dunif(0, 0.075) 	 # error in llin manufacturer	
 						manufacturer_llins_est[year_idx] ~ dnorm(manufacturer_llins[year_idx], ((manufacturer_llins[year_idx]+1e-12)*manufacturer_sigma[year_idx])^-2) T(0,)
@@ -353,7 +353,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
 					}
   
     # Don't allow distribution of excess stock
-    for(year_idx in ((last_distribution_year_count+1):year_count)){
+    for(year_idx in ((projection_year_count+1):year_count)){
 					  
 					  # initial stock: last year's final stock + nets from manufacturer 
 						initial_stock[year_idx] <- final_stock[year_idx-1] + manufacturer_llins_est[year_idx]
@@ -511,7 +511,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
   
   # Specify model.
   # When you're not running with "no distribution years", don't include the extra model restrictions
-  if(last_distribution_year==end_year){
+  if(projection_year==end_year){
     full_model_string <- paste(model_preface, 
                                annual_stock_and_flow, 
                                llin_quarterly, 
@@ -524,7 +524,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
   }else{
     full_model_string <- paste(model_preface, 
                                annual_stock_and_flow, 
-                               annual_stock_and_flow_no_distributions, # this is the only difference
+                               annual_stock_and_flow_projected, # this is the only difference
                                llin_quarterly, 
                                citn_quarterly, 
                                accounting, 
@@ -740,7 +740,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
 }
 
 # DSUB FOR MAIN RUN
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --preemptible --retries 1 --wait  --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-8 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20200731 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020/20200418/ITN_C1.00_R1.00 CODE=gs://map_users/amelia/itn/code/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200731_final_for_wmr2020 --command 'cd ${CODE}; Rscript stock_and_flow/03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list.tsv
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --preemptible --retries 1 --wait  --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-8 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20200731 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020/20200929/ready_for_stockflow CODE=gs://map_users/amelia/itn/code/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200930_new_2020_dists --command 'cd ${CODE}; Rscript stock_and_flow/03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list_TESTING.tsv
 
 # DSUB FOR SENSITIVITY ANALYSIS
 # dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --preemptible --retries 1 --wait --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highmem-2 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20191205 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who CODE=gs://map_users/amelia/itn/code/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191211_full_sensitivity --command 'cd ${CODE}; Rscript stock_and_flow/03_stock_and_flow.r ${this_country} ${survey_count} ${order_type}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_sensitivity_TESTING.tsv
@@ -776,15 +776,15 @@ if(Sys.getenv("main_dir")=="") {
 source("stock_and_flow/jags_functions.r")
 source("itn_cube/01_data_functions.r")
 start_year <- 2000
-end_year<- 2019
-last_distribution_year <- 2019
+end_year<- 2020
+projection_year <- 2019
 
 gg_color_hue <- function(n) {
   hues = seq(15, 375, length = n + 1)
   hcl(h = hues, l = 65, c = 100)[1:n]
 }
 
-run_stock_and_flow(this_country, start_year, end_year, main_dir, nmcp_manu_dir, out_dir, last_distribution_year, sensitivity_survey_count, sensitivity_type)
+run_stock_and_flow(this_country, start_year, end_year, main_dir, nmcp_manu_dir, out_dir, projection_year, sensitivity_survey_count, sensitivity_type)
 
 
 
