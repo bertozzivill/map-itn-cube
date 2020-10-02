@@ -12,10 +12,10 @@ rm(list=ls())
 # dsub --provider google-v2 --project map-special-0001 --disk-size 400 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial  --regions europe-west1 --label "type=itn_cube" --machine-type n1-standard-1  --logging gs://map_users/amelia/itn/itn_cube/logs --input CODE=gs://map_users/amelia/itn/code/itn_cube/test_dsub_from_instance.r --command 'Rscript ${CODE}'
 
 
-years <- 2000:2019
+years <- 2000:2020
 preempt <- T
-orig_cube_labels <- c("20200801_final_for_wmr2020")
-orig_stockflow_labels <- c("20200731_final_for_wmr2020")
+orig_cube_labels <- c("20201001_new_2020_dists")
+orig_stockflow_labels <- c("20200930_new_2020_dists")
 
 stockflow_map <- data.table(cube_label=orig_cube_labels,
                             stockflow_label=orig_stockflow_labels)

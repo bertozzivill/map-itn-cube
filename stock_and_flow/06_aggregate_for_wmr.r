@@ -291,7 +291,7 @@ aggregate_indicators <- function(reference_dir, list_out_dir, wmr_input_dir){
   write.csv(wmr_subset, file.path(list_out_dir, "indicators_for_wmr.csv"), row.names=F)
 }
 
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --preemptible --retries 1 --wait --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n2-highmem-32  --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive reference_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200731_final_for_wmr2020 wmr_input_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20200731 CODE=gs://map_users/amelia/itn/code/ --output-recursive list_out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200731_final_for_wmr2020 --command 'cd ${CODE}; Rscript stock_and_flow/06_aggregate_for_wmr.r'
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --preemptible --retries 1 --wait --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n2-highmem-32  --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive reference_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200930_new_2020_dists wmr_input_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20200731 CODE=gs://map_users/amelia/itn/code/ --output-recursive list_out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200930_new_2020_dists --command 'cd ${CODE}; Rscript stock_and_flow/06_aggregate_for_wmr.r'
 # --preemptible --retries 1 --wait
 
 package_load <- function(package_list){
