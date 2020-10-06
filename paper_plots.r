@@ -471,10 +471,23 @@ npc_dev_timeseries <- ggplot(cube_nat_level[variable=="percapita_net_dev" & year
 
 
 ## Look at access-npc relationship by country-month
-nat_level_for_compare_uncert <- melt(cube_nat_level[iso3!="AFR"], id.vars = c("iso3", "country_name", "year", "month", "variable"), 
+nat_level_for_compare_uncert <- melt(cube_nat_level[iso3!="AFR"], id.vars = c("iso3", "country_name", "year", "month", "time", "variable"), 
                                      measure.vars=c("mean", "lower", "upper"), variable.name = "metric")
 nat_level_for_compare_uncert[, full_var:= paste0(variable, "_", metric)]
-nat_level_for_compare_uncert <- dcast.data.table(nat_level_for_compare_uncert, iso3 + country_name + year + month  ~ full_var, value.var="value")
+nat_level_for_compare_uncert <- dcast.data.table(nat_level_for_compare_uncert, iso3 + country_name + year + month + time  ~ full_var, value.var="value")
+
+
+nat_level_for_compare_uncert[, potential_access_mean:=pmin(percapita_nets_mean*2, 1)]
+nat_level_for_compare_uncert[, potential_access_lower:=pmin(percapita_nets_lower*2, 1)]
+nat_level_for_compare_uncert[, potential_access_upper:=pmin(percapita_nets_upper*2, 1)]
+
+ggplot(nat_level_for_compare_uncert, aes(x=time)) + 
+  geom_ribbon(aes(ymin=access_lower, ymax=access_upper), fill=color_red, color=NA, alpha=0.25) +
+  geom_ribbon(aes(ymin=potential_access_lower, ymax=potential_access_upper), fill=color_blue, color=NA, alpha=0.25) +
+  geom_line(aes(y=access_mean), color=color_red) + 
+  geom_line(aes(y=potential_access_mean), color=color_blue) +
+  facet_wrap(~iso3)
+
 
 
 nat_level_subset <- nat_level_for_compare_uncert[year==2020]
@@ -492,6 +505,16 @@ access_npc_plot <- ggplot(nat_level_subset[code!="AFR"], aes(x=percapita_nets_me
                     geom_smooth(color=color_blue, size=2, se=F) + 
                     labs(x="Nets Per Capita",
                          y="Access (Proportion)")
+
+access_npc_plot_2 <- ggplot(nat_level_subset[code!="AFR" & potential_access!=1], aes(x=potential_access, y=access_mean)) + 
+                      #geom_errorbar(aes(ymin=access_lower, ymax=access_upper), color="lightgrey") + 
+                      #geom_errorbarh(aes(xmin=percapita_nets_lower, xmax=percapita_nets_upper), color="lightgrey") + 
+                      geom_point(size=2) +
+                      geom_abline(slope=1) + 
+                      coord_equal(ratio=1, xlim=c(0, 1), ylim=c(0, 1), expand=F) + 
+                      geom_smooth(color=color_blue, size=2, se=F) + 
+                      labs(x="Potential Access",
+                           y="Access (Proportion)")
 
 
 ggsave(plot=access_npc_plot, height=9,width=9, filename=file.path(out_dir, "fig_4_access_npc.pdf"), useDingbats=FALSE)
