@@ -593,7 +593,8 @@ rel_uncert_maps <- lapply(variables_to_plot, function(this_var){
   if (this_var %in% c("access", "use")){
     pal <- wpal("seaside", noblack = T)
   }else if (this_var=="use_rate"){
-    pal <- c("#722503", "#AB0002", "#F2A378", "#F4CA7D", "#C8D79E", "#70A800")
+    # pal <- c("#722503", "#AB0002", "#F2A378", "#F4CA7D", "#C8D79E", "#70A800")
+    pal <- rev(pnw_palette("Sailboat", 30))
   }else if (this_var == "percapita_nets"){
     pal <- rev(pnw_palette("Mushroom", 30))
   }
