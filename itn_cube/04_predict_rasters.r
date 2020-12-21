@@ -21,7 +21,7 @@ package_load <- function(package_list){
 package_load(c("zoo", "VGAM", "raster", "doParallel", "data.table", "rgdal", "INLA", "RColorBrewer", "cvTools", "boot", "stringr", "dismo", "gbm", "pryr",
                "matrixStats", "Matrix.utils"))
 
-## Input info, move to bottom after debugging ----------------------------------------------------------------------------------------
+## Input info ----------------------------------------------------------------------------------------
 
 if(Sys.getenv("input_dir")=="") {
   this_year <- 2012

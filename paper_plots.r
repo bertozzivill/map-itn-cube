@@ -15,6 +15,8 @@ library(maptools)
 library(PNWColors)
 library(Hmisc)
 library(geofacet)
+library(data.table)
+library(INLA)
 
 rm(list=ls())
 
@@ -26,6 +28,7 @@ years <- 2000:2020
 years_for_rel_gain <- c(2015, 2020)
 
 cube_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20201001_new_2020_dists/04_predictions"
+cube_validation_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20201221_validation_from_20201001"
 stockflow_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200930_new_2020_dists"
 survey_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200731"
 nmcp_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020/20200929/ready_for_stockflow/"
@@ -356,12 +359,12 @@ access_use_timeseries <- ggplot(cube_nat_level[variable %in% c("access", "use") 
                                 aes(x=time-2000, color=variable, fill=variable)) + 
                           geom_hline(yintercept = 80, size=1, linetype="dotted") + 
                           geom_ribbon(aes(ymin=par_adj_lower*100, ymax=par_adj_upper*100), color=NA, alpha=0.35) + 
-                          geom_line(aes(y=par_adj_mean*100), size=0.75) + 
+                          geom_line(aes(y=par_adj_mean*100), size=0.5) + 
                           geom_point(data=cube_survey[variable %in% c("access", "use")], aes(x=date-2000, y=adj_mean*100, shape=variable), color="black") + 
                           facet_geo(~code, grid = ssa_grid, label="name") + 
                           scale_shape_manual(values=c(0,2)) + 
                           theme_classic() + 
-                          scale_x_continuous(breaks=seq(0,20,5))+
+                          scale_x_continuous(breaks=seq(0,20,5), labels=c("'00", "'05", "'10", "'15", "'20"))+
                           theme(legend.title = element_blank(),
                                 legend.position="none",
                                 # axis.text.x = element_text(angle=45, hjust=1)
@@ -515,7 +518,7 @@ access_npc_plot <- ggplot(nat_level_subset[code!="AFR"], aes(x=percapita_nets_me
                     geom_point(size=2) +
                     geom_abline(slope=1.8) + 
                     coord_equal(ratio=1, xlim=c(0, 1), ylim=c(0, 1), expand=F) + 
-                    geom_smooth(color=color_blue, size=2, se=F) + 
+                    geom_smooth(color=color_blue, size=1, se=F) + 
                     labs(x="Nets Per Capita",
                          y="Access (Proportion)")
 
@@ -837,6 +840,24 @@ pdf(file.path(out_dir, "fig_6_relgain_2020.pdf"), width=12, height=10)
   grid.arrange(rel_gain_plots[["2020"]])
 graphics.off()
 
+## Regression performance  ----------------------------------------------------------------------------------------------------------------
+
+data_vs_pred <- fread(file.path(cube_validation_indir, "03_data_vs_pred.csv"))
+validation_metrics <- fread(file.path(cube_validation_indir, "03_validation_metrics.csv"))
+
+data_point_performance_plots <- ggplot(data_vs_pred, aes(x=true, y=mean)) +
+                                  geom_abline() +
+                                  geom_point(alpha=0.3) +
+                                  facet_grid(.~outcome_var)
+
+pit_plots <- ggplot(validation_metrics, aes(x=pit)) +
+              geom_histogram() +
+              theme_minimal(base_size=14) +
+              facet_grid(. ~ outcome_var) +
+              labs(title="PIT distribution for different models",
+                   x="PIT",
+                   y="Count")
+
 ############ ----------------------------------------------------------------------------------------------------------------------
 ## Bring it all together  ----------------------------------------------------------------------------------------------------------------------
 ############ ----------------------------------------------------------------------------------------------------------------------
@@ -851,4 +872,6 @@ print(npc_dev_timeseries)
 print(access_npc_timeseries_with_data)
 do.call("grid.arrange", c(exceed_plot_list, ncol=3))
 grid.arrange(rel_gain_plots[["2015"]])
+print(data_point_performance_plots)
+print(pit_plots)
 graphics.off()
