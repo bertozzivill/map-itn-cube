@@ -17,6 +17,7 @@ library(Hmisc)
 library(geofacet)
 library(data.table)
 library(INLA)
+library(sf)
 
 rm(list=ls())
 
@@ -858,6 +859,63 @@ pit_plots <- ggplot(validation_metrics, aes(x=pit)) +
                    x="PIT",
                    y="Count")
 
+
+## Stationarity Demo  ----------------------------------------------------------------------------------------------------------------
+
+reg_data <- fread(file.path(cube_indir, "../03_data_for_model.csv"))
+reg_data <- reg_data[, list(row_id, year, month, cellnumber, survey, iso3, time,
+                            lat,
+                            long=lon,
+                            access=access_count/pixel_pop, 
+                            use=use_count/pixel_pop,
+                            percapita_nets,
+                            access_dev,
+                            use_gap,
+                            percapita_net_dev)]
+reg_data <- melt(reg_data, id.vars = c("row_id", "year", "month", "cellnumber", "survey", "iso3", "time", "lat", "long"))
+
+reg_data_sp <- data.table(fortify(
+                      st_as_sf(x = reg_data, 
+                       coords = c("long", "lat"),
+                       crs = "+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0")
+))
+
+reg_data_sp$long <- reg_data$long
+reg_data_sp$lat <- reg_data$lat
+
+standard_metrics <- ggplot(Africa_dt, aes(x = long, y = lat)) + 
+                      geom_polygon(aes(fill=modeled, group = group)) + 
+                      geom_path(aes(group = group), color = "black", size = 0.3) +
+                      geom_point(data=reg_data_sp[variable %in% c("access", "use", "percapita_nets")], aes(color=value), size=0.25, alpha=0.75) +
+                      facet_grid(.~variable) + 
+                      scale_fill_manual(values=c("white","gray80")) + 
+                      scale_color_gradientn(colors=wpal("seaside", noblack = T)) +
+                      coord_equal(xlim = c(-18, 52), ylim = c(-35, 38)) +
+                      labs(x = NULL, y = NULL, title = "") +
+                      theme_classic(base_size = 12) +
+                      theme(axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(),
+                            plot.margin = unit(c(0, 0, 0, 0), "in"), legend.title=element_blank())
+
+dev_metrics <- ggplot(Africa_dt, aes(x = long, y = lat)) + 
+                        geom_polygon(aes(fill=modeled, group = group)) + 
+                        geom_path(aes(group = group), color = "black", size = 0.3) +
+                        geom_point(data=reg_data_sp[!variable %in% c("access", "use", "percapita_nets")], aes(color=value), size=0.25, alpha=0.75) +
+                        facet_wrap(.~variable) + 
+                        scale_fill_manual(values=c("white","gray80")) + 
+                        scale_color_gradientn(colors=wpal("seaside", noblack = T)) +
+                        coord_equal(xlim = c(-18, 52), ylim = c(-35, 38)) +
+                        labs(x = NULL, y = NULL, title = "") +
+                        theme_classic(base_size = 12) +
+                        theme(axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(),
+                              plot.margin = unit(c(0, 0, 0, 0), "in"), legend.title=element_blank())
+
+
+# shapefile
+Africa <- readOGR(file.path(shape_dir, "Africa_simplified.shp"))
+Africa_dt <- data.table(fortify(Africa, region = "COUNTRY_ID"))
+Africa_dt[, modeled:= ifelse(id %in% unique(cube_nat_level$iso3), "Yes", "No")]
+
+
 ############ ----------------------------------------------------------------------------------------------------------------------
 ## Bring it all together  ----------------------------------------------------------------------------------------------------------------------
 ############ ----------------------------------------------------------------------------------------------------------------------
@@ -872,6 +930,7 @@ print(npc_dev_timeseries)
 print(access_npc_timeseries_with_data)
 do.call("grid.arrange", c(exceed_plot_list, ncol=3))
 grid.arrange(rel_gain_plots[["2015"]])
+grid.arrange(standard_metrics, dev_metrics)
 print(data_point_performance_plots)
 print(pit_plots)
 graphics.off()
