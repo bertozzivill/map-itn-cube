@@ -6,6 +6,7 @@
 ## prototype ITN outputs for paper and thesis
 ##############################################################################################################
 
+library(dplyr)
 library(survey)
 library(raster)
 library(rasterVis)
@@ -18,6 +19,7 @@ library(geofacet)
 library(data.table)
 library(INLA)
 library(sf)
+
 
 rm(list=ls())
 
@@ -44,7 +46,11 @@ iso_gaul_fname <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/iso
 
 setwd(cube_indir)
 out_dir <- file.path(cube_indir, "../final_plots")
-dir.create(out_dir, showWarnings = F)
+supp_dir <- file.path(out_dir, "supplementary_plots")
+dir.create(supp_dir, showWarnings = F)
+
+supp_std_width <- 12
+supp_std_height <- 9
 
 ############ ----------------------------------------------------------------------------------------------------------------------
 ## Functions  ----------------------------------------------------------------------------------------------------------------------
@@ -80,33 +86,47 @@ survey_summary[, short_source:=ifelse(source %like% "MICS", "MICS",
                                              source))]
 
 
-survey_panel <- ggplot(survey_summary, aes(x=main_year, y=country)) + 
+survey_panel <- ggplot(survey_summary, aes(x=main_year, y=reorder(country, desc(country)))) + 
   geom_point(aes(shape=included_in_cube, color=short_source), size=3) +
   scale_x_continuous(labels=2000:2019, breaks = 2000:2019) + 
   theme_bw() + 
   labs(y="", 
        x="",
-       title="Surveys by Country and Type")
+       title="Surveys by Country and Type",
+       shape="Included in\nGeospatial Regression?",
+       color="Survey Type")
 
+pdf(file.path(supp_dir, "survey_panel.pdf"), width=12, height=9)
+  print(survey_panel)
+graphics.off()
 
 ## Plot NMCP data with missings
 nmcp_data <- fread(list.files(nmcp_indir, full.names = T)[list.files(nmcp_indir) %like% "prepped_llins"])
-nmcp_plot <- ggplot(nmcp_data[year %in% years], aes(x=year, y=llins)) +
-  # geom_line(aes(y=manu_llins), color="blue") + 
+nmcp_data[, llin_mils:= llins/1e6]
+nmcp_data[, format_source:= factor(source, 
+                                   levels=c("alma", "nmcp", "pmi", "who", "min", "custom"),
+                                   labels=c("ALMA", "NMCPs", "PMI Reports", "WHO (2020)", "3yr Minimum", "Custom"))]
+
+nmcp_colors <- gg_color_hue(6)
+nmcp_plot <- ggplot(nmcp_data[year %in% years], aes(x=year, y=llin_mils)) +
   geom_line() + 
-  geom_point(aes(color=source), size=2) +
-  scale_shape_manual(values=c(16,1)) + 
+  geom_point(aes(color=format_source), size=2) +
+  scale_color_manual(values=c(nmcp_colors[1], nmcp_colors[3], nmcp_colors[2], nmcp_colors[4:6])) + 
   facet_wrap(~ISO3, scales="free_y") +
   theme(axis.text.x = element_text(angle = 45, hjust=1)) +
   labs(x="",
-       y="LLINs Distributed",
-       title="LLIN Distribution Data by Type")
+       y="LLINs Distributed (Millions)",
+       title="LLIN Distribution Data by Type",
+       color="Data Source")
+
+pdf(file.path(supp_dir, "nmcp_data_timeseries.pdf"), width=supp_std_width, height=supp_std_height)
+  print(nmcp_plot)
+graphics.off()
 
 stockflow_model_name <- gsub(".*/[0-9]{8}_", "", stockflow_indir)
 
-# loads a file with data.frames "nets_in_houses_all", "nmcp_data_all", "stock_all", "survey_data_all"
+# loads a file with data.frames "nets_in_houses_all", "nmcp_data_all", "stock_all", "survey_data_all", "half_life_comparison"
 load(file.path(stockflow_indir, "for_plotting.RData"))
-
 
 half_life_comparison <- half_life_comparison[net_type=="llin" & model==stockflow_model_name]
 
@@ -156,6 +176,9 @@ half_life_iso_plot <- ggplot(country_lambdas, aes(x=iso3, color=factor(high_svy)
 pdf(file.path(out_dir, "fig_5_half_lives.pdf"), width=14, height=9)
   print(half_life_iso_plot)
 graphics.off()
+
+write.csv(country_lambdas[, list(iso3, half_life, lower=round(lower,2), upper=round(upper,2), svy_count)],
+          file=file.path(out_dir, "llin_half_lives.csv"), row.names = F)
 
 # time series of net crop vs survey data
 net_crop_timeseries_plot <- ggplot(nets_in_houses_all[model==stockflow_model_name & date<(max(years)+1)], aes(x=date, color=type, fill=type)) +
@@ -253,6 +276,92 @@ graphics.off()
  ############ ----------------------------------------------------------------------------------------------------------------------
 ## ITN Cube: Time series  ---------------------------------------------------------------------------------------------------------
 ############ ----------------------------------------------------------------------------------------------------------------------
+
+# regression coefficients, "inla_outputs_for_prediction"
+load(file.path(cube_indir, "../03_inla_outputs_for_prediction.Rdata"))
+fixed_effects <- rbindlist(lapply(names(inla_outputs_for_prediction), function(outcome_var){
+  fe <- data.table(inla_outputs_for_prediction[[outcome_var]]$fixed, keep.rownames = T)[, list(outcome_var=outcome_var, cov=rn, mean, lower=`0.025quant`, upper=`0.975quant`)]
+  fe[, cov_label:=factor(cov, levels=c("Intercept",
+                                       "Aridity_Index_v2.Synoptic.Overall.Data.5km.mean",
+                                      "SRTM_elevation.Synoptic.Overall.Data.5km.mean",
+                                      "SRTM_SlopePCT_Corrected.Synoptic.Overall.Data.5km.mean",
+                                      "VIIRS.SLC.2014.Annual.mean.5km.mean",
+                                      "Accessibility.2015.Annual.Data.5km.mean",
+                                      "pf_seasonality",
+                                      "PET_v2.Synoptic.Overall.Data.5km.mean",
+                                      "Africa_TMI_90m.mean",
+                                      "Population",
+                                      "Landcover_2_Evergreen_Broadleaf_Forest",
+                                      "Landcover_4_Deciduous_Broadleaf_Forest",
+                                      "Landcover_5_Mixed_Forest",
+                                      "Landcover_6_Closed_Shrublands",
+                                      "Landcover_7_Open_Shrublands",
+                                      "Landcover_8_Woody_Savannas",
+                                      "Landcover_9_Savannas",
+                                      "Landcover_10_Grasslands",
+                                      "Landcover_11_Permanent_Wetlands",
+                                      "Landcover_12_Croplands",
+                                      "Landcover_14_Cropland_Natural_Vegetation_Mosaic",
+                                      "Landcover_16_Barren_Or_Sparsely_Populated",
+                                      "Landcover_17_Water",
+                                      "EVI",
+                                      "TCW",
+                                      "LST_day",
+                                      "LST_night",
+                                      "TSI"),
+                        labels=c("Intercept",
+                                 "Aridity",
+                                 "Elevation",
+                                  "Slope",
+                                  "NightTime Lights",
+                                  "Accessibility to Cities",
+                                  "Pf Seasonality",
+                                  "PET",
+                                  "TMI",
+                                  "Population",
+                                  "LC2: Ever Broadleaf",
+                                  "LC4: Decid Broadleaf",
+                                  "LC5: Mixed Forest",
+                                  "LC6: Closed Shrublands",
+                                  "LC7: Open Shrublands",
+                                  "LC8: Woody Savannas",
+                                  "LC9: Savannas",
+                                  "LC10: Grasslands",
+                                  "LC11: Perm Wetlands",
+                                  "LC12: Croplands",
+                                  "LC14: Crop/Natural Veg",
+                                  "LC16: Barren/Sparse Pop",
+                                  "LC17: Water",
+                                  "EVI",
+                                  "TCW",
+                                  "Daytime LST",
+                                  "Nighttime LST",
+                                  "TSI"))]
+  
+  fe[, vals_label:= paste0(round(mean, 3), " (", round(lower,3), ", ", round(upper, 3), ")")]
+  
+  return(fe)
+}))
+
+fixed_effects[, outcome_var:= factor(outcome_var, 
+                                     levels = c("access_dev", "use_gap", "percapita_net_dev"),
+                                     labels = c("Access Deviation", "Use Gap", "NPC Deviation"))]
+
+write.csv(fixed_effects, file = file.path(out_dir, "reg_coeffs.csv"), row.names=F)
+
+reg_coeffs_plot <- ggplot(fixed_effects, aes(x=mean, y=outcome_var, color=outcome_var)) +
+                              geom_vline(xintercept = 0) + 
+                              geom_errorbarh(aes(xmin=lower, xmax=upper)) + 
+                              geom_point() +
+                              facet_wrap(~cov_label) + 
+                              theme(legend.position = "none") +
+                              labs(x="Coefficient",
+                                   y="",
+                                   title="Geospatial Regression Coefficients")
+
+pdf(file.path(supp_dir, "reg_coeffs.pdf"), width=14, height=supp_std_height)
+  print(reg_coeffs_plot)
+graphics.off()
 
 # survey data
 cube_survey <- fread(file.path(cube_indir, "../01_survey_summary.csv"))
@@ -423,7 +532,7 @@ graphics.off()
 use_rate_timeseries <- 
   ggplot(cube_nat_level[year %in% years &  time>=2005 & variable=="use_rate"], aes(x=time, y=mean, group=iso3))+ 
   geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.5) + 
-  geom_hline(yintercept=0.8, color="#00BFC4") + 
+  geom_hline(yintercept=1, color="#00BFC4") + 
   geom_line() + 
   geom_point(data=cube_survey[type=="use_rate" & date>=2005], aes(x=date, y=mean)) + 
   facet_wrap(~iso3) +
@@ -436,37 +545,56 @@ use_rate_timeseries <-
        y="Use Rate",
        title="ITN Use Rate by Country")
 
+pdf(file.path(supp_dir, "use_rate_timeseries.pdf"), width=supp_std_width, height=supp_std_height)
+  print(use_rate_timeseries)
+graphics.off()
+
 
 # use gap line plot
 use_gap_timeseries <- ggplot(cube_nat_level[variable=="use_gap" & year %in% years], aes(x=time, y=mean)) + 
   geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.5) + 
+  geom_hline(yintercept=0, color="#00BFC4") + 
   geom_line() + 
   geom_point(data=cube_survey[type=="use_gap"], aes(x=date, y=mean)) + 
   facet_wrap(.~iso3) + 
+  theme_minimal() +
   theme(legend.title = element_blank(),
         axis.text.x = element_text(angle=45, hjust=1)) + 
   labs(title="ITN Use Gap by Country",
        x="Time",
        y="Use Gap")
 
+pdf(file.path(supp_dir, "use_gap_timeseries.pdf"), width=supp_std_width, height=supp_std_height)
+  print(use_gap_timeseries)
+graphics.off()
+
 # access deviation line plot 
 acc_dev_timeseries <- ggplot(cube_nat_level[variable=="access_dev" & year %in% years], aes(x=time, y=mean)) + 
-  geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.5) + 
+  geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.5) +
+  geom_hline(yintercept=0, color="#00BFC4") + 
   geom_line() + 
   geom_point(data=cube_survey[type=="access_deviation"], aes(x=date, y=mean)) + 
   facet_wrap(.~iso3) + 
+  theme_minimal() +
   theme(legend.title = element_blank(),
         axis.text.x = element_text(angle=45, hjust=1)) + 
   labs(title="ITN Access Deviation by Country",
        x="Time",
        y="Access Deviation")
 
+
+pdf(file.path(supp_dir, "acc_dev_timeseries.pdf"), width=supp_std_width, height=supp_std_height)
+  print(acc_dev_timeseries)
+graphics.off()
+
 # percapita net deviation line plot
 npc_dev_timeseries <- ggplot(cube_nat_level[variable=="percapita_net_dev" & year %in% years], aes(x=time, y=mean)) + 
   geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.5) + 
+  geom_hline(yintercept=0, color="#00BFC4") + 
   geom_line() + 
   geom_point(data=cube_survey[type=="percapita_net_deviation"], aes(x=date, y=mean)) + 
   facet_wrap(.~iso3) + 
+  theme_minimal() +
   theme(legend.title = element_blank(),
         axis.text.x = element_text(angle=45, hjust=1)) + 
   labs(title="Nets-per-Capita Deviation by Country",
@@ -474,8 +602,13 @@ npc_dev_timeseries <- ggplot(cube_nat_level[variable=="percapita_net_dev" & year
        y="NPC Deviation")
 
 
+pdf(file.path(supp_dir, "npc_dev_timeseries.pdf"), width=supp_std_width, height=supp_std_height)
+  print(npc_dev_timeseries)
+graphics.off()
+
+
 ## Look at access-npc relationship by country-month
-nat_level_for_compare_uncert <- melt(cube_nat_level[iso3!="AFR"], id.vars = c("iso3", "country_name", "year", "month", "time", "variable"), 
+nat_level_for_compare_uncert <- melt(cube_nat_level, id.vars = c("iso3", "country_name", "year", "month", "time", "variable"), 
                                      measure.vars=c("mean", "lower", "upper"), variable.name = "metric")
 nat_level_for_compare_uncert[, full_var:= paste0(variable, "_", metric)]
 nat_level_for_compare_uncert <- dcast.data.table(nat_level_for_compare_uncert, iso3 + country_name + year + month + time  ~ full_var, value.var="value")
@@ -493,6 +626,7 @@ for_potential_access[, variable:= ifelse(variable %like% "potential", "Access wi
 for_potential_access <- dcast.data.table(for_potential_access, iso3 + country_name + year + month + time + variable ~ metric)
 
 potential_access_plot <- ggplot(for_potential_access, aes(x=time, color=variable, fill=variable)) + 
+                            geom_hline(yintercept=0.8) + 
                             geom_ribbon(aes(ymin=lower, ymax=upper), color=NA, alpha=0.25) +
                             geom_line(aes(y=mean)) + 
                             scale_fill_manual(values=c(color_blue, color_red)) +
@@ -502,8 +636,9 @@ potential_access_plot <- ggplot(for_potential_access, aes(x=time, color=variable
                                   axis.text.x = element_text(angle=45, hjust=1)) +
                             labs(x="Time",
                                  y="Access (Proportion)",
-                                 title="True vs Optimal Access")
-ggsave(plot=potential_access_plot, height=9,width=12, filename=file.path(out_dir, "optimal_vs_true_access.pdf"), useDingbats=FALSE)
+                                 title="Estimated True vs Optimal Access")
+
+ggsave(plot=potential_access_plot, height=9,width=12, filename=file.path(supp_dir, "optimal_vs_true_access.pdf"), useDingbats=FALSE)
 
 
 
@@ -533,23 +668,37 @@ hhsize_dist <- fread("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01
 # compare to survey clusters
 nat_level_subset <- nat_level_for_compare_uncert[year>=2003]
 
-access_npc_timeseries_with_data <- ggplot() + 
+access_npc_compare <- rbind(nat_level_subset[, list(year,
+                                                    type="Modeled\nCountry-Months",
+                                                    percapita_nets=percapita_nets_mean, 
+                                                    percapita_nets_lower, 
+                                                    percapita_nets_upper,
+                                                    access=access_mean,
+                                                    access_lower,
+                                                    access_upper)],
+                            hh_survey_data[, list(year,
+                                                  type="Survey\nData Clusters",
+                                                  percapita_nets,
+                                                  access=access_count/pixel_pop)],
+                            fill=T)
+
+
+access_npc_compare_with_data <- ggplot(access_npc_compare, aes(x=percapita_nets, y=access, color=type)) + 
                                     geom_abline(slope=1.8) +
-                                    geom_point(data=hh_survey_data, color=color_red, aes(x=percapita_nets, y=access_count/pixel_pop), alpha=0.1) + 
-                                    geom_smooth(data=hh_survey_data, aes(x=percapita_nets, y=access_count/pixel_pop), color=color_red, size=2, se=F) + 
-                                    geom_point(data=nat_level_subset, color=color_blue, aes(x=percapita_nets_mean, y=access_mean), alpha=0.1) + 
-                                    geom_smooth(data=nat_level_subset, aes(x=percapita_nets_mean, y=access_mean), color=color_blue, size=2, se=F) + 
+                                    geom_errorbar(aes(ymin=access_lower, ymax=access_upper), alpha=0.1) + 
+                                    geom_errorbarh(aes(xmin=percapita_nets_lower, xmax=percapita_nets_upper), alpha=0.1) + 
+                                    geom_point(alpha=0.25) + 
+                                    geom_smooth(size=2, se=F, alpha=0.5) + 
                                     facet_wrap(~year) + 
+                                    theme(axis.text.x = element_text(angle = 45, hjust=1)) + 
                                     labs(x="Nets Per Capita",
                                          y="Access (Proportion)", 
-                                         title="")
+                                         title="Nets-Per-Capita vs Access, Data and Model",
+                                         color="")
 
-# test 1.8 slope
-hh_survey_data[, access:=access_count/pixel_pop]
-find_npc_slope <- lm(access ~ percapita_nets, data=hh_survey_data[percapita_nets<0.5 & year<2010])
-
-
-
+pdf(file.path(supp_dir, "access_npc_compare_with_data.pdf"), width=supp_std_width, height=supp_std_height)
+  print(access_npc_compare_with_data)
+graphics.off()
 
 ############ ----------------------------------------------------------------------------------------------------------------------
 ## ITN Cube: maps  ----------------------------------------------------------------------------------------------------------------
@@ -711,8 +860,6 @@ pdf(file.path(out_dir, "fig_3_maps_with_uncert_quart.pdf"), width = (12), height
 dev.off()
 
 
-
-
 ## Means and Exceedance  ----------------------------------------------------------------------------------------------------------------
 
 
@@ -776,6 +923,10 @@ exceed_plot_list <- lapply(1:nrow(label_df), function(idx){
 })
 
 
+pdf(file.path(supp_dir, "exceedance_example.pdf"), width=supp_std_width, height=supp_std_height)
+  do.call("grid.arrange", c(exceed_plot_list, ncol=3))
+graphics.off()
+
 ## Relative Gain  ----------------------------------------------------------------------------------------------------------------
 
 # relative gain for latest year
@@ -806,18 +957,18 @@ rel_gain_plots <- lapply(years_for_rel_gain, function(this_year){
   
   true_use <- levelplot(this_use,
                         par.settings=rasterTheme(region= main_colors), at= seq(0, 100, 2.5),
-                        xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, main=paste("True Use", this_year)) +
+                        xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, main=paste("ITN Use", this_year)) +
     latticeExtra::layer(sp.polygons(Africa))
   
   maxima <- stack(this_access, this_use_rate)
-  names(maxima) <- c("Maximum with Use", "Maximum with Access")
+  names(maxima) <- c("Maximize Use Rate", "Maximize Access")
   maxima_plot <- levelplot(maxima,
                            par.settings=rasterTheme(region= main_colors), at= seq(0, 100, 2.5),
                            xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F) +
     latticeExtra::layer(sp.polygons(Africa))
   
   new_comparison <- stack(use_gain, access_gain)
-  names(new_comparison) <- c("Increase Use", "Increase Access")
+  names(new_comparison) <- c("Gain from Maximizing Use Rate", "Gain from Maximizing Access")
   relative_gain_continuous <- levelplot(new_comparison,
                                         par.settings=rasterTheme(region= relgain_colors), at= seq(0, 100, 2.5),
                                         xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F) +
@@ -841,15 +992,31 @@ pdf(file.path(out_dir, "fig_6_relgain_2020.pdf"), width=12, height=10)
   grid.arrange(rel_gain_plots[["2020"]])
 graphics.off()
 
+pdf(file.path(supp_dir, "rel_gain_alt.pdf"), width=11, height=8)
+  grid.arrange(rel_gain_plots[["2015"]])
+graphics.off()
+
 ## Regression performance  ----------------------------------------------------------------------------------------------------------------
 
 data_vs_pred <- fread(file.path(cube_validation_indir, "03_data_vs_pred.csv"))
+data_vs_pred[, outcome_var:= factor(outcome_var, 
+                                          levels = c("access_dev", "use_gap", "percapita_net_dev"),
+                                          labels = c("Access Deviation", "Use Gap", "NPC Deviation"))]
 validation_metrics <- fread(file.path(cube_validation_indir, "03_validation_metrics.csv"))
-
+validation_metrics[, outcome_var:= factor(outcome_var, 
+                                          levels = c("access_dev", "use_gap", "percapita_net_dev"),
+                                          labels = c("Access Deviation", "Use Gap", "NPC Deviation"))]
 data_point_performance_plots <- ggplot(data_vs_pred, aes(x=true, y=mean)) +
                                   geom_abline() +
                                   geom_point(alpha=0.3) +
-                                  facet_grid(.~outcome_var)
+                                  facet_grid(.~outcome_var) + 
+                                  labs(x="True Value",
+                                       y="Predicted Value",
+                                       title="Model fit to data for geospatial regressions")
+
+pdf(file.path(supp_dir, "reg_performance.pdf"), width=7, height=4)
+  print(data_point_performance_plots)
+graphics.off()
 
 pit_plots <- ggplot(validation_metrics, aes(x=pit)) +
               geom_histogram() +
@@ -859,6 +1026,10 @@ pit_plots <- ggplot(validation_metrics, aes(x=pit)) +
                    x="PIT",
                    y="Count")
 
+
+pdf(file.path(supp_dir, "pit_plots.pdf"), width=7, height=4)
+  print(pit_plots)
+graphics.off()
 
 ## Stationarity Demo  ----------------------------------------------------------------------------------------------------------------
 
@@ -874,6 +1045,11 @@ reg_data <- reg_data[, list(row_id, year, month, cellnumber, survey, iso3, time,
                             percapita_net_dev)]
 reg_data <- melt(reg_data, id.vars = c("row_id", "year", "month", "cellnumber", "survey", "iso3", "time", "lat", "long"))
 
+reg_data[, variable_label:= factor(variable, 
+                              levels = c("access", "use", "percapita_nets", "access_dev", "use_gap", "percapita_net_dev"),
+                              labels = c("Access", "Use", "NPC", "Access Deviation", "Use Gap", "NPC Deviation"))]
+
+
 reg_data_sp <- data.table(fortify(
                       st_as_sf(x = reg_data, 
                        coords = c("long", "lat"),
@@ -887,50 +1063,30 @@ standard_metrics <- ggplot(Africa_dt, aes(x = long, y = lat)) +
                       geom_polygon(aes(fill=modeled, group = group)) + 
                       geom_path(aes(group = group), color = "black", size = 0.3) +
                       geom_point(data=reg_data_sp[variable %in% c("access", "use", "percapita_nets")], aes(color=value), size=0.25, alpha=0.75) +
-                      facet_grid(.~variable) + 
-                      scale_fill_manual(values=c("white","gray80")) + 
-                      scale_color_gradientn(colors=wpal("seaside", noblack = T)) +
+                      facet_grid(.~variable_label) + 
+                      scale_fill_manual(values=c("white","gray80"), guide="none") + 
+                      scale_color_gradientn(colors=wpal("seaside", noblack = T), name="Metric") +
                       coord_equal(xlim = c(-18, 52), ylim = c(-35, 38)) +
                       labs(x = NULL, y = NULL, title = "") +
                       theme_classic(base_size = 12) +
                       theme(axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(),
-                            plot.margin = unit(c(0, 0, 0, 0), "in"), legend.title=element_blank())
+                            plot.margin = unit(c(0, 0, 0, 0), "in"))
 
 dev_metrics <- ggplot(Africa_dt, aes(x = long, y = lat)) + 
                         geom_polygon(aes(fill=modeled, group = group)) + 
                         geom_path(aes(group = group), color = "black", size = 0.3) +
                         geom_point(data=reg_data_sp[!variable %in% c("access", "use", "percapita_nets")], aes(color=value), size=0.25, alpha=0.75) +
-                        facet_wrap(.~variable) + 
-                        scale_fill_manual(values=c("white","gray80")) + 
-                        scale_color_gradientn(colors=wpal("seaside", noblack = T)) +
+                        facet_wrap(.~variable_label) + 
+                        scale_fill_manual(values=c("white","gray80"), guide="none") + 
+                        scale_color_gradientn(colors=wpal("seaside", noblack = T), name="Deviation\nMetric") +
                         coord_equal(xlim = c(-18, 52), ylim = c(-35, 38)) +
                         labs(x = NULL, y = NULL, title = "") +
                         theme_classic(base_size = 12) +
                         theme(axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(),
-                              plot.margin = unit(c(0, 0, 0, 0), "in"), legend.title=element_blank())
+                              plot.margin = unit(c(0, 0, 0, 0), "in"))
 
 
-# shapefile
-Africa <- readOGR(file.path(shape_dir, "Africa_simplified.shp"))
-Africa_dt <- data.table(fortify(Africa, region = "COUNTRY_ID"))
-Africa_dt[, modeled:= ifelse(id %in% unique(cube_nat_level$iso3), "Yes", "No")]
-
-
-############ ----------------------------------------------------------------------------------------------------------------------
-## Bring it all together  ----------------------------------------------------------------------------------------------------------------------
-############ ----------------------------------------------------------------------------------------------------------------------
-
-pdf(file.path(out_dir, "methods_and_supplement_plots.pdf"), width=14, height=8)
-print(survey_panel)
-print(nmcp_plot)
-print(use_rate_timeseries)
-print(use_gap_timeseries)
-print(acc_dev_timeseries)
-print(npc_dev_timeseries)
-print(access_npc_timeseries_with_data)
-do.call("grid.arrange", c(exceed_plot_list, ncol=3))
-grid.arrange(rel_gain_plots[["2015"]])
-grid.arrange(standard_metrics, dev_metrics)
-print(data_point_performance_plots)
-print(pit_plots)
+pdf(file.path(supp_dir, "stationarity.pdf"), width=11, height=8)
+  grid.arrange(standard_metrics, dev_metrics)
 graphics.off()
+
