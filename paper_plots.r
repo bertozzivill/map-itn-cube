@@ -720,6 +720,8 @@ background_raster[!is.na(background_raster)] <- 1
 background_mask_dt <- data.table(rasterToPoints(background_raster))
 names(background_mask_dt) <- c("long", "lat", "mask")
 
+save(background_mask_dt, file=file.path(out_dir, "background_mask_dt.Rdata"))
+
 background_plot_single <- levelplot(background_raster,
                                     par.settings=rasterTheme(region=c("gray80")),
                                     xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F 
@@ -881,7 +883,7 @@ plot_map <- function(rasters, metric, variable, maxpixels=5e5){
     if (variable %in% c("Access", "Use")){
       pal <- wpal("seaside", noblack = T)
     }else if (variable=="Use Rate"){
-      pal <- c("#722503", "#AB0002", "#F2A378", "#F4CA7D", "#C8D79E", "#70A800")
+      pal <-    rev(pnw_palette("Sailboat", 30))
     }else if (variable == "Percapita Nets"){
       pal <- rev(pnw_palette("Mushroom", 30))
     }
@@ -1019,7 +1021,7 @@ pdf(file.path(supp_dir, "reg_performance.pdf"), width=7, height=4)
 graphics.off()
 
 pit_plots <- ggplot(validation_metrics, aes(x=pit)) +
-              geom_histogram() +
+              geom_histogram(bins=10) +
               theme_minimal(base_size=14) +
               facet_grid(. ~ outcome_var) +
               labs(title="PIT distribution for different models",
@@ -1075,8 +1077,8 @@ standard_metrics <- ggplot(Africa_dt, aes(x = long, y = lat)) +
 dev_metrics <- ggplot(Africa_dt, aes(x = long, y = lat)) + 
                         geom_polygon(aes(fill=modeled, group = group)) + 
                         geom_path(aes(group = group), color = "black", size = 0.3) +
-                        geom_point(data=reg_data_sp[!variable %in% c("access", "use", "percapita_nets")], aes(color=value), size=0.25, alpha=0.75) +
-                        facet_wrap(.~variable_label) + 
+                        geom_point(data=reg_data_sp[variable=="access_dev" & year==2017], aes(color=value), size=0.25, alpha=0.75) +
+                        facet_grid(variable_label~year) + 
                         scale_fill_manual(values=c("white","gray80"), guide="none") + 
                         scale_color_gradientn(colors=wpal("seaside", noblack = T), name="Deviation\nMetric") +
                         coord_equal(xlim = c(-18, 52), ylim = c(-35, 38)) +
