@@ -70,6 +70,28 @@ Calculate relative effect of increasing access vs increasing use.
 Compare versions of cube outputs to each other.
 
 
+# Data Versioning
+Each of the following types of input data receives separate, dated labels:
+
+## Household survey data
+This includes three components: 
+* DHS data-- updated when the team cleans new surveys;
+* MICS -- at the moment, these are manually extracted and cleaned by the ITN person;
+* MIS and other surveys that do not report microdata-- again, extracted manually from time to time.
+
+In addition, this analysis includes some older surveys (DHS and MICS 3 and 4) extracted by Bonnie Mappin that I could not find matches for in the current DHS framework.
+
+This data is cleaned in the 01a_prep_hh_survey_data.r and 01b_prep_reportonly_survey_data.r scripts, and would benefit substantially from streamlining.
+
+## Net stock and flow data
+Updated approximately annually when new data is recevied from WHO. Cleaned using 02_prep_delivery_dist_data.r (requires customization)
+
+## Covariates
+Updated relatively rarely; Extracted using 000_make_dsub.r and 000_extract_covariates.r in the itn_cube folder
+
+# Output versioning
+Every time a stock and flow or ITN cube model is run, outputs are saved in a dated and uniquely labeled folder in the appropriate spot on the google cloud buckets. Older versions are not deleted to serve as comparison points. 
+
 
 
 
