@@ -39,7 +39,6 @@ data_fname <- "../02_data_covariates.csv"
 
 
 shape_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/shapefiles/"
-geofacet_fname <- "~/repos/map-itn-cube/geofacet_ssa_malaria.csv"
 pop_tif_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/gbd_populations"
 gaul_tif_fname <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/african_cn5km_2013_no_disputes.tif"
 iso_gaul_fname <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/iso_gaul_map.csv"
@@ -50,8 +49,8 @@ supp_dir <- file.path(out_dir, "supplementary_plots")
 dir.create(supp_dir, showWarnings = F)
 
 # directory for saving figure data to git repo (paper submission requirement)
-repo_fig_dir <- "/Users/bertozzivill/repos/map-itn-cube/paper_figures/figure_data/"
-
+repo_fig_dir <- "~repos/map-itn-cube/paper_figures/figure_data/"
+geofacet_fname <- "~/repos/map-itn-cube/paper_figures/geofacet_ssa_malaria.csv"
 
 # supplementary image default sizes
 supp_std_width <- 12

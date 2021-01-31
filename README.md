@@ -49,9 +49,9 @@ Construct the long bash command used to collate and save the desired covariates 
 Collate and save covariates from the `COVARIATE` bucket using the `dsub` command constructed above. 
 
 ### 00_generate_cube_master.r
-This is the script that gets submitted for a full run of the cube. Loads all input data and runs steps 1-4. TODO: modify step 4 to instead submit separate jobs for each year. 
+This is the script that gets submitted for a full run of the cube. Loads all input data and runs steps 1-3. Step 4 needs to be run separately to paralleleize correctly. 
 
-### 01_prep_data.r; 01_prep_data.r
+### 01_prep_data.r; 01_data_functions.r
 Load household-level survey data cleaned in the stock and flow code, calculate cluster-level access, aggregate to the 5km-by-5km pixel level.
 
 ### 02_prep_covariates.r
@@ -60,7 +60,7 @@ Subset full covariate set down to only those needed for model fitting; merge ont
 ### 03_regress.r; 03_inla_functions.r
 Run regression (including appropriate data transformations) and save outputs.
 
-### 04_predict_rasters.r; 04_prediction functions.r; 04_batch_submit_predictions.r
+### 04_predict_rasters.r; 04_prediction_functions.r; 04_batch_submit_predictions.r
 Recently modified to run separately for each year. Predict outputs on the monthly level; save national and continental aggregation of monthly time series; aggregate rasters to the annual level and save; calculate exceedance and relative uncertainty.
 
 ### 05_relative_gain.r
