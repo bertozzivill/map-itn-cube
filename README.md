@@ -1,5 +1,7 @@
 # map-itn-cube
 
+NOTE: This branch is under active development. To view the branch used for the 2021 research paper, switch to branch `publication-2021`.
+
 The code in this repo generates estimates of insecticide treated net (ITN) ownership, access, and use in sub-Saharan Africa. 
 
 ## Stock and Flow (stock_and_flow)
@@ -7,6 +9,18 @@ Mechanistic model fit in `rjags` to estimate country-specific time series of ITN
 
 ### 01a_prep_hh_survey_data.r
 Clean household-level survey data; save for ITN cube; aggregate to national level for stock and flow.
+
+| name           | type   | location                                                                                           | description                                                                                   |
+|----------------|--------|----------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|
+| main_dir       | input  | ~/stock_and_flow/input_data/00_survey_nmcp_manufacturer/household_surveys                          | Location of manually-extracted survey data (mostly MICS). See README in folder for more info. |
+| dhs_dir        | input  | ~/../Shared Drives/dhs-outputs/Standard_MAP_DHS_Outputs/DHS_ITN_Data/Output/[DATE]/standard_tables | Location of DHS data extracted by MAP team.                                                   |
+| code_dir       | input  | map-itn-cube/stock_and_flow                                                                        | Location of repo                                                                              |
+| out_dir        | output | ~/stock_and_flow/input_data/01_input_data_prep/[DATE]                                              | Output directory                                                                              |
+| *for_cube*     | output | out_dir/itn_hh_survey_data.csv                                                                     | Household-level data file to use in the ITN cube step, later. Contains geolocated data ONLY.  |
+| hh_size_props  | output | out_dir/hhsize_from_surveys.csv                                                                    | Household size distribution (1-10+ people) for use in the crop-to-access conversion.          |
+| summary_table  | output | out_dir/summary_tables/summary_table_raw.csv                                                       | Descriptor to track survey summary stats.                                                     |
+| all_data       | output | out_dir/itn_hh_data_all.csv                                                                        | Household-level data file INCLUDING non-geolocated points.                                    |
+| *survey_summary* | output | out_dir/itn_aggregated_survey_data.csv                                                             | Aggregated survey data. This is the main file that feeds into the next step!                  |
 
 ### 01b_prep_reportonly_survey_data.r
 Append those surveys whose results are only available in aggregated form to the stock and flow dataset.
