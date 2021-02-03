@@ -14,8 +14,8 @@ Clean household-level survey data; save for ITN cube; aggregate to national leve
 |----------------|--------|-----------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|
 | main_dir       | input  | Location of manually-extracted survey data (mostly MICS). See README in folder for more info. | ~/stock_and_flow/input_data/00_survey_nmcp_manufacturer/household_surveys                          |
 | dhs_dir        | input  | Location of DHS data extracted by MAP team.                                                   | ~/../Shared Drives/dhs-outputs/Standard_MAP_DHS_Outputs/DHS_ITN_Data/Output/[DATE]/standard_tables |
-| code_dir       | input  | Location of repo                                                                              | map-itn-cube/stock_and_flow                                                                        |
-| out_dir        | output | Output directory                                                                              | ~/stock_and_flow/input_data/01_input_data_prep/[DATE]                                              |
+| code_dir       | input  | Location of repo.                                                                             | map-itn-cube/stock_and_flow                                                                        |
+| out_dir        | output | Output directory.                                                                             | ~/stock_and_flow/input_data/01_input_data_prep/[DATE]                                              |
 | for_cube       | output | Household-level data file to use in the ITN cube step, later. Contains geolocated data ONLY.  | out_dir/itn_hh_survey_data.csv                                                                     |
 | hh_size_props  | output | Household size distribution (1-10+ people) for use in the crop-to-access conversion.          | out_dir/hhsize_from_surveys.csv                                                                    |
 | summary_table  | output | Descriptor to track survey summary stats.                                                     | out_dir/summary_tables/summary_table_raw.csv                                                       |
@@ -26,17 +26,68 @@ Clean household-level survey data; save for ITN cube; aggregate to national leve
 ### 01b_prep_reportonly_survey_data.r
 Append those surveys whose results are only available in aggregated form to the stock and flow dataset.
 
+| name          | type   | description                                                                                                 | location                                                |
+|---------------|--------|-------------------------------------------------------------------------------------------------------------|---------------------------------------------------------|
+| main_dir      | input  | Location to which data in the previous step was saved.                                                      | ~/stock_and_flow/input_data/01_input_data_prep/[DATE]   |
+| input_dir     | input  | Location of survey data that contains only survey-level information extracted from reports.                 | ~/stock_and_flow/input_data/00_survey_nmcp_manufacturer |
+| survey_count  | output | Small dataset tracking the number of surveys per country, relevant for sensitivity analysis.                | main_dir/survey_count.csv                               |
+| for_tsv       | output | Dataset used to organize surveys and countries for sensitivity analysis; not important for main model run.  | main_dir/batch_sensitivity.tsv                          |
+| summary_table | output | Descriptor to track survey summary stats (appended to version from prior step).                             | main_dir/summary_tables/summary_table_intermediate.csv  |
+| survey_data   | output | Aggregated survey data, including report-only surveys. This is the main file that feeds into the next step! | main_dir/itn_aggregated_survey_data_plus_reportonly.csv |
+
+
 ### 01c_prep_indicator_priors.r
 Run a regression to find coefficients for the "proportion of households with no net" and "mean nets per household" metrics.
+
+| name        | type   | description                                                                                                    | location                                              |
+|-------------|--------|----------------------------------------------------------------------------------------------------------------|-------------------------------------------------------|
+| main_dir    | input  | Location to which data in the previous step was saved.                                                         | ~/stock_and_flow/input_data/01_input_data_prep/[DATE] |
+| HH          | input  | Household-level data ("for_cube" in step 01a). POSSIBLE BUG: should this use "all_data" from step 01a instead? | main_dir/itn_hh_survey_data.csv                       |
+| all_outputs | output | Samples from the posterior distributions of the Stan model, used as priors in step 03.                         | main_dir/indicator_priors.csv                         |
+
 
 ### 01d_calculate_use.r
 Run a regression to find coefficients for the access-to-use conversion used in the World Malaria Report. Use is calculated overall, among children under 5, and among pregnant people.
 
+| name        | type   | description                                                                                                                        | location                                              |
+|-------------|--------|------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------|
+| main_dir    | input  | Location to which data in the previous step was saved.                                                                             | ~/stock_and_flow/input_data/01_input_data_prep/[DATE] |
+| code_dir    | input  | Location of repo.                                                                                                                  | map-itn-cube/stock_and_flow                           |
+| survey_data | input  | Aggregated survey data ("survey_summary" in step 01a).                                                                             | main_dir/itn_aggregated_survey_data.csv               |
+| all_data    | input  | Household-level survey data ("all_data" in step 01a).                                                                              | main_dir/itn_hh_data_all.csv                          |
+| all_traces  | output | Samples from the posterior distributions of the Stan model, used to calculate use from access for 3 demographic groups in step 03. | main_dir/access_use_relationship.csv                  |
+
 ### 02_prep_delivery_dist_data.r
 Clean and format ITN delivery and ITN distribution data.
 
+| name                | type   | description                                                                           | location                                                                                       |
+|---------------------|--------|---------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------|
+| main_dir            | input  | Location of net delivery and distribution data from WHO.                              | ~/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_[YEAR] |
+| out_dir             | output | Output directory.                                                                     | Variable                                                                                       |
+| these_distributions | output | Dataset of all LLIN distributions--descriptive.                                       | out_dir/prepped_llins_[DATE].csv                                                               |
+| new_nmcp            | output | these_distributions, reformatted to resemble the original NMCP data. Used in step 03. | out_dir/itn_distributions.csv                                                                  |
+| new_manu            | output | Dataset of manufacturer deliveries. Used in step 03.                                  | out_dir/manufacturer_deliveries.csv                                                            |
+
 ### 03_stock_and_flow.r; jags_functions.r
 Run and save results for the stock and flow model; run separately for each country.
+
+| name                                       | type   | description                                                                                                                                                                            | location                                                                                                                                   |
+|--------------------------------------------|--------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
+| main_dir                                   | input  | Location of prepped survey data.                                                                                                                                                       | ~/stock_and_flow/input_data/01_input_data_prep/[DATE]                                                                                      |
+| nmcp_manu_dir                              | input  | Location of cleaned net delivery and distribution data from WHO.                                                                                                                       | Variable, but e.g. stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020/20200929/ready_for_stockflow |
+| out_dir                                    | input  | Output directory.                                                                                                                                                                      | ~/stock_and_flow/results/[DATE_UNIQUELABEL]                                                                                                |
+| code_dir                                   | input  | Location of repo.                                                                                                                                                                      | map-itn-cube                                                                                                                               |
+| this_country                               | input  | ISO3 code of country for which to run the model.                                                                                                                                       |                                                                                                                                            |
+| sensitivity_survey_count; sensitivity type | input  | Needed only for sensitivity analysis-- parameters for what survey data to fit to.                                                                                                      |                                                                                                                                            |
+| start_year                                 | input  | integer year, usually 2000                                                                                                                                                             |                                                                                                                                            |
+| end_year                                   | input  | integer year, the latest year for which there is data.                                                                                                                                 |                                                                                                                                            |
+| projection_year                            | input  | integer year. Any time *later* than this year will receive different assumptions about the variability of net distribution data. Only used for projection scenarios, not typical runs. |                                                                                                                                            |
+| full_model_string                          | output | text file of JAGS model code.                                                                                                                                                          | out_dir/[ISO3]_model.txt                                                                                                                   |
+| time_df                                    | output | small .csv to track how long models take to run.                                                                                                                                       | out_dir/[ISO3]_time.csv                                                                                                                    |
+| final_metrics                              | output | Posterior draws of ITN access to pass on to the next steps.                                                                                                                            | out_dir/[ISO3]_access_draws.csv                                                                                                            |
+| R environment                              | output | Save all items in the R environment to use in later steps.                                                                                                                             | out_dir/[ISO3]_all_output.RData                                                                                                            |
+
+
 
 ### 04_compare_outputs.r 
 View results of stock and flow compared to earlier model versions.
