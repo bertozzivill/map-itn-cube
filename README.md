@@ -68,6 +68,7 @@ Clean and format ITN delivery and ITN distribution data.
 | new_nmcp            | output | these_distributions, reformatted to resemble the original NMCP data. Used in step 03. | out_dir/itn_distributions.csv                                                                  |
 | new_manu            | output | Dataset of manufacturer deliveries. Used in step 03.                                  | out_dir/manufacturer_deliveries.csv                                                            |
 
+
 ### 03_stock_and_flow.r; jags_functions.r
 Run and save results for the stock and flow model; run separately for each country.
 
@@ -84,25 +85,55 @@ Run and save results for the stock and flow model; run separately for each count
 | projection_year                            | input  | integer year. Any time *later* than this year will receive different assumptions about the variability of net distribution data. Only used for projection scenarios, not typical runs. |                                                                                                                                            |
 | full_model_string                          | output | text file of JAGS model code.                                                                                                                                                          | out_dir/[ISO3]_model.txt                                                                                                                   |
 | time_df                                    | output | small .csv to track how long models take to run.                                                                                                                                       | out_dir/[ISO3]_time.csv                                                                                                                    |
-| final_metrics                              | output | Posterior draws of ITN access to pass on to the next steps.                                                                                                                            | out_dir/[ISO3]_access_draws.csv                                                                                                            |
-| R environment                              | output | Save all items in the R environment to use in later steps.                                                                                                                             | out_dir/[ISO3]_all_output.RData                                                                                                            |
-
+| final_metrics                              | output | Posterior draws of ITN access to pass on to the next steps.                                                                                                                            | out_dir/[ISO3]_access_draws_.csv                                                                                                            |
+| R environment                              | output | Save all items in the R environment to use in later steps.                                                                                                                             | out_dir/[ISO3]\_all_output.RData                                                                                                            |
 
 
 ### 04_compare_outputs.r 
 View results of stock and flow compared to earlier model versions.
 
+| name                                                                                | type   | description                                                                                                                              | location                                                                       |
+|-------------------------------------------------------------------------------------|--------|------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------|
+| base_dir                                                                            | input  | Location where stock and flow results are saved. Not called "main dir" to avoid being overwritten when stock and flow results are loaded | ~/stock_and_flow/results                                                       |
+| func_dir                                                                            | input  | Location of repo.                                                                                                                        | map-itn-cube/stock_and_flow                                                    |
+| out_dir                                                                             | input  | Output directory.                                                                                                                        | ~/stock_and_flow/results/[DATE_UNIQUELABEL]                                    |
+| plot_dir                                                                            | input  | Location to save comparison plots                                                                                                        | ~/stock_and_flow/results/[LABEL]                                               |
+| model_dirs                                                                          | input  | vector of unique model result labels to compare. Must be at least length two, I don't recommend more than four.                          | e.g. c("20200418_BMGF_ITN_C1.00_R1.00_V2", "20200418_BMGF_ITN_C1.00_R1.00_V2") |
+| nets_in_houses_all, survey_data_all, nmcp_data_all, stock_all, half_life_comparison | output | various output datasets useful for later plotting.                                                                                       | plot_dir/for_plotting.RData                                                    |
+| timing_all                                                                          | output | aggregation of model runtime by country.                                                                                                 | plot_dir/timing_all.csv                                                        |
+| compare_outputs pdf                                                                 | output | Time-series comparisons of different models.                                                                                             | plot_dir/compare_outputs_[label_1]_[label 2]...pdf                             |
+| compare_half_lives pdf                                                              | output | Comparisons of different model ITN retention half-lives.                                                                                 | plot_dir/half_lives_[label_1]_[label 2]...pdf                                  |
+
 ### 05_aggregate_for_cube.r
 Collect national-level outputs to pass along to the itn_cube code.
 
-### 06_aggregate_for_wrm.r 
+| name             | type   | description                                                                                                                               | location                                        |
+|------------------|--------|-------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------|
+| reference_dir    | input  | Location where stock and flow results are saved. Not called "main dir" to avoid being overwritten when stock and flow results are loaded. | ~/stock_and_flow/results/[UNIQUE LABEL]         |
+| list_out_dir     | input  | Output directory, same as reference_dir.                                                                                                  | ~/stock_and_flow/results/[UNIQUE LABEL]         |
+| metrics_for_cube | output | Draw-level access metrics (NPC, probability of not having a net, and nets per household) for cube.                                        | out_dir/for_cube/stock_and_flow_by_draw.csv     |
+| means_for_cube   | output | Mean access metrics (NPC, probability of not having a net, and nets per household) for cube.                                              | out_dir/for_cube/stock_and_flow_probs_means.csv |
+| national_access  | output | Mean national access and NPC for cube.                                                                                                    | out_dir/for_cube/stock_and_flow_access_npc.csv  |
+
+
+### 06_aggregate_for_wmr.r 
 Calculate national and continental ITN indicators used in the World Malaria Report.
 
+| name              | type   | description                                                                                                                               | location                                              |
+|-------------------|--------|-------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------|
+| reference_dir     | input  | Location where stock and flow results are saved. Not called "main dir" to avoid being overwritten when stock and flow results are loaded. | ~/stock_and_flow/results/[UNIQUE LABEL]               |
+| list_out_dir      | input  | Output directory, same as reference_dir.                                                                                                  | ~/stock_and_flow/results/[UNIQUE LABEL]               |
+| code_dir          | input  | Location of repo.                                                                                                                         | map-itn-cube                                          |
+| wmr_input_dir     | input  | Location of outputs from step 01d.                                                                                                        | ~/stock_and_flow/input_data/01_input_data_prep/[DATE] |
+| indicator_summary | output | Quarterly values of all indicators calculated in script.                                                                                  | list_out_dir/for_cube/indicators_all.csv              |
+| wmr_subset        | output | National, annual values of indicators. This output file is given directly to WHO.                                                         | list_out_dir/for_cube/indicators_for_wmr.csv          |
+
+
 ### 07_half_life_convergence.r
-Generate plots to assess JAGS model fit based on the convergence of the half-life parameter; also save uncertainty intervals for half-life.
+Generate plots to assess JAGS model fit based on the convergence of the half-life parameter; also save uncertainty intervals for half-life. Diagnostic purposes only.
 
 ### 08_analyze_sensitivity.r
-For sensitivity analysis model runs, aggregate and plot results. 
+For sensitivity analysis model runs, aggregate and plot results. Not usually used.
 
 
 ## ITN "cube" (itn_cube)
