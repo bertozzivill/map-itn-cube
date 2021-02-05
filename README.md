@@ -142,29 +142,104 @@ Geospatial regression model fit in `R-INLA` that utilizes the national mean from
 ### 000_make_dsub.r:
 Construct the long bash command used to collate and save the desired covariates (see `covariate_key.csv`) from the `COVARIATE` bucket.
 
+| name          | type   | description                                                                 | location |
+|---------------|--------|-----------------------------------------------------------------------------|----------|
+| various       | input  | Various directories and google cloud specifications                         |          |
+| full_dsub_str | output | `dsub` command in the form of a string to paste into a google cloud console |          |
+
 ### 000_extract_covariates.r
 Collate and save covariates from the `COVARIATE` bucket using the `dsub` command constructed above. 
+
+No table since this should only be run via 000_make_dsub.
 
 ### 00_generate_cube_master.r
 This is the script that gets submitted for a full run of the cube. Loads all input data and runs steps 1-3. Step 4 needs to be run separately to paralleleize correctly. 
 
-### 01_prep_data.r; 01_data_functions.r
+| name             | type  | description                                                    | location                                            |
+|------------------|-------|----------------------------------------------------------------|-----------------------------------------------------|
+| input_dir        | input | Location of miscellaneous input data (iso-to-gaul names, etc). | ~/itn_cube/input_data                               |
+| cov_dir          | input | Location of cleaned covariates from step 000.                  | ~/itn_cube/results/covariates/[COV_DATE]            |
+| func_dir         | input | Location of repo.                                              | map-itn-cube/itn_cube/                              |
+| main_dir         | input | Location to save all results.                                  | ~/itn_cube/results/[UNIQUE_LABEL]                   |
+| survey_indir     | input | Location of household-level survey data.                       | stock_and_flow/input_data/01_input_data_prep/[DATE] |
+| indicators_indir | input | Location of stock and flow outputs to use.                     | ~/stock_and_flow/results/[STOCKFLOW_LABEL]/for_cube |
+
+### 01_prep_data.r; supported by 01_data_functions.r
 Load household-level survey data cleaned in the stock and flow code, calculate cluster-level access, aggregate to the 5km-by-5km pixel level.
+
+| name             | type   | description                                                    | location                                            |
+|------------------|--------|----------------------------------------------------------------|-----------------------------------------------------|
+| main_indir       | input  | Location of miscellaneous input data (iso-to-gaul names, etc). | ~/itn_cube/input_data                               |
+| func_dir         | input  | Location of repo.                                              | map-itn-cube/itn_cube/                              |
+| survey_indir     | input  | Location of household-level survey data.                       | stock_and_flow/input_data/01_input_data_prep/[DATE] |
+| indicators_indir | input  | Location of stock and flow outputs to use.                     | ~/stock_and_flow/results/[STOCKFLOW_LABEL]/for_cube |
+| main_outdir      | input  | Location to save all results.                                  | ~/itn_cube/results/[UNIQUE_LABEL]                   |
+| survey_summary   | output | Descriptive; summary stats of all surveys.                     | main_outdir/01_survey_summary.csv                   |
+| final_data       | output | Prepped household-level data for regression.                   | main_outdir/01_survey_data.csv                      |
+
 
 ### 02_prep_covariates.r
 Subset full covariate set down to only those needed for model fitting; merge onto survey data.
 
-### 03_regress.r; 03_inla_functions.r
+| name        | type   | description                                                           | location                                 |
+|-------------|--------|-----------------------------------------------------------------------|------------------------------------------|
+| main_indir  | input  | Location of miscellaneous input data (iso-to-gaul names, etc).        | ~/itn_cube/input_data                    |
+| cov_dir     | input  | Location of cleaned covariates from step 000.                         | ~/itn_cube/results/covariates/[COV_DATE] |
+| main_outdir | input  | Location to save all results.                                         | ~/itn_cube/results/[UNIQUE_LABEL]        |
+| data        | output | Prepped household-level data with covariates appended for regression. | main_outdir/02_data_covariates.csv       |
+
+
+### 03_regress.r; supported by 03_inla_functions.r
 Run regression (including appropriate data transformations) and save outputs.
+
+| name                        | type   | description                                                                   | location                                         |
+|-----------------------------|--------|-------------------------------------------------------------------------------|--------------------------------------------------|
+| input_dir                   | input  | Location of miscellaneous input data (iso-to-gaul names, etc).                | ~/itn_cube/input_data                            |
+| func_dir                    | input  | Location of repo.                                                             | map-itn-cube/itn_cube/                           |
+| main_indir                  | input  | Location of miscellaneous input data (iso-to-gaul names, etc).                | ~/itn_cube/input_data                            |
+| main_outdir                 | input  | Location to save all results.                                                 | ~/itn_cube/results/[UNIQUE_LABEL]                |
+| start_year                  | input  | Integer year to begin regression (usually 2000).                              |                                                  |
+| end_year                    | input  | Integer year to end regression.                                               |                                                  |
+| save_uncertainty            | input  | Set to F when debugging to avoid very large output files.                     |                                                  |
+| nsamp                       | input  | Integer number of posterior draws to sample.                                  |                                                  |
+| data                        | output | Final dataset that goes into regression                                       | main_outdir/03_data_for_model.csv                |
+| inla_outputs                | output | Large .RData file containing the regression objects for all three model runs. | main_outdir/03_inla_outputs.Rdata                |
+| inla_outputs_for_prediction | output | Small .RData file to use when you want to predict only mean outcomes.         | main_outdir/03_inla_outputs_for_prediction.Rdata |
+| inla_posterior_samples      | output | Medium .RData file that saves posterior samples for prediction in step 04.    | main_outdir/03_inla_posterior_samples.Rdata      |
 
 ### 04_predict_rasters.r; 04_prediction_functions.r; 04_batch_submit_predictions.r
 Recently modified to run separately for each year. Predict outputs on the monthly level; save national and continental aggregation of monthly time series; aggregate rasters to the annual level and save; calculate exceedance and relative uncertainty.
 
+| name                 | type   | description                                                                                 | location                                                                       |
+|----------------------|--------|---------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------|
+| this_year            | input  | Integer year to predict values.                                                             |                                                                                |
+| input_dir            | input  | Location of miscellaneous input data (iso-to-gaul names, etc).                              | ~/itn_cube/input_data                                                          |
+| func_dir             | input  | Location of repo.                                                                           | map-itn-cube/itn_cube/                                                         |
+| main_indir           | input  | Location of miscellaneous input data (iso-to-gaul names, etc).                              | ~/itn_cube/input_data                                                          |
+| main_outdir          | input  | Location to save all results.                                                               | ~/itn_cube/results/[UNIQUE_LABEL]                                              |
+| indicators_indir     | input  | Location of stock and flow outputs to use.                                                  | ~/stock_and_flow/results/[STOCKFLOW_LABEL]/for_cube                            |
+| static_cov_dir       | input  | Location of cleaned static covariates from step 000.                                        | ~/itn_cube/results/covariates/[COV_DATE]/static_covariates.csv                 |
+| annual_cov_dir       | input  | Location of cleaned annual covariates from step 000.                                        | ~/itn_cube/results/covariates/[COV_DATE]/annual_covariates.csv                 |
+| dynamic_cov_dir      | input  | Location of cleaned monthly covariates from step 000.                                       | ~/itn_cube/results/covariates/[COV_DATE]/dynamic_covariates/dynamic_[YEAR].csv |
+| testing              | input  | Set to T to reduce dataset size dramatically if testing/debugging.                          |                                                                                |
+| nat_level            | output | Dataset of monthly national-level time series for all outputs                               | main_outdir/04_predictions/aggregated/aggregated_predictions_[YEAR].csv        |
+| annual_summary_stats | output | This dataset of annual pixel-level results gets transformed into annual rasters and saved.  | main_outdir/04_predictions/rasters                                             |
+
+
 ### 05_relative_gain.r
 Calculate relative effect of increasing access vs increasing use. 
 
+Not used in a typical model run; for publication only.
+
 ### view_changes.r
 Compare versions of cube outputs to each other.
+
+| name     | type  | description                              | location                                |
+|----------|-------|------------------------------------------|-----------------------------------------|
+| new_dir  | input | Location to which new results are saved. | ~/itn_cube/results/[NEW_LABEL]/         |
+| old_dir  | input | Location to which old results are saved. | ~/itn_cube/results/[OLD_LABEL]/         |
+| func_dir | input | Location of repo.                        | map-itn-cube/itn_cube/                  |
+| out_path | input | Output directory.                        | new_dir/04_predictions/view_changes.pdf |
 
 
 # Data Versioning
