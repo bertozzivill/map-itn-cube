@@ -448,7 +448,7 @@ all_data[preg_use>1, preg_use:=1]
 
 # calculate survey-level over-allocation of nets (the proportion of nets that are unnecessarily located in households)
 all_data[, over_alloc:= pmax(n_itn-ceiling(n_defacto_pop/2), 0)/n_itn]
-all_data[, n_itn==0, over_alloc:=0]
+all_data[n_itn==0, over_alloc:=0]
 
 print("Summarizing surveys")
 survey_summary <- lapply(unique(all_data$SurveyId), function(this_svy){
