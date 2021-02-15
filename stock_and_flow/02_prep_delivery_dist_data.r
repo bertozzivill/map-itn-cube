@@ -13,7 +13,7 @@ library(ggplot2)
 library(data.table)
 
 rm(list=ls())
-code_dir <- "~/repos/map-itn-cube/stock_and_flow"
+code_dir <- "/Users/bertozzivill/repos/map-itn-cube/stock_and_flow"
 sf_countries <- fread(file.path(code_dir, "for_gcloud", "batch_country_list.tsv"))
 names(sf_countries) <- "ISO3"
 
