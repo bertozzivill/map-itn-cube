@@ -1120,17 +1120,17 @@ standard_metrics <- ggplot(Africa_dt, aes(x = long, y = lat)) +
                             plot.margin = unit(c(0, 0, 0, 0), "in"))
 
 dev_metrics <- ggplot(Africa_dt, aes(x = long, y = lat)) + 
-                        geom_polygon(aes(fill=modeled, group = group)) + 
-                        geom_path(aes(group = group), color = "black", size = 0.3) +
-                        geom_point(data=reg_data_sp[variable=="access_dev" & year==2017], aes(color=value), size=0.25, alpha=0.75) +
-                        facet_grid(variable_label~year) + 
-                        scale_fill_manual(values=c("white","gray80"), guide="none") + 
-                        scale_color_gradientn(colors=wpal("seaside", noblack = T), name="Deviation\nMetric") +
-                        coord_equal(xlim = c(-18, 52), ylim = c(-35, 38)) +
-                        labs(x = NULL, y = NULL, title = "") +
-                        theme_classic(base_size = 12) +
-                        theme(axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(),
-                              plot.margin = unit(c(0, 0, 0, 0), "in"))
+                    geom_polygon(aes(fill=modeled, group = group)) + 
+                    geom_path(aes(group = group), color = "black", size = 0.3) +
+                    geom_point(data=reg_data_sp[variable%in% c("access_dev", "use_gap", "percapita_net_dev")], aes(color=value), size=0.25, alpha=0.75) +
+                    facet_grid(.~variable_label) + 
+                    scale_fill_manual(values=c("white","gray80"), guide="none") + 
+                    scale_color_gradientn(colors=wpal("seaside", noblack = T), name="Deviation\nMetric") +
+                    coord_equal(xlim = c(-18, 52), ylim = c(-35, 38)) +
+                    labs(x = NULL, y = NULL, title = "") +
+                    theme_classic(base_size = 12) +
+                    theme(axis.line = element_blank(), axis.text = element_blank(), axis.ticks = element_blank(),
+                          plot.margin = unit(c(0, 0, 0, 0), "in"))
 
 
 pdf(file.path(supp_dir, "stationarity.pdf"), width=11, height=8)
