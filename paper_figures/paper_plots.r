@@ -1122,8 +1122,8 @@ standard_metrics <- ggplot(Africa_dt, aes(x = long, y = lat)) +
 dev_metrics <- ggplot(Africa_dt, aes(x = long, y = lat)) + 
                         geom_polygon(aes(fill=modeled, group = group)) + 
                         geom_path(aes(group = group), color = "black", size = 0.3) +
-                        geom_point(data=reg_data_sp[variable=="access_dev" & year==2017], aes(color=value), size=0.25, alpha=0.75) +
-                        facet_grid(variable_label~year) + 
+                        geom_point(data=reg_data_sp[variable%in% c("access", "use", "percapita_nets")], aes(color=value), size=0.25, alpha=0.75) +
+                        facet_grid(.~variable_label) + 
                         scale_fill_manual(values=c("white","gray80"), guide="none") + 
                         scale_color_gradientn(colors=wpal("seaside", noblack = T), name="Deviation\nMetric") +
                         coord_equal(xlim = c(-18, 52), ylim = c(-35, 38)) +
