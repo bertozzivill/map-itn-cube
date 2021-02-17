@@ -12,6 +12,8 @@ library(gridExtra)
 library(MapSuite)
 library(PNWColors)
 
+rm(list=ls())
+
 theme_set(theme_minimal(base_size = 24))
 
 shape_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/shapefiles/"
@@ -22,7 +24,6 @@ exceed_rasts <- all_rasts[all_rasts %like% "exceed"]
 # shapefile
 Africa <- readOGR(file.path(shape_dir, "Africa_simplified.shp"))
 Africa_dt <- data.table(fortify(Africa, region = "COUNTRY_ID"))
-Africa_dt[, modeled:= ifelse(id %in% unique(cube_nat_level$iso3), "Yes", "No")]
 
 load(file.path(main_dir, "../../final_plots/background_mask_dt.Rdata"))
 
