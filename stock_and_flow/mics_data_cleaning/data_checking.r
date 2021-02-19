@@ -40,8 +40,6 @@
 # from Z:\Malaria data\Surveys from other sources. Some permissions documented in Surveys permissions.docx
 
 # Eritrea2008: MIS survey, not in dhs_key. No source/permission info. 
-# Malawi2010: MIS, not in dhs_key (though a 2010 DHS is documented). 
-#             Note says "Source: Malawi MoH, via researchers at Tulane. Permission: make no mention of the fact we have this survey, nor share the data"
 
 # SierraLeone2011: unclear origin, not in dhs_key. Possibly from Adam Bennet? No permission info. 
 # Sudan 2009, Sudan2012: From WHO. Note says "We are allowed to state that we have this data, but we are not allowed to share it"
@@ -190,7 +188,6 @@ print("Other Surveys")
 print(unique(other_bonnie$Survey.hh))
 
 # Eritrea2008: MIS survey, not in dhs_key
-# Malawi2010: MIS, secret, not in dhs_key (though a 2010 DHS is documented)
 # SierraLeone2011: unclear origin, not in dhs_key
 # Sudan 2009, Sudan2012: From WHO
 # Zambia: 2010 & 2012 MIS, not in dhs_key
