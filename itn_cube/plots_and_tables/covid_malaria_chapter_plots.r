@@ -20,15 +20,15 @@ rm(list=ls())
 main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/"
 stockflow_main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results"
 comparison_dir <- file.path(main_dir, "map_version_comparison")
-out_dir <- "/Users/bertozzivill/Dropbox (IDM)/Malaria Team Folder/projects/map_intervention_impact/writing_and_presentations/dissertation/thesis/covid_malaria_chapter/"
+out_dir <- "/Users/bertozzivill/Dropbox (IDM)/Malaria Team Folder/projects/map_intervention_impact/writing_and_presentations/dissertation/thesis/overleaf/figures/covid_malaria_chapter/"
 pop_fname <- file.path(stockflow_main_dir, "../input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020/20200418/ITN_C1.00_R1.00",
                        "ihme_populations.csv")
 
 scenario_names <- c(`Business as Usual`="20200418_BMGF_ITN_C1.00_R1.00_V2",
                     `No Mass Campaigns`="20200418_BMGF_ITN_C0.00_R1.00_V2",
-                    `75% Mass Campaigns`="20200418_BMGF_ITN_C0.00_R0.75_V2",
-                    `50% Mass Campaigns`="20200418_BMGF_ITN_C0.00_R0.50_V2",
-                    `25% Mass Campaigns`="20200418_BMGF_ITN_C0.00_R0.25_V2",
+                    `75% of Routine`="20200418_BMGF_ITN_C0.00_R0.75_V2",
+                    `50% of Routine`="20200418_BMGF_ITN_C0.00_R0.50_V2",
+                    `25% of Routine`="20200418_BMGF_ITN_C0.00_R0.25_V2",
                     `No Nets Distributed`="20200507_BMGF_ITN_C0.00_R0.00_V2"
 )
 
@@ -43,6 +43,7 @@ all_scenarios <- rbindlist(lapply(names(scenario_names), function(this_name){
 
 all_scenarios <- melt(all_scenarios, id.vars=c("scenario", "iso3", "year", "month", "time", "pop"),
                       variable.name="type")
+all_scenarios[, scenario:=factor(scenario, levels=names(scenario_names), labels = names(scenario_names))]
 
 all_scenarios_quarterly <- copy(all_scenarios)
 all_scenarios_quarterly[, quarter:=floor((month-1)/3)+1]
@@ -77,10 +78,10 @@ annual_comparison_plot_full <- ggplot(all_scenarios[type=="use" & year>2015 &  y
   theme_classic() + 
   scale_x_continuous(breaks=seq(2016,2021,1))+
   ylim(c(0, 95)) +
-  scale_color_manual(values=rev(wes_palette("Zissou1", 6, "continuous"))) + 
-  # scale_color_manual(values=rev(pnw_palette("Bay", 6, "continuous"))) +
+  scale_color_manual(values=wes_palette("Zissou1", 6, "continuous")) + 
+  #scale_color_manual(values=pnw_palette("Sunset2", 6, "continuous")) +
   theme(legend.title = element_blank(),
-        legend.position="none",
+        legend.position="top",
         axis.text.x = element_text(angle=45, hjust=1),
         # axis.text.x = element_blank(),
         axis.line = element_blank(),
@@ -128,13 +129,15 @@ names(to_compare_percent) <- names(scenario_names)
 
 comparisons <- levelplot(to_compare_percent,
                          par.settings=rasterTheme(region= brewer.pal(9, "Blues")), at= seq(0, 1, 0.025),
-                         xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(6,1), main="Proportion of Business as Usual")
+                         xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(6,1), main="Proportion of Business as Usual")+
+                latticeExtra::layer(sp.polygons(Africa))
 
 baseline_plot <-  levelplot(to_compare_rasters,
                             par.settings=rasterTheme(region= wpal("seaside", noblack = T)), at= seq(0, 1, 0.025),
-                            xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(6,1), main="2020: Use Scenarios")
+                            xlab=NULL, ylab=NULL, scales=list(draw=F), margin=F, layout=c(6,1), main="ITN Use")+
+                  latticeExtra::layer(sp.polygons(Africa))
 
 
-pdf(file.path(out_dir, "compare_maps.pdf"), width=10, height=6)
+pdf(file.path(out_dir, "compare_maps.pdf"), width=10, height=5)
   grid.arrange(baseline_plot, comparisons, nrow=2)
 graphics.off()
