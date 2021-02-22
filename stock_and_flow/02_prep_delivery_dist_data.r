@@ -30,7 +30,7 @@ nmcp <- nmcp[ISO3 %in% sf_countries$ISO3]
 
 # use the minimum of 2014-18 to fill in as a proxy for routine distributions when you have no other information
 nmcp_mins <- unique(nmcp[year>=2014, list(MAP_Country_Name, LLIN=min(LLIN, na.rm=T)), by="ISO3"])
-write.csv(nmcp_mins, file.path(in_dir, "nmcp_2019_5yr_mins.csv"), row.names=F)
+write.csv(nmcp_mins, file.path(out_dir, "nmcp_2019_5yr_mins.csv"), row.names=F)
 setnames(nmcp_mins, "ISO3", "iso3")
 
 nmcp_fill_nas <- nmcp[, list(iso3=ISO3, year, llin=LLIN, type="NMCP")]
