@@ -20,7 +20,7 @@ rm(list=ls())
 main_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/"
 stockflow_main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results"
 comparison_dir <- file.path(main_dir, "map_version_comparison")
-out_dir <- "/Users/bertozzivill/Dropbox (IDM)/Malaria Team Folder/projects/map_intervention_impact/writing_and_presentations/dissertation/thesis/overleaf/figures/covid_malaria_chapter/"
+out_dir <- "/Users/bertozzivill/Dropbox (IDM)/Malaria Team Folder/projects/map_intervention_impact/writing_and_presentations/dissertation/thesis/overleaf/covid_malaria_chapter/"
 pop_fname <- file.path(stockflow_main_dir, "../input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020/20200418/ITN_C1.00_R1.00",
                        "ihme_populations.csv")
 
