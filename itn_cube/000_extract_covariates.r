@@ -27,13 +27,13 @@ which_non_null <- function(reference_raster){
 
 # function for extracting a raster stack and applying it to data
 extract_values <- function(raster_fname_list, extraction_indices, reference_raster, names=c()){
-  
+
   cov_stack <- lapply(raster_fname_list, function(this_fname){
     print(paste("extracting", this_fname))
     this_raster <- raster(this_fname)
     this_raster <- crop(this_raster, reference_raster)
   })
-  
+
   cov_stack <- stack(cov_stack)
   NAvalue(cov_stack)=-9999
   extracted_covs <- data.table(cov_stack[extraction_indices])
@@ -45,24 +45,34 @@ extract_values <- function(raster_fname_list, extraction_indices, reference_rast
   return(extracted_covs)
 }
 
-extract_covariates <- function(input_dir, main_indir, main_outdir, prediction_years) {
+extract_covariates <- function(
+  africa_raster_mask_tif,
+  covariate_key_csv,
+  covariate_key_out_csv,
+  static_covariates_csv,
+  annual_covariates_csv,
+  dynamic_covariates_csv_dir,
+  prediction_years,
+  filter_used_sam
+) {
   # Load list of covariates  ------------------------------------------------------------
 
   # load covariates
-  cov_dt <- fread(file.path(main_indir, "covariate_key.csv"))
+  cov_dt <- fread(covariate_key_csv)
   cov_dt[, used_sam:= as.logical(used_sam)]
 
-  # todo: remove this column when switching to new covariates
-  cov_dt <- cov_dt[used_sam==T]
+  if (filter_used_sam) {
+    cov_dt <- cov_dt[used_sam==T]
+  }
 
   # attach on list of vm directories passed into script via dsub
   vm_dirs <- data.table(cov_name=names(Sys.getenv(cov_dt$cov_name)), vm_path=Sys.getenv(cov_dt$cov_name))
   cov_dt <- merge(cov_dt, vm_dirs, by="cov_name", all.x=T)
 
-  write.csv(cov_dt, file.path(main_outdir, "covariate_key.csv"), row.names=F)
+  write.csv(cov_dt, covariate_key_out_csv, row.names=F)
 
   # find the "valid" cell values for which we want to predict in the itn prediction step
-  reference_raster <- raster(file.path(input_dir, "general/african_cn5km_2013_no_disputes.tif"))
+  reference_raster <- raster(africa_raster_mask_tif)
   raster_indices <- which_non_null(reference_raster)
 
   ### Static covariates  ----------------------------------------------------------------------------#######################
@@ -71,7 +81,7 @@ extract_covariates <- function(input_dir, main_indir, main_outdir, prediction_ye
   static_cov_dt <- cov_dt[type=="static", list(fname=file.path(vm_path, fname))]
 
   all_static <- extract_values(static_cov_dt$fname, raster_indices, reference_raster)
-  write.csv(all_static, file.path(main_outdir, "static_covariates.csv"), row.names = F)
+  write.csv(all_static, static_covariates_csv, row.names = F)
 
   rm(all_static); gc()
   print("static covariates successfully extracted")
@@ -115,7 +125,7 @@ extract_covariates <- function(input_dir, main_indir, main_outdir, prediction_ye
     all_annual[[this_name]] <- all_annual[[this_name]]/100
   }
 
-  write.csv(all_annual, file.path(main_outdir, "annual_covariates.csv"), row.names = F)
+  write.csv(all_annual, annual_covariates_csv, row.names = F)
 
   rm(all_annual); gc()
   print("annual covariates successfully extracted")
@@ -130,9 +140,8 @@ extract_covariates <- function(input_dir, main_indir, main_outdir, prediction_ye
 
   registerDoParallel(ncores-2)
 
-  dynamic_outdir <- file.path(main_outdir, "dynamic_covariates")
-  if (!dir.exists(dynamic_outdir)){
-    dir.create(dynamic_outdir)
+  if (!dir.exists(dynamic_covariates_csv_dir)){
+    dir.create(dynamic_covariates_csv_dir)
   }
 
   all_dynamic <- foreach(month_index=1:nrow(all_yearmons)) %dopar% {
@@ -167,15 +176,14 @@ extract_covariates <- function(input_dir, main_indir, main_outdir, prediction_ye
   print("saving dynamic covariates by year")
   for (this_year in prediction_years){
     print(this_year)
-    write.csv(all_dynamic[year==this_year], file.path(dynamic_outdir, paste0("dynamic_", this_year,".csv")), row.names=F)
+    dynamic_covariates_this_year_csv <- file.path(dynamic_covariates_csv_dir, paste0("dynamic_", this_year, ".csv"))
+    write.csv(all_dynamic[year==this_year], dynamic_covariates_this_year_csv, row.names=F)
   }
   rm(all_dynamic); gc()
   print("dynamic covariates successfully extracted")
 }
 
 main <- function() {
-  package_load(c("zoo","raster", "doParallel", "data.table", "rgdal", "RColorBrewer", "cvTools", "boot", "stringr", "dismo", "gbm"))
-
   if(Sys.getenv("input_dir")=="") {
     input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/"
     main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20190614_rearrange_scripts/"
@@ -186,11 +194,42 @@ main <- function() {
     main_outdir <- Sys.getenv("main_outdir")
   }
 
-  prediction_years <- 2000:2021
-  extract_covariates(input_dir, main_indir, main_outdir, prediction_years)
+  parser <- arg_parser("Extract all covariates from mastergrids and aggregate them into a smaller dataset for the cube.")
+  parser <- add_argument(parser, "--start_year", help="Prediction start year", default=2000)
+  parser <- add_argument(parser, "--end_year", help="Prediction end year", default=2021)
+  parser <- add_argument(parser, "--filter_used_sam", help="Boolean. If True, only uses covariates for which used_sam column is true in covariate_key file", default=TRUE)
+  parser <- add_argument(parser, "--africa_raster_mask", help="Input TIF file. Raster mask file, masking non-african area with value -9999. Default path can be adjusted with env 'input_dir'", default=file.path(input_dir, 'general', 'african_cn5km_2013_no_disputes.tif'))
+  parser <- add_argument(parser, "--covariate_key", help="Input CSV file. File containing covariates to be used and relative paths. The cov_name column contains the covariate name and there must be a same-names environment variable containing the covariate's data directory. Default path can be adjusted with env 'main_indir'", default=file.path(main_indir, 'covariate_key.csv'))
+  parser <- add_argument(parser, "--covariate_key_out", help="Output CSV file. Same as original, but includes vm_path column. Default path can be adjusted with env 'main_outdir'", default=file.path(main_outdir, 'covariate_key.csv'))
+  parser <- add_argument(parser, "--static_covariates", help="Output CSV file. File containing cleaned extracted static covariates. Default path can be adjusted with env 'main_outdir'", default=file.path(main_outdir, 'static_covariates.csv'))
+  parser <- add_argument(parser, "--annual_covariates", help="Output CSV file. File containing cleaned extracted annual covariates. Default path can be adjusted with env 'main_outdir'", default=file.path(main_outdir, 'annual_covariates.csv'))
+  parser <- add_argument(parser, "--dynamic_covariates", help="Output CSV dir. Directory for files containing cleaned extracted dynamic covariates. Default path can be adjusted with env 'main_outdir'", default=file.path(main_outdir, 'dynamic_covariates'))
+
+  argv <- parse_args(parser)
+
+  prediction_years <- argv$start_year:argv$end_year
+
+  extract_covariates(
+    argv$africa_raster_mask,
+    argv$covariate_key,
+    argv$covariate_key_out,
+    argv$static_covariates,
+    argv$annual_covariates,
+    argv$dynamic_covariates,
+    prediction_years,
+    argv$filter_used_sam
+  )
 }
 
 # DON'T USE THIS-- FOR FULL DSUB SEE 000_MAKE_DSUB.R
 # dsub --provider google-v2 --project map-special-0001 --image gcr.io/map-demo-0001/map_geospatial --regions europe-west1 --label "type=itn_cube" --machine-type n1-ultramem-40 --logging gs://map_users/amelia/itn/itn_cube/logs --input-recursive input_dir=gs://map_users/amelia/itn/itn_cube/input_data main_indir=gs://map_users/amelia/itn/itn_cube/results/covariates/20190729/ cov_dir=gs://mastergrids_5km --input run_individually=gs://map_users/amelia/itn/code/generate_cube/run_individually.txt CODE=gs://map_users/amelia/itn/code/generate_cube/03_prep_covariates.r --output-recursive main_outdir=gs://map_users/amelia/itn/itn_cube/results/covariates/20190729/ --command 'Rscript ${CODE}'
 
-main()
+package_load(c("zoo","raster", "doParallel", "data.table", "rgdal", "RColorBrewer", "cvTools", "boot", "stringr", "dismo", "gbm", "argparser", "tryCatchLog", "futile.logger"))
+
+options(keep.source = TRUE)
+options(keep.source.pkgs = TRUE)
+options(tryCatchLog.include.compact.call.stack = FALSE)
+flog.threshold(ERROR)
+tryCatchLog({
+  main()
+})
