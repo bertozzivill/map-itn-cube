@@ -11,16 +11,22 @@
 ## 
 ##############################################################################################################
 
-prep_covariates <- function(cov_dir, main_indir, main_outdir){
+prep_covariates <- function(
+  survey_data_csv,
+  static_covariates_csv,
+  annual_covariates_csv,
+  dynamic_covariates_csv_dir,
+  data_covariates_out_csv
+){
   
   # Load data from create_database.r,  ------------------------------------------------------------
-  data<-fread(file.path(main_indir, "01_survey_data.csv"))
+  data<-fread(survey_data_csv)
   data[, row_id:=as.integer(row.names(data))]
 
   ### Static covariates  ----------------------------------------------------------------------------#######################  
   
   print("Extracting static covariates")
-  all_static <- fread(file.path(cov_dir, "static_covariates.csv"))
+  all_static <- fread(static_covariates_csv)
   data <- merge(data, all_static, by="cellnumber", all.x=T)
   rm(all_static); gc()
   print("static covariates successfully extracted")
@@ -28,7 +34,7 @@ prep_covariates <- function(cov_dir, main_indir, main_outdir){
   ### Annual covariates  ----------------------------------------------------------------------------#######################  
   
   print("Extracting annual covariates")
-  all_annual <- fread(file.path(cov_dir, "annual_covariates.csv"))
+  all_annual <- fread(annual_covariates_csv)
   data <- merge(data, all_annual, by=c("year", "cellnumber"), all.x=T)
   rm(all_annual); gc()
   print("annual covariates successfully extracted")
@@ -37,7 +43,7 @@ prep_covariates <- function(cov_dir, main_indir, main_outdir){
   
   print("Extracting dynamic covariates")
 
-  dynamic_dir <- file.path(cov_dir, "dynamic_covariates")
+  dynamic_dir <- dynamic_covariates_csv_dir
   all_dynamic <- lapply(list.files(dynamic_dir, full.names = T), fread)
   all_dynamic <- rbindlist(all_dynamic)
   
@@ -49,7 +55,7 @@ prep_covariates <- function(cov_dir, main_indir, main_outdir){
   print("dynamic covariates successfully extracted")
   
   print("saving to file")
-  write.csv(data, file.path(main_outdir, "02_data_covariates.csv"), row.names = F)
+  write.csv(data, data_covariates_out_csv, row.names = F)
 }
 
 ## TO RUN THIS SCRIPT INDIVIDUALLY, READ HERE
@@ -81,10 +87,11 @@ if (Sys.getenv("run_individually")!=""){
     cov_dir <- Sys.getenv("cov_dir")
   }
   
-  prep_covariates(cov_dir, main_indir, main_outdir)
-  
+  prep_covariates(
+    survey_data_csv = file.path(main_indir, "01_survey_data.csv"),
+    static_covariates_csv = file.path(cov_dir, "static_covariates.csv"),
+    annual_covariates_csv = file.path(cov_dir, "annual_covariates.csv"),
+    dynamic_covariates_csv_dir = file.path(cov_dir, "dynamic_covariates"),
+    data_covariates_out_csv = file.path(main_outdir, "02_data_covariates.csv")
+  )
 }
-
-
-
-
