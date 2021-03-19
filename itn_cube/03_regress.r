@@ -9,18 +9,29 @@
 ## 
 ##############################################################################################################
 
-run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, start_year, end_year, save_uncertainty=F, nsamp=100){
+run_dev_gap_models <- function(
+  data_covariates_csv,
+  func_dir,
+  inla_out_rdata,
+  inla_for_prediction_out_rdata,
+  inla_posterior_samples_out_rdata,
+  data_for_model_out_csv,
+  start_year,
+  end_year,
+  save_uncertainty=F,
+  nsamp=100
+){
   
   # set.seed(212)
   
   # load relevant functions
   source(file.path(func_dir, "03_inla_functions.r"))
-  output_fname <- file.path(main_outdir, "03_inla_outputs.Rdata")
-  summary_output_fname <- file.path(main_outdir, "03_inla_outputs_for_prediction.Rdata")
-  posterior_output_fname <- file.path(main_outdir, "03_inla_posterior_samples.Rdata")
+  output_fname <- inla_out_rdata
+  summary_output_fname <- inla_for_prediction_out_rdata
+  posterior_output_fname <- inla_posterior_samples_out_rdata
   
   ## Load data 
-  data <- fread(file.path(main_indir, "02_data_covariates.csv"))
+  data <- fread(data_covariates_csv)
   data <- data[order(row_id)]
   
   ## Check for collinearity ## ---------------------------------------------------------
@@ -155,7 +166,7 @@ run_dev_gap_models <- function(input_dir, func_dir, main_indir, main_outdir, sta
   # limit data to chosen "end year"
   data[, capped_time:=pmin(time, end_year-0.046)]
   
-  write.csv(data, file.path(main_outdir, "03_data_for_model.csv"), row.names=F)
+  write.csv(data, data_for_model_out_csv, row.names=F)
   ## Run model ##------------------------------------------------------------
 
   ncores <- detectCores()
@@ -270,13 +281,11 @@ if (Sys.getenv("run_individually")!=""){
   
   package_load(c("zoo","raster", "doParallel", "data.table", "rgdal", "INLA", "RColorBrewer", "cvTools", "boot", "stringr", "dismo", "gbm", "rgeos"))
   
-  if(Sys.getenv("input_dir")=="") {
-    input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
+  if(Sys.getenv("main_indir")=="") {
     main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200418_BMGF_ITN_C1.00_R1.00_V2/"
     main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200418_BMGF_ITN_C1.00_R1.00_V2/"
     func_dir <- "/Users/bertozzivill/repos/map-itn-cube/itn_cube/"
   } else {
-    input_dir <- Sys.getenv("input_dir")
     main_indir <- Sys.getenv("main_indir")
     main_outdir <- Sys.getenv("main_outdir")
     func_dir <- Sys.getenv("func_dir") # code directory for function scripts
@@ -285,8 +294,16 @@ if (Sys.getenv("run_individually")!=""){
   start_year=2000
   end_year=2021
   
-  run_dev_gap_models(input_dir, func_dir, main_indir, main_outdir, start_year=start_year, end_year=end)
-  
+  run_dev_gap_models(
+    data_covariates_csv = file.path(main_indir, "02_data_covariates.csv"),
+    func_dir,
+    inla_out_data = file.path(main_outdir, "03_inla_outputs.Rdata"),
+    inla_for_prediction_out_rdata = file.path(main_outdir, "03_inla_outputs_for_prediction.Rdata"),
+    inla_posterior_samples_out_rdata = file.path(main_outdir, "03_inla_posterior_samples.Rdata"),
+    data_for_model_out_csv = file.path(main_outdir, "03_data_for_model.csv"),
+    start_year=start_year,
+    end_year=end
+  )
 }
 
 
