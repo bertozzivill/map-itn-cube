@@ -86,7 +86,7 @@ for (idx in 1:nrow(to_submit)){
                      paste0("CODE=", cloud_func_dir, "04_predict_rasters.r")
   )
   
-  final_str <- paste0("--command 'Rscript ${CODE} ",  this_year, "' ")
+  final_str <- paste0("--command 'Rscript ${CODE} --year ",  this_year, "' ")
   
   full_dsub_str <- paste(dsub_str, label_str, machine_str, disk_str, boot_disk_str, preempt_str,
                          logging_str, input_str, input_dir_str, output_dir_str, final_str)
