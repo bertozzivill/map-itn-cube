@@ -24,19 +24,23 @@ time_passed <- function(tic, toc){
 
 predict_rasters <- function(
   this_year,
-  input_dir,
-  main_indir,
-  indicators_indir,
-  main_outdir,
-  static_cov_dir,
-  annual_cov_dir,
-  dynamic_cov_dir,
+  nsamp,
+  prediction_type,
+  iso_gaul_map_csv,
+  africa_raster_mask_tif,
+  inla_outputs_for_prediction_rdata,
+  inla_posterior_samples_rdata,
+  draw_metrics_csv,
+  national_access_csv,
+  static_covariates_csv,
+  annual_covariates_csv,
+  dynamic_covariates_csv,
+  nat_level_out_csv_dir,
+  annual_summary_stats_out_tif_dir,
   func_dir,
   testing
 ) {
   print("Predicting")
-  prediction_type <- "uncertainty"
-  nsamp <- 200
 
   start_time <- Sys.time()
   print(paste("Start time:", start_time))
@@ -48,11 +52,8 @@ predict_rasters <- function(
   print(mem_used())
 
   # output directory creation
-  out_dir <- file.path(main_outdir, "04_predictions")
-  dir.create(out_dir, recursive=T,showWarnings = F)
-  dir.create(file.path(out_dir, "aggregated"), showWarnings = F)
-  dir.create(file.path(out_dir, "rasters"), showWarnings = F)
-  dir.create(file.path(out_dir, "raster_draws"), showWarnings=F)
+  dir.create(nat_level_out_csv_dir, recursive = T, showWarnings = F)
+  dir.create(annual_summary_stats_out_tif_dir, recursive = T, showWarnings = F)
 
   # load function script
   source(file.path(func_dir, "03_inla_functions.r")) # for ll_to_xyz and predict_inla
@@ -60,16 +61,14 @@ predict_rasters <- function(
 
   # locations of prediction objects
   if (prediction_type=="uncertainty"){
-    stockflow_fname <- file.path(indicators_indir, "stock_and_flow_by_draw.csv")
-    # stockflow_fname <- file.path(indicators_indir, "stock_and_flow_access_npc.csv")
-    for_prediction_fname <- file.path(main_indir, "03_inla_posterior_samples.Rdata")
+    stockflow_fname <- draw_metrics_csv
+    for_prediction_fname <- inla_posterior_samples_rdata
   }else if (prediction_type=="mean"){
-    stockflow_fname <- file.path(indicators_indir, "stock_and_flow_access_npc.csv")
-    for_prediction_fname <- file.path(main_indir, "03_inla_outputs_for_prediction.Rdata")
+    stockflow_fname <- national_access_csv
+    for_prediction_fname <- inla_outputs_for_prediction_rdata
   }else{
     stop(paste("Unknown prediction type", prediction_type))
   }
-
 
   inla_metric_names <- c("access_dev", "use_gap", "percapita_net_dev")
 
@@ -99,7 +98,7 @@ predict_rasters <- function(
   }
 
   # name map
-  iso_gaul_map<-fread(file.path(input_dir, "general/iso_gaul_map.csv"))
+  iso_gaul_map<-fread(iso_gaul_map_csv)
   setnames(iso_gaul_map, c("GAUL_CODE", "COUNTRY_ID", "NAME"), c("gaul", "iso3", "country"))
 
   print("Input object loading complete.")
@@ -109,7 +108,7 @@ predict_rasters <- function(
   print("Loading covariates")
 
   print("Dynamic")
-  thisyear_covs <- fread(dynamic_cov_dir)
+  thisyear_covs <- fread(dynamic_covariates_csv)
   # find and delete the cellnumbers that contain NA's for any month
   to_keep <- thisyear_covs[, lapply(.SD, sum), by=cellnumber]
   to_keep <- to_keep[complete.cases(to_keep)]$cellnumber
@@ -117,11 +116,11 @@ predict_rasters <- function(
   rm(to_keep)
 
   print("Annual")
-  thisyear_covs <- merge(thisyear_covs, fread(annual_cov_dir),
+  thisyear_covs <- merge(thisyear_covs, fread(annual_covariates_csv),
                          by=c("cellnumber", "year"))
 
   print("Static")
-  thisyear_covs <- merge(thisyear_covs, fread(static_cov_dir), by="cellnumber")
+  thisyear_covs <- merge(thisyear_covs, fread(static_covariates_csv), by="cellnumber")
   thisyear_covs[, "Intercept":=1]
 
   thisyear_covs <- thisyear_covs[complete.cases(thisyear_covs)]
@@ -133,7 +132,7 @@ predict_rasters <- function(
 
   ## Load and format pixel spatial info  ----------------------------------------------------------------------------------------
   print("Loading and formatting pixel locations")
-  national_raster <- raster(file.path(input_dir, "general/african_cn5km_2013_no_disputes.tif"))
+  national_raster <- raster(africa_raster_mask_tif)
   NAvalue(national_raster) <- -9999
 
   prediction_cells <- data.table(row_id=prediction_indices, gaul=extract(national_raster, prediction_indices))
@@ -264,7 +263,7 @@ predict_rasters <- function(
   nat_level <- merge(nat_level, time_map, all.x=T)
   nat_level[, year:=this_year]
   suffix <- ifelse(prediction_type=="mean", "_mean_ONLY", "")
-  write.csv(nat_level, file.path(out_dir, "aggregated", paste0("aggregated_predictions_", this_year, suffix, ".csv")), row.names=F)
+  write.csv(nat_level, file.path(nat_level_out_csv_dir, paste0("aggregated_predictions_", this_year, suffix, ".csv")), row.names=F)
 
   print("Summary stats calculated.")
   print(mem_used())
@@ -293,7 +292,7 @@ predict_rasters <- function(
     print(this_var)
     var_maps <- lapply(colnames(annual_summary_stats[[this_var]]), function(this_col){
       print(this_col)
-      this_out_fname <- file.path(out_dir, "rasters", paste0("ITN_", this_year, "_", this_var, "_", this_col, ".tif"))
+      this_out_fname <- file.path(annual_summary_stats_out_tif_dir, paste0("ITN_", this_year, "_", this_var, "_", this_col, ".tif"))
       make_raster(annual_summary_stats[[this_var]][, this_col], cellnumbers=prediction_cells$cellnumber, raster_template=national_raster, out_fname=this_out_fname)
     })
   })
@@ -303,14 +302,9 @@ predict_rasters <- function(
 }
 
 main <- function() {
-  print("Loading Packages")
-  package_load(c("zoo", "VGAM", "raster", "doParallel", "data.table", "rgdal", "INLA", "RColorBrewer", "cvTools", "boot", "stringr", "dismo", "gbm", "pryr",
-                 "matrixStats", "Matrix.utils"))
-
   ## Input info ----------------------------------------------------------------------------------------
 
   if(Sys.getenv("input_dir")=="") {
-    this_year <- 2012
     input_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data"
     main_indir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200501_BMGF_ITN_C1.00_R1.00_V2_with_uncertainty/"
     indicators_indir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2/for_cube"
@@ -321,7 +315,6 @@ main <- function() {
     func_dir <- "/Users/bertozzivill/repos/map-itn-cube/itn_cube/"
     testing <- T
   } else {
-    this_year <- commandArgs(trailingOnly=TRUE)[1]
     input_dir <- Sys.getenv("input_dir")
     main_indir <- Sys.getenv("main_indir")
     indicators_indir <- Sys.getenv("indicators_indir")
@@ -333,18 +326,63 @@ main <- function() {
     testing <- F
   }
 
+  parser <- arg_parser("Predict monthly ITN rasters, transform them back to level space, and aggregate up to annual values")
+  parser <- add_argument(parser, "--year", help="Integer. Year to predict.", default=2012)
+  parser <- add_argument(parser, "--nsamp", help="Number of samples for prediction", default=200)
+  parser <- add_argument(parser, "--prediction_type", help="Type of prediction, one of 'uncertainty', or 'mean'", default="uncertainty")
+  parser <- add_argument(parser, "--testing", help="Boolean. Set to true when enabling testing mode. Defaults to TRUE when any of the other envs is set. FALSE otherwise", default=testing)
+  parser <- add_argument(parser, "--code_dir", help="Directory containing model code. Default path can be adjusted with env 'func_dir'", default=func_dir)
+  parser <- add_argument(parser, "--iso_gaul_map", help="Input CSV file. ISO-to-GAUL names. Default path can be adjusted with env 'input_dir'", default=file.path(input_dir, "general", "iso_gaul_map.csv"))
+  parser <- add_argument(parser, "--africa_raster_mask", help="Input TIF file. Raster mask file, masking non-african area with value -9999. Default path can be adjusted with env 'input_dir'", default=file.path(input_dir, 'general', 'african_cn5km_2013_no_disputes.tif'))
+  parser <- add_argument(parser, "--inla_outputs_for_prediction", help="Input Rdata file. Inla outputs from step 3. Default path can be adjusted with env 'main_indir'", default=file.path(main_indir, "03_inla_outputs_for_prediction.Rdata"))
+  parser <- add_argument(parser, "--inla_posterior_samples", help="Input Rdata file. Posterior samples for prediction from step 3. Default path can be adjusted with env 'main_indir'", default=file.path(main_indir, "03_inla_posterior_samples.Rdata"))
+  parser <- add_argument(parser, "--draw_metrics", help="Input CSV file. Draw-level access metrics (NPC, probability of not having a net, and nets per household) for cube. Default path can be adjusted with env 'indicators_indir'", default=file.path(indicators_indir, "stock_and_flow_by_draw.csv"))
+  parser <- add_argument(parser, "--national_access", help="Input CSV file. Mean national access and NPC. Default path can be adjusted with env 'indicators_indir'", default=file.path(indicators_indir, "stock_and_flow_access_npc.csv"))
+  parser <- add_argument(parser, "--static_covariates", help="Input CSV file. File containing cleaned extracted static covariates. Default path can be adjusted with env 'static_cov_dir'", default=static_cov_dir)
+  parser <- add_argument(parser, "--annual_covariates", help="Input CSV file. File containing cleaned extracted annual covariates. Default path can be adjusted with env 'annual_cov_dir'", default=annual_cov_dir)
+  parser <- add_argument(parser, "--dynamic_covariates", help="Input CSV files directory. Directory containing cleaned extracted dynamic covariates. Default path can be adjusted with env 'cov_dir'", default=dirname(dynamic_cov_dir))
+  parser <- add_argument(parser, "--nat_level", help="Output CSV dir. Dataset of monthly national-level time series for all outputs. Default path can be adjusted with env 'main_outdir'", default=file.path(main_outdir, "04_predictions", "aggregated"))
+  parser <- add_argument(parser, "--annual_summary_stats", help="Output TIF dir. This dataset of annual pixel-level results gets transformed into annual rasters and saved. Default path can be adjusted with env 'main_outdir'", default=file.path(main_outdir, "04_predictions", "rasters"))
+
+  args <- parse_args(parser)
+
+  dynamic_covariates_year <- file.path(args$dynamic_covariates, paste0("dynamic_", args$year, ".csv"))
+
+  for (input in c("code_dir", "iso_gaul_map", "africa_raster_mask", "inla_outputs_for_prediction", "inla_posterior_samples", "draw_metrics", "national_access", "static_covariates", "annual_covariates", "dynamic_covariates")) {
+    file <- args[[input]]
+    if (!file.exists(file)) {
+      stop(sprintf("Problem with input '%s', file '%s' doesn't exist.", input, file))
+    }
+  }
+
   predict_rasters(
-    this_year,
-    input_dir,
-    main_indir,
-    indicators_indir,
-    main_outdir,
-    static_cov_dir,
-    annual_cov_dir,
-    dynamic_cov_dir,
-    func_dir,
-    testing
+    args$year,
+    args$nsamp,
+    args$prediction_type,
+    args$iso_gaul_map,
+    args$africa_raster_mask,
+    args$inla_outputs_for_prediction,
+    args$inla_posterior_samples,
+    args$draw_metrics,
+    args$national_access,
+    args$static_covariates,
+    args$annual_covariates,
+    dynamic_covariates_year,
+    args$nat_level,
+    args$annual_summary_stats,
+    args$code_dir,
+    args$testing
   )
 }
 
-main()
+print("Loading Packages")
+package_load(c("zoo", "VGAM", "raster", "doParallel", "data.table", "rgdal", "INLA", "RColorBrewer", "cvTools", "boot", "stringr", "dismo", "gbm", "pryr",
+               "matrixStats", "Matrix.utils", "argparser", "tryCatchLog", "futile.logger"))
+
+options(keep.source = TRUE)
+options(keep.source.pkgs = TRUE)
+options(tryCatchLog.include.compact.call.stack = FALSE)
+flog.threshold(ERROR)
+tryCatchLog({
+  main()
+})
