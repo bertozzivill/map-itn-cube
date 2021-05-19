@@ -1,4 +1,4 @@
-###############################################################################################################
+#file.path(main_indir, "general/iso_gaul_map.csv")##############################################################################################################
 ## 01_prep_data.r
 ## Amelia Bertozzi-Villa
 ## February 2020
@@ -11,17 +11,24 @@
 ##      To run this script individually, see instructions at the bottom of the page. 
 ##############################################################################################################
 
-prep_data <- function(main_indir, survey_indir, indicators_indir, main_outdir, func_dir){
+prep_data <- function(
+  iso_gaul_map_csv,
+  africa_raster_mask_tif,
+  stock_and_flow_probs_means_csv,
+  itn_hh_survey_data_csv,
+  survey_data_out_csv,
+  survey_summary_out_csv,
+  func_dir
+){
   
-  out_fname <- file.path(main_outdir, "01_survey_data.csv")
   source(file.path(func_dir, "01_data_functions.r"))
   
-  stock_and_flow_outputs <- fread(file.path(indicators_indir, "stock_and_flow_probs_means.csv"))
-  iso_gaul_map<-fread(file.path(main_indir, "general/iso_gaul_map.csv"))
+  stock_and_flow_outputs <- fread(stock_and_flow_probs_means_csv)
+  iso_gaul_map<-fread(iso_gaul_map_csv)
   setnames(iso_gaul_map, c("GAUL_CODE", "COUNTRY_ID", "NAME"), c("gaul", "iso3", "country"))
   
   # load household data and survey-to-country key, keep only those in country list
-  HH <- fread(file.path(survey_indir, "itn_hh_survey_data.csv"))
+  HH <- fread(itn_hh_survey_data_csv)
   
   # keep only the years and  columns we use
   
@@ -220,7 +227,7 @@ prep_data <- function(main_indir, survey_indir, indicators_indir, main_outdir, f
     return(svy_summary)
   })
   survey_summary <- data.table(rbindlist(survey_summary))
-  write.csv(survey_summary, file=file.path(main_outdir, "01_survey_summary.csv"), row.names=F)
+  write.csv(survey_summary, file=survey_summary_out_csv, row.names=F)
   
   
   # Cleanup: remove flawed points, print summary messages, aggregate to pixel level, save ------------------------------------------------------------
@@ -231,7 +238,7 @@ prep_data <- function(main_indir, survey_indir, indicators_indir, main_outdir, f
   final_data<-final_data[lat!=0 & lon!=0]
   
   # Check for invalid points, and attempt to reposition them
-  national_raster<-raster(file.path(main_indir, "general/african_cn5km_2013_no_disputes.tif")) # master country layer
+  national_raster<-raster(africa_raster_mask_tif) # master country layer
   NAvalue(national_raster)=-9999
   
   print("Attempting to reposition points")
@@ -281,15 +288,16 @@ prep_data <- function(main_indir, survey_indir, indicators_indir, main_outdir, f
   final_data[, gaul:=NULL]
   
   # add markers for where the data came from
-  indicator_subdir <- gsub(".*/results/(.*)/for_cube", "\\1", indicators_indir, )
-  survey_subdir <- gsub(".*/01_input_data_prep/(.*)", "\\1", survey_indir)
+  indicator_subdir <- gsub(".*/results/(.*)/for_cube", "\\1", dirname(stock_and_flow_probs_means_csv))
+  survey_subdir <- gsub(".*/01_input_data_prep/(.*)", "\\1", dirname(itn_hh_survey_data_csv))
+
   final_data[, stockflow_dir:=indicator_subdir]
   final_data[, survey_dir:=survey_subdir]
 
   setcolorder(final_data, c("stockflow_dir", "survey_dir", "survey", "iso3", "cellnumber", "lat", "lon", "time", "year", "month", "access_count", "use_count", "net_count", "pixel_pop", "national_access"))
   
-  print(paste("--> Writing to", out_fname))
-  write.csv(final_data, out_fname, row.names=FALSE)
+  print(paste("--> Writing to", survey_data_out_csv))
+  write.csv(final_data, survey_data_out_csv, row.names=FALSE)
   
 }
 
@@ -329,10 +337,13 @@ if (Sys.getenv("run_individually")!="" | exists("run_locally")){
     func_dir <- Sys.getenv("func_dir") # code directory for function scripts
   }
   
-  prep_data(main_indir, survey_indir, indicators_indir, main_outdir, func_dir)
-  
+  prep_data(
+    iso_gaul_map_csv = file.path(main_indir, "general/iso_gaul_map.csv"),
+    africa_raster_mask_tif = file.path(main_indir, "general/african_cn5km_2013_no_disputes.tif"),
+    stock_and_flow_probs_means_csv = file.path(indicators_indir, "stock_and_flow_probs_means.csv"),
+    itn_hh_survey_data_csv = file.path(survey_indir, "itn_hh_survey_data.csv"),
+    survey_data_out_csv = file.path(main_outdir, "01_survey_data.csv"),
+    survey_summary_out_csv = file.path(main_outdir, "01_survey_summary.csv"),
+    func_dir
+  )
 }
-
-
-
-

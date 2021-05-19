@@ -10,7 +10,24 @@
 ## 3. Fits the model and predicts and saves outputs. 
 ##############################################################################################################
 
-run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmcp_manu_dir, out_dir, projection_year=NA, sensitivity_survey_count=NA, sensitivity_type=NA){
+run_stock_and_flow <- function(
+  this_country,
+  start_year,
+  end_year,
+  itn_distributions_csv,
+  manufacturer_deliveries_csv,
+  ihme_populations_csv,
+  itn_survey_data_csv,
+  indicator_priors_csv,
+  hhsize_from_surveys_csv,
+  jags_model_out_txt,
+  time_df_out_csv,
+  access_draws_out_csv,
+  all_output_out_rdata,
+  projection_year=NA,
+  sensitivity_survey_count=NA,
+  sensitivity_type=NA
+) {
   
   print(paste("RUNNING STOCK AND FLOW FOR", this_country))
   
@@ -37,14 +54,14 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
   ### Read in all data #####----------------------------------------------------------------------------------------------------------------------------------
   
   # From WHO: NMCP data and manufacturer data
-  nmcp_data<-fread(file.path(nmcp_manu_dir, "itn_distributions.csv"),stringsAsFactors=FALSE)
+  nmcp_data<-fread(itn_distributions_csv,stringsAsFactors=FALSE)
   setnames(nmcp_data, "ITN", "CITN")
   
   # Set all NMCP NA's to zero based on time series patterns
   nmcp_data[is.na(LLIN), LLIN:=0]
   nmcp_data[is.na(CITN), CITN:=0]
   
-  manufacturer_llins <- fread(file.path(nmcp_manu_dir, "manufacturer_deliveries.csv"),stringsAsFactors=FALSE)
+  manufacturer_llins <- fread(manufacturer_deliveries_csv, stringsAsFactors=FALSE)
   setnames(manufacturer_llins, names(manufacturer_llins), as.character(manufacturer_llins[1,]))
   manufacturer_llins <- manufacturer_llins[2:nrow(manufacturer_llins),]
   manufacturer_llins <- manufacturer_llins[Country!=""]
@@ -52,13 +69,13 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
   manufacturer_llins <- melt(manufacturer_llins, id.vars=c("MAP_Country_Name", "ISO3"), value.name="llins", variable.name="year")
   
   # From GBD2019 folder: annual population and pop at risk
-  population_full <- fread(file.path(nmcp_manu_dir, "ihme_populations.csv"))
+  population_full <- fread(ihme_populations_csv)
   population_full <- population_full[year>=2000 & admin_unit_level=="ADMIN0" & age_bin=="All_Ages", 
                                      list(year, iso3, country_name, total_pop, pop_at_risk_pf, prop_pop_at_risk_pf=pop_at_risk_pf/total_pop)
                                      ]
   
   # From 02a_prep_stock_and_flow: survey data
-  survey_data <- fread(file.path(main_dir, "itn_aggregated_survey_data_plus_reportonly.csv"))
+  survey_data <- fread(itn_survey_data_csv)
   
   # subset data to country level
   this_survey_data <- survey_data[iso3 %in% this_country,]
@@ -78,8 +95,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
     
     print(this_survey_data)
   }
-  outdir_suffix <- ifelse(is.na(sensitivity_type), "", paste0("_", sensitivity_survey_count, "_surveys_", sensitivity_type))
-  
+
   ### Convert survey data from "mean nets per hh" to "total nets in country"; formulate means and confidence around survey data #####----------------------------------------------------------------------------------------------------------------------------------
   
   # create blank dataframe if country has no surveys
@@ -242,7 +258,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
     return(this_list)
   }
   
-  indicator_priors <- fread(file.path(main_dir, "indicator_priors.csv"))
+  indicator_priors <- fread(indicator_priors_csv)
   
   no_net_props <- dcast.data.table(indicator_priors[model_type=="no_net_prob"], sample  ~ variable, value.var = "value")
   
@@ -536,7 +552,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
   }
   
   # write to file
-  fileConn<-file(file.path(out_dir, paste0(this_country, "_model", outdir_suffix, ".txt")))
+  fileConn<-file(jags_model_out_txt)
   writeLines(full_model_string, fileConn)
   close(fileConn)
   
@@ -604,7 +620,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
   print(paste("Time elapsed for model fitting:", time_elapsed))
   
   time_df <- data.table(iso3=this_country, time=time_elapsed)
-  write.csv(time_df, file=file.path(out_dir, paste0(this_country, "_time", outdir_suffix, ".csv")), row.names = F)
+  write.csv(time_df, file=time_df_out_csv, row.names = F)
   
   ### Find mean values  #####----------------------------------------------------------------------------------------------------------------------------------
   print("findind means")
@@ -623,7 +639,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
     pre_new_objects <- ls()
     ##  Load and format household size distributions for each survey ## ------------------------------------------------------------
     print("loading and formatting household size distributions")
-    hh_sizes<-fread(file.path(main_dir, "hhsize_from_surveys.csv"))
+    hh_sizes<-fread(hhsize_from_surveys_csv)
     
     # function to aggregate survey data to find the total distribution of household sizes from 1:10+ across the provided dataset
     find_hh_distribution <- function(props, cap_hh_size=10){
@@ -726,7 +742,7 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
     final_metrics <- indicator_draws[, list(iso3, ITER, year, month, time, hh_size, stockflow_percapita_nets,
                                             stockflow_prob_no_nets, stockflow_mean_nets_per_hh)]
     final_metrics <- merge(final_metrics, access_draws, by=c("ITER", "time"), all=T)
-    write.csv(final_metrics, file=file.path(out_dir, paste0(this_country, "_access_draws", outdir_suffix, ".csv")), row.names = F)
+    write.csv(final_metrics, file = access_draws_out_csv, row.names = F)
     
     new_objects <- setdiff(ls(), pre_new_objects)
     rm(list=new_objects)
@@ -735,16 +751,9 @@ run_stock_and_flow <- function(this_country, start_year, end_year, main_dir, nmc
   
   ### Saving  #####----------------------------------------------------------------------------------------------------------------------------------
   print("saving all outputs")
-  save(list = ls(all.names = TRUE), file = file.path(out_dir, paste0(this_country, "_all_output", outdir_suffix, ".RData")), envir = environment())
+  save(list = ls(all.names = TRUE), file = all_output_out_rdata, envir = environment())
   
 }
-
-# DSUB FOR MAIN RUN
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --preemptible --retries 1 --wait  --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-8 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20200731 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020/20200929/ready_for_stockflow CODE=gs://map_users/amelia/itn/code/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200930_new_2020_dists --command 'cd ${CODE}; Rscript stock_and_flow/03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list.tsv
-
-# DSUB FOR SENSITIVITY ANALYSIS
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --preemptible --retries 1 --wait --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highmem-2 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20191205 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who CODE=gs://map_users/amelia/itn/code/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191211_full_sensitivity --command 'cd ${CODE}; Rscript stock_and_flow/03_stock_and_flow.r ${this_country} ${survey_count} ${order_type}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_sensitivity_TESTING.tsv
-
 
 package_load <- function(package_list){
   # package installation/loading
@@ -753,40 +762,97 @@ package_load <- function(package_list){
   lapply(package_list, library, character.only=T)
 }
 
-package_load(c("data.table","raster","rjags", "zoo", "ggplot2", "doParallel", "lubridate", "VGAM"))
+main <- function() {
+  package_load(c("data.table","raster","rjags", "zoo", "ggplot2", "doParallel", "lubridate", "VGAM", "argparser", "stringr"))
 
-if(Sys.getenv("main_dir")=="") {
-  nmcp_manu_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020/20200409/ITN_C0.00_R0.25"
-  main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200408"
-  out_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/testing"
-  code_dir <- "~/repos/map-itn-cube"
-  this_country <- "ERI"
-  sensitivity_survey_count <- NA # 2
-  sensitivity_type <- NA # "chron_order"
-  setwd(code_dir)
-} else {
-  main_dir <- Sys.getenv("main_dir")
-  nmcp_manu_dir <- Sys.getenv("nmcp_manu_dir") 
-  out_dir <- Sys.getenv("out_dir") 
-  this_country <- commandArgs(trailingOnly=TRUE)[1]
-  sensitivity_survey_count <- commandArgs(trailingOnly=TRUE)[2]
-  sensitivity_type <- commandArgs(trailingOnly=TRUE)[3]
+  if(Sys.getenv("main_dir")=="") {
+    nmcp_manu_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020/20200409/ITN_C0.00_R0.25"
+    main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200408"
+    out_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/testing"
+  } else {
+    main_dir <- Sys.getenv("main_dir")
+    nmcp_manu_dir <- Sys.getenv("nmcp_manu_dir")
+    out_dir <- Sys.getenv("out_dir")
+  }
+
+  parser <- arg_parser("Run stock and flow model for a given country")
+
+  # inputs
+  parser <- add_argument(parser, "--country", help="ISO3 code of country for which to run the model.", default="ERI")
+  parser <- add_argument(parser, "--start_year", help="Start year. integer, usually 2000", default=2000)
+  parser <- add_argument(parser, "--end_year", help="The latest year for which there is data. integer", default=2020)
+  parser <- add_argument(parser, "--projection_year", help="Projection year. Any time later than this year will recieve different assumptions about the variability of net distribution data. Only used for projection scenarios, not typical runs. integer.", default=2019)
+  parser <- add_argument(parser, "--sensitivity_type", help="Sensitivity type. Only used for sensitivity analysis, not typical runs. Default value can be adjusted with env 'sensitivity_type'", default=NA)
+  parser <- add_argument(parser, "--sensitivity_survey_count", help="Sensitivity survey count. Only used for sensitivity analysis, not typical runs. Default value can be adjusted with env 'sensitivity_survey_count'", default=NA)
+  parser <- add_argument(parser, "--code_dir", help="Directory containing model code", default="/Users/bertozzivill/repos/map-itn-cube")
+  parser <- add_argument(parser, "--itn_distributions", help="Input CSV file. Dataset of ITN distributions. Output from step 02. Default path can be adjusted with env 'nmcp_manu_dir'", default=file.path(nmcp_manu_dir, "itn_distributions.csv"))
+  parser <- add_argument(parser, "--manufacturer_deliveries", help="Input CSV file. Dataset of manufacturer deliveries. output from step 02. Default path can be adjusted with env 'nmcp_manu_dir'", default=file.path(nmcp_manu_dir, "manufacturer_deliveries.csv"))
+  parser <- add_argument(parser, "--ihme_populations", help="Input CSV file. Dataset of IHME populations. Default path can be adjusted with env 'nmcp_manu_dir'", default=file.path(nmcp_manu_dir, "ihme_populations.csv"))
+  parser <- add_argument(parser, "--itn_survey_data", help="Input CSV file. Aggregated survey data, including report-only surveys. Output from step 01b. Default path can be adjusted with env 'main_dir'", default=file.path(main_dir, "itn_aggregated_survey_data_plus_reportonly.csv"))
+  parser <- add_argument(parser, "--indicator_priors", help="Input CSV file. Samples from the posterior distributions of the Stan model. Output from step 01c. Default path can be adjusted with env 'main_dir'", default=file.path(main_dir, "indicator_priors.csv"))
+  parser <- add_argument(parser, "--hhsize_from_surveys", help="Input CSV file. Household size distribution for use in the crop-to-access conversion. Output from step 01a. Default path can be adjusted with env 'main_dir'", default=file.path(main_dir, "hhsize_from_surveys.csv"))
+
+  # outputs
+  parser <- add_argument(parser, "--jags_model", help="Output TXT file. Text file of JAGS model code. Default path can be adjusted with env 'out_dir'", default=file.path(out_dir, "${country}_model${outdir_suffix}.txt"))
+  parser <- add_argument(parser, "--time_df", help="Output CVS file. Small file to track how long models take to run. Default path can be adjusted with env 'out_dir'", default=file.path(out_dir, "${country}_time${outdir_suffix}.csv"))
+  parser <- add_argument(parser, "--access_draws", help="Output CSV file. Posterior draws of ITN access to pass on to the next steps. Default path can be adjusted with env 'out_dir'", default=file.path(out_dir, "${country}_access_draws${outdir_suffix}.csv"))
+  parser <- add_argument(parser, "--all_output", help="Output RData file. All items in R environment. Default path can be adjusted with env 'out_dir'", default=file.path(out_dir, "${country}_all_output${outdir_suffix}.RData"))
+
+  argv <- parse_args(parser)
+
+  for (input in c("itn_distributions", "manufacturer_deliveries", "ihme_populations", "itn_survey_data", "indicator_priors", "hhsize_from_surveys")) {
+    file <- argv[[input]]
+    if (!file.exists(file)) {
+      stop(sprintf("Problem with input '%s', file '%s' doesn't exist.", input, file))
+    }
+  }
+
+  setwd(argv$code_dir)
+
+  country <- argv$country
+  sensitivity_type <- argv$sensitivity_type
+  sensitivity_survey_count <- argv$sensitivity_survey_count
+
+  outdir_suffix <- ifelse(is.na(sensitivity_type), "", paste0("_", sensitivity_survey_count, "_surveys_", sensitivity_type))
+  template_args <- list(country = country, outdir_suffix = outdir_suffix)
+
+  jags_model_out_txt <- str_interp(argv$jags_model, template_args)
+  time_df_csv <- str_interp(argv$time_df, template_args)
+  access_draws_csv <- str_interp(argv$access_draws, template_args)
+  all_output_rdata <- str_interp(argv$all_output, template_args)
+
+  source("stock_and_flow/jags_functions.r")
+  source("itn_cube/01_data_functions.r")
+
+  gg_color_hue <- function(n) {
+    hues = seq(15, 375, length = n + 1)
+    hcl(h = hues, l = 65, c = 100)[1:n]
+  }
+
+  run_stock_and_flow(
+    country,
+    argv$start_year,
+    argv$end_year,
+    argv$itn_distributions,
+    argv$manufacturer_deliveries,
+    argv$ihme_populations,
+    argv$itn_survey_data,
+    argv$indicator_priors,
+    argv$hhsize_from_surveys,
+    jags_model_out_txt,
+    time_df_csv,
+    access_draws_csv,
+    all_output_rdata,
+    argv$projection_year,
+    sensitivity_survey_count,
+    sensitivity_type
+  )
 }
 
-source("stock_and_flow/jags_functions.r")
-source("itn_cube/01_data_functions.r")
-start_year <- 2000
-end_year<- 2020
-projection_year <- 2019
+# DSUB FOR MAIN RUN
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --preemptible --retries 1 --wait  --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-8 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20200731 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020/20200929/ready_for_stockflow CODE=gs://map_users/amelia/itn/code/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200930_new_2020_dists --command 'cd ${CODE}; Rscript stock_and_flow/03_stock_and_flow.r ${this_country}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_country_list.tsv
 
-gg_color_hue <- function(n) {
-  hues = seq(15, 375, length = n + 1)
-  hcl(h = hues, l = 65, c = 100)[1:n]
-}
+# DSUB FOR SENSITIVITY ANALYSIS
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --preemptible --retries 1 --wait --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-highmem-2 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive main_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20191205 nmcp_manu_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who CODE=gs://map_users/amelia/itn/code/ --output-recursive out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20191211_full_sensitivity --command 'cd ${CODE}; Rscript stock_and_flow/03_stock_and_flow.r ${this_country} ${survey_count} ${order_type}' --tasks gs://map_users/amelia/itn/code/stock_and_flow/for_gcloud/batch_sensitivity_TESTING.tsv
 
-run_stock_and_flow(this_country, start_year, end_year, main_dir, nmcp_manu_dir, out_dir, projection_year, sensitivity_survey_count, sensitivity_type)
-
-
-
-
-
+main()

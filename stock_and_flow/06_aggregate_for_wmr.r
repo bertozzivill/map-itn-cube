@@ -13,7 +13,15 @@
 ## Additionally, calculate ITN Use overall, among pregnant people, and among children under 5.
 ##############################################################################################################
 
-aggregate_indicators <- function(reference_dir, list_out_dir, wmr_input_dir){
+aggregate_indicators <- function(
+  reference_dir,
+  hh_size_props_csv,
+  access_use_relationship_csv,
+  hh_data_csv,
+  overalloc_plots_templ_pdfs,
+  indicator_summary_csv,
+  wmr_subset_csv
+) {
   
   ### Prep  #####----------------------------------------------------------------------------------------------------------------------------------
   
@@ -43,8 +51,8 @@ aggregate_indicators <- function(reference_dir, list_out_dir, wmr_input_dir){
     
     
     print("loading and formatting household size distributions")
-    hh_sizes<-fread(file.path(wmr_input_dir, "hhsize_from_surveys.csv"))
-    use_traces <- fread(file.path(wmr_input_dir, "access_use_relationship.csv"))
+    hh_sizes <- fread(hh_size_props_csv)
+    use_traces <- fread(access_use_relationship_csv)
     
     # function to aggregate survey data to find the total distribution of household sizes from 1:10+ across the provided dataset
     find_hh_distribution <- function(props, cap_hh_size=10){
@@ -113,7 +121,7 @@ aggregate_indicators <- function(reference_dir, list_out_dir, wmr_input_dir){
     
     if (explore_over_alloc){
       # to debug overallocation: load household-level survey data
-      hh_svy_data <- fread(file.path(wmr_input_dir, "itn_hh_data_all.csv"))
+      hh_svy_data <- fread(hh_data_csv)
       hh_svy_data <- hh_svy_data[iso3==this_country]
       if (nrow(hh_svy_data)>0){
         print("comparing overallocation to surveys")
@@ -165,8 +173,9 @@ aggregate_indicators <- function(reference_dir, list_out_dir, wmr_input_dir){
         
         for_plotting <- melt(for_plotting, id.vars = c("type", "SurveyId", "n_defacto_pop", "n_itn", "access_lim"),
                              measure.vars = c("weighted_hh_prop", "over_alloc_prop", "access_prop"))
-        
-        pdf(file.path(list_out_dir, "overalloc_plots", paste0("distributions_", this_country, ".pdf")), width=12, height=8)
+
+        overalloc_plot_file <- str_interp(overalloc_plots_templ_pdfs, list(country=this_country))
+        pdf(overalloc_plot_file, width=12, height=8)
         
         for (this_svy in unique(svy_net_data$SurveyId)){
           samp_size <- nrow(hh_svy_data[SurveyId==this_svy])
@@ -281,18 +290,15 @@ aggregate_indicators <- function(reference_dir, list_out_dir, wmr_input_dir){
   #   geom_line(aes(y=mean)) +
   #   facet_wrap(~variable, scales="free")
   
-  write.csv(indicator_summary, file.path(list_out_dir, "indicators_all.csv"), row.names=F)
+  write.csv(indicator_summary, indicator_summary_csv, row.names=F)
   
   wmr_subset <- indicator_summary[time_type=="annual" & variable!="prop_over_alloc"]
   wmr_subset[, c("time_type", "quarter"):=NULL]
   
   wmr_subset <- rbind(wmr_subset[iso3=="SSA"], wmr_subset[iso3!="SSA"])
   
-  write.csv(wmr_subset, file.path(list_out_dir, "indicators_for_wmr.csv"), row.names=F)
+  write.csv(wmr_subset, wmr_subset_csv, row.names=F)
 }
-
-# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --preemptible --retries 1 --wait --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n2-highmem-32  --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive reference_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200930_new_2020_dists wmr_input_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20200731 CODE=gs://map_users/amelia/itn/code/ --output-recursive list_out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200930_new_2020_dists --command 'cd ${CODE}; Rscript stock_and_flow/06_aggregate_for_wmr.r'
-# --preemptible --retries 1 --wait
 
 package_load <- function(package_list){
   # package installation/loading
@@ -301,74 +307,88 @@ package_load <- function(package_list){
   lapply(package_list, library, character.only=T)
 }
 
-package_load(c("data.table","rjags", "zoo", "ggplot2", "gridExtra", "VGAM", "doParallel"))
-theme_set(theme_minimal(base_size = 12))
+main <- function() {
+  package_load(c("data.table","rjags", "zoo", "ggplot2", "gridExtra", "VGAM", "doParallel", "argparser", "stringr"))
+  theme_set(theme_minimal(base_size = 12))
 
-if(Sys.getenv("reference_dir")=="") {
-  reference_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2"
-  list_out_dir <- reference_dir
-  code_dir <- "~/repos/map-itn-cube"
-  wmr_input_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200618"
-  setwd(code_dir)
-} else {
-  reference_dir <- Sys.getenv("reference_dir") 
-  list_out_dir <- Sys.getenv("list_out_dir")
-  wmr_input_dir <- Sys.getenv("wmr_input_dir")
+  if(Sys.getenv("reference_dir")=="") {
+    reference_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2"
+    list_out_dir <- reference_dir
+    wmr_input_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200618"
+  } else {
+    reference_dir <- Sys.getenv("reference_dir")
+    list_out_dir <- Sys.getenv("list_out_dir")
+    wmr_input_dir <- Sys.getenv("wmr_input_dir")
+  }
+
+  parser <- arg_parser("Calculate national and continental ITN indicators used in the World Malaria Report.")
+  # input
+  parser <- add_argument(parser, "--reference_dir", help="Dir to input RData files. Location where stock and flow results are saved. From step 01. Default dir can also be set with env 'reference_dir'", default=reference_dir) #  Not called "main dir" to avoid being overwritten when stock and flow results are loaded.
+  parser <- add_argument(parser, "--hh_size_props", help="Input CSV file. Household size distribution. From step 01a. Default dir can also be set with env 'wmr_input_dir'", default=file.path(wmr_input_dir, "hhsize_from_surveys.csv"))
+  parser <- add_argument(parser, "--access_use_relationship", help="Input CSV file. Samples from the posterior distributions of the Stan model. From step 01d. Default dir can also be set with env 'wmr_input_dir'", default=file.path(wmr_input_dir, "access_use_relationship.csv"))
+  parser <- add_argument(parser, "--hh_data", help="Input CSV file. Household-level survey data. From step 01d. Default dir can also be set with env 'wmr_input_dir'", default=file.path(wmr_input_dir, "itn_hh_data_all.csv"))
+  parser <- add_argument(parser, "--code_dir", help="Directory containing model code", default="/Users/bertozzivill/repos/map-itn-cube")
+
+  # output
+  parser <- add_argument(parser, "--indicator_summary", help="Output CSV file. Quarterly values of all indicators calculated in script. Default dir can also be set with env 'list_out_dir'", default=file.path(list_out_dir, "indicators_all.csv"))
+  parser <- add_argument(parser, "--wmr_subset", help="Output CSV file. National, annual values of indicators. This output file is given directly to WHO. Default dir can also be set with env 'list_out_dir'", default=file.path(list_out_dir, "indicators_for_wmr.csv"))
+  parser <- add_argument(parser, "--overalloc_plots", help="Output PDF files. Location where overallocation plots are saved. Templated with variables 'country'. Default dir can also be set with env 'list_out_dir'", default=file.path(list_out_dir, "overalloc_plots", paste0("distributions_${country}.pdf")))
+  argv <- parse_args(parser)
+
+  setwd(argv$code_dir)
+  source("stock_and_flow/jags_functions.r")
+  source("itn_cube/01_data_functions.r")
+
+  dir.create(dirname(argv$overalloc_plots))
+
+  aggregate_indicators(argv$reference_dir, argv$hh_size_props, argv$access_use_relationship, argv$hh_data, argv$overalloc_plots, argv$indicator_summary, argv$wmr_subset)
+
+  # plotting code to review:
+
+  # library(data.table)
+  # library(ggplot2)
+  #
+  # indir <- "~/Downloads/amelia_itn_stock_and_flow_results_20200709_wmr_agg_overalloc_fix_indicators_for_wmr.csv"
+  # wmr_agg <- fread(indir)
+  #
+  #
+  # subset <- wmr_agg[time_type=="quarterly" & (variable %like% "ind" & !variable %like% "ind4" | variable=="use")]
+  #
+  # subset <- wmr_agg[time_type=="quarterly" & (variable %like% "alloc")]
+  # subset[, time:= 2000 + (quarter-1)*0.25]
+  # survey_data <- fread("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200707/itn_aggregated_survey_data.csv")
+  #
+  # ggplot(subset, aes(x=time)) +
+  #   geom_ribbon(aes(ymin=lower, ymax=upper, fill=variable), alpha=0.5) +
+  #   geom_line(aes(y=mean, color=variable)) +
+  #   geom_pointrange(data=survey_data, aes(x=date, y=over_alloc_mean, ymin=over_alloc_mean-1.96*over_alloc_se, ymax=over_alloc_mean+1.96*over_alloc_se), size=0.25) +
+  #   facet_wrap(~iso3) +
+  #   theme(legend.position = "none",
+  #         axis.text.x = element_text(angle=45, hjust=1)) +
+  #   labs(title="Proportion of Nets that are Over-Allocated")
+  #
+  # subset <- wmr_agg[time_type=="quarterly" & (variable %like% "ind3")]
+  # subset[, time:= 2000 + (quarter-1)*0.25]
+  # ggplot(subset, aes(x=time)) +
+  #   geom_ribbon(aes(ymin=lower, ymax=upper, fill=variable), alpha=0.5) +
+  #   geom_line(aes(y=mean, color=variable)) +
+  #   geom_pointrange(data=survey_data, aes(x=date, y=access_mean, ymin=access_mean-1.96*access_se, ymax=access_mean+1.96*access_se), size=0.25) +
+  #   facet_wrap(~iso3) +
+  #   theme(legend.position = "none",
+  #         axis.text.x = element_text(angle=45, hjust=1)) +
+  #   labs(title="Access")
+  #
+
+  #
+  # subset <- wmr_agg[time_type=="annual" & (variable %like% "use")]
+  #
+  # ggplot(subset[year>=2010], aes(x=year, color=variable, fill=variable)) +
+  #   # geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.5) +
+  #   geom_line(aes(y=mean)) +
+  #   facet_wrap(~iso3, scales="free")
 }
 
-source("stock_and_flow/jags_functions.r")
-source("itn_cube/01_data_functions.r")
-dir.create(file.path(list_out_dir, "overalloc_plots"))
+# dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --preemptible --retries 1 --wait --image eu.gcr.io/map-special-0001/map-geospatial-jags --regions europe-west1 --label "type=itn_stockflow" --machine-type n2-highmem-32  --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive reference_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200930_new_2020_dists wmr_input_dir=gs://map_users/amelia/itn/stock_and_flow/input_data/01_input_data_prep/20200731 CODE=gs://map_users/amelia/itn/code/ --output-recursive list_out_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200930_new_2020_dists --command 'cd ${CODE}; Rscript stock_and_flow/06_aggregate_for_wmr.r'
+# --preemptible --retries 1 --wait
 
-aggregate_indicators(reference_dir, list_out_dir, wmr_input_dir)
-
-
-
-
-# plotting code to review: 
-
-
-# library(data.table)
-# library(ggplot2)
-# 
-# indir <- "~/Downloads/amelia_itn_stock_and_flow_results_20200709_wmr_agg_overalloc_fix_indicators_for_wmr.csv"
-# wmr_agg <- fread(indir)
-# 
-# 
-# subset <- wmr_agg[time_type=="quarterly" & (variable %like% "ind" & !variable %like% "ind4" | variable=="use")]
-# 
-# subset <- wmr_agg[time_type=="quarterly" & (variable %like% "alloc")]
-# subset[, time:= 2000 + (quarter-1)*0.25]
-# survey_data <- fread("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep/20200707/itn_aggregated_survey_data.csv")
-# 
-# ggplot(subset, aes(x=time)) +
-#   geom_ribbon(aes(ymin=lower, ymax=upper, fill=variable), alpha=0.5) +
-#   geom_line(aes(y=mean, color=variable)) +
-#   geom_pointrange(data=survey_data, aes(x=date, y=over_alloc_mean, ymin=over_alloc_mean-1.96*over_alloc_se, ymax=over_alloc_mean+1.96*over_alloc_se), size=0.25) +
-#   facet_wrap(~iso3) +
-#   theme(legend.position = "none",
-#         axis.text.x = element_text(angle=45, hjust=1)) +
-#   labs(title="Proportion of Nets that are Over-Allocated")
-# 
-# subset <- wmr_agg[time_type=="quarterly" & (variable %like% "ind3")]
-# subset[, time:= 2000 + (quarter-1)*0.25]
-# ggplot(subset, aes(x=time)) +
-#   geom_ribbon(aes(ymin=lower, ymax=upper, fill=variable), alpha=0.5) +
-#   geom_line(aes(y=mean, color=variable)) +
-#   geom_pointrange(data=survey_data, aes(x=date, y=access_mean, ymin=access_mean-1.96*access_se, ymax=access_mean+1.96*access_se), size=0.25) +
-#   facet_wrap(~iso3) +
-#   theme(legend.position = "none",
-#         axis.text.x = element_text(angle=45, hjust=1)) +
-#   labs(title="Access")
-# 
-
-#
-# subset <- wmr_agg[time_type=="annual" & (variable %like% "use")]
-# 
-# ggplot(subset[year>=2010], aes(x=year, color=variable, fill=variable)) +
-#   # geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.5) +
-#   geom_line(aes(y=mean)) + 
-#   facet_wrap(~iso3, scales="free")
-
-
-
+main()
