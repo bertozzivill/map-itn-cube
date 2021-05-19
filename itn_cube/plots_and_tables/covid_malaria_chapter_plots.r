@@ -13,6 +13,12 @@ library(raster)
 library(rasterVis)
 library(gridExtra)
 library(wesanderson)
+library(readxl)
+library(geofacet)
+library(maptools)
+library(wesanderson)
+library(PNWColors)
+
 
 rm(list=ls())
 
@@ -24,7 +30,9 @@ out_dir <- "/Users/bertozzivill/Dropbox (IDM)/Malaria Team Folder/projects/map_i
 pop_fname <- file.path(stockflow_main_dir, "../input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020/20200418/ITN_C1.00_R1.00",
                        "ihme_populations.csv")
 
-scenario_names <- c(`Business as Usual`="20200418_BMGF_ITN_C1.00_R1.00_V2",
+## part 1: ITN coverage plots -------------------------------------------------------------------------------------------------------------------------------------------
+
+scenario_names <- c(`Baseline`="20200418_BMGF_ITN_C1.00_R1.00_V2",
                     `No Mass Campaigns`="20200418_BMGF_ITN_C0.00_R1.00_V2",
                     `75% of Routine`="20200418_BMGF_ITN_C0.00_R0.75_V2",
                     `50% of Routine`="20200418_BMGF_ITN_C0.00_R0.50_V2",
@@ -54,11 +62,6 @@ all_scenarios_quarterly <- all_scenarios_quarterly[, list(value=mean(value),
 all_scenarios_annual <- all_scenarios[, list(value=mean(value)), 
                                       by=list(scenario,iso3, type, year)]
 all_scenarios_annual[, time:=year]
-
-library(geofacet)
-library(maptools)
-library(wesanderson)
-library(PNWColors)
 
 shape_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/input_data/general/shapefiles/"
 Africa <- readOGR(file.path(shape_dir, "Africa_simplified.shp"))
@@ -90,7 +93,7 @@ annual_comparison_plot_full <- ggplot(all_scenarios[type=="use" & year>2015 &  y
   ) + 
   labs(title="",
        x="",
-       y="")
+       y="ITN Use (%)")
 
 sf_for_ref <- ggplot(Africa_dt, aes(x = long, y = lat, group = group)) + 
   geom_polygon(aes(fill=modeled)) + 
@@ -141,3 +144,41 @@ baseline_plot <-  levelplot(to_compare_rasters,
 pdf(file.path(out_dir, "compare_maps.pdf"), width=10, height=5)
   grid.arrange(baseline_plot, comparisons, nrow=2)
 graphics.off()
+## part 2: Impact on Pf -------------------------------------------------------------------------------------------------------------------------------------------
+
+pf_results <- data.table(read_excel(file.path(out_dir, "results_from_lid_paper.xlsx")))
+pf_results[Scenario=="Baseline", Scenario:="Business as Usual"]
+pf_results[, scenario_label:=factor(Scenario_ID, labels = Scenario[1:10])]
+
+ggplot(pf_results[ISO3=="SSA" & Scenario_ID>0], aes(x=scenario_label, y=incidence_count_rmean/1e7)) +
+  geom_bar(stat="identity", aes(fill=scenario_label)) +
+  geom_linerange(aes(ymin=incidence_count_LCI/1e7, ymax=incidence_count_UCI/1e7)) +
+  theme(axis.text.x = element_text(angle=45, hjust=1), 
+        legend.position = "none") +
+  labs(x="")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
