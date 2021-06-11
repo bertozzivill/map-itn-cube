@@ -7,19 +7,21 @@
 ## Plot net crop, distribution, and stock from different stock and flow models
 ##############################################################################################################
 
-compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir) {
-  
+compare_stock_and_flow <- function(model_dirs, plot_dir) {
+
+  dir.create(plot_dir, recursive=TRUE)
   ### Prep  #####----------------------------------------------------------------------------------------------------------------------------------
   
   make_country_plots <- T
-  
-  model_names <- gsub("[0-9]{8}_", "", model_dirs)
-  model_order <- sort(model_dirs) # for arranging plots left-to-right chronologically
+
+  model_dir_names = sapply(model_dirs, basename)
+  model_names <- gsub("[0-9]{8}_", "", model_dir_names)
+  model_order <- sort(model_dir_names) # for arranging plots left-to-right chronologically
   model_order <- gsub("[0-9]{8}_", "", model_order)
-  names(model_dirs) <- model_names
+  names(model_dirs) <- model_dir_names
   out_label <- paste(model_names, collapse="_VS_")
   
-  reference_dir <- file.path(base_dir, model_dirs[[1]])
+  reference_dir <- model_dirs[[1]]
   
   countries <- gsub("([A-Z]{3})_all_output\\.RData", "\\1", list.files(reference_dir)[list.files(reference_dir) %like% ".RData"])
   countries <- countries[nchar(countries)==3]
@@ -41,8 +43,8 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir) {
   
   for(this_country in countries){
     
-    do_files_exist <- sapply(names(model_dirs), function(this_model_name){
-      return(file.exists(file.path(base_dir, model_dirs[[this_model_name]], paste0(this_country, "_all_output.RData"))))
+    do_files_exist <- sapply(names(model_dirs), function(this_model_name) {
+      return(file.exists(file.path(model_dirs[[this_model_name]], paste0(this_country, "_all_output.RData"))))
     })
     
     if (all(do_files_exist)){
@@ -55,7 +57,7 @@ compare_stock_and_flow <- function(base_dir, model_dirs, plot_dir) {
       
       for (this_model_name in names(model_dirs)){
         print(paste("Loading results for", this_model_name))
-        new_fname <- file.path(base_dir, model_dirs[[this_model_name]], paste0(this_country, "_all_output.RData"))
+        new_fname <- file.path(model_dirs[[this_model_name]], paste0(this_country, "_all_output.RData"))
         if(file.exists(new_fname)){
           pre_new_objects <- ls()
           load(new_fname)
@@ -441,32 +443,28 @@ main <- function() {
   theme_set(theme_minimal(base_size = 12))
 
   if(Sys.getenv("model_dir_1")=="") {
-    base_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/"
     func_dir <- "~/repos/map-itn-cube/stock_and_flow/"
     plot_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2"
-
-    model_dirs <- c("20200418_BMGF_ITN_C1.00_R1.00_V2", "20200418_BMGF_ITN_C1.00_R1.00_V2")
-
+    model_dirs <- c(
+      "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2",
+      "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2"
+    )
   } else {
+    model_dirs <- Sys.getenv()[names(Sys.getenv()) %like% "model_dir"]
     plot_dir <- Sys.getenv("plot_dir")
     func_dir <- getwd()
-
-    model_dirs <- sapply(Sys.getenv()[names(Sys.getenv()) %like% "model_dir"], basename)
-    base_dir <- sapply(Sys.getenv()[names(Sys.getenv()) %like% "model_dir"], dirname)[[1]]
   }
 
   parser <- arg_parser("Plot net crop, distribution, and stock from different stock and flow models")
-  parser <- add_argument(parser, "--base_model_dir", help="Directory containing directories of stock-and-flow model results.", default=base_dir)
-  parser <- add_argument(parser, "--model_dirs", help="Comma-separated list of model directory names. Default values are retrieved from environment variables containing 'model_dir'", default=paste(model_dirs, collapse=','))
+  parser <- add_argument(parser, "--model_dirs", help="Comma-separated list of directories containing stock-and-flow model results. Default values are retrieved from environment variables containing 'model_dir'", default=paste(model_dirs, collapse=','))
   parser <- add_argument(parser, "--code_dir", help="Directory containing stock-and-flow code.", default=func_dir)
   parser <- add_argument(parser, "--plot_dir", help="Output directory to save plots.", default=plot_dir)
 
   args <- parse_args(parser)
-  model_dirs <- str_split(args$model_dirs, ',')[[1]]
 
   source(file.path(args$code_dir, "jags_functions.r"))
 
-  compare_stock_and_flow(args$base_model$dir, model_dirs, args$plot_dir)
+  compare_stock_and_flow(str_split(args$model_dirs, ',')[[1]], args$plot_dir)
 }
 
 # dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --preemptible --retries 1 --wait --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive model_dir_1=gs://map_users/amelia/itn/stock_and_flow/results/20200731_final_for_wmr2020 model_dir_2=gs://map_users/amelia/itn/stock_and_flow/results/20200930_new_2020_dists CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive plot_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200930_new_2020_dists --command 'cd ${CODE}; Rscript 04_compare_outputs.r'
