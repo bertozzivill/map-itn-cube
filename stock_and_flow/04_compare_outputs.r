@@ -438,29 +438,44 @@ append_to_countrylist <- function(dt, listname, this_iso3){
 }
 
 main <- function() {
-  package_load(c("data.table","rjags", "zoo", "ggplot2", "gridExtra", "rlist"))
   theme_set(theme_minimal(base_size = 12))
 
   if(Sys.getenv("model_dir_1")=="") {
     base_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/"
     func_dir <- "~/repos/map-itn-cube/stock_and_flow/"
-    setwd(func_dir)
     plot_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/results/20200418_BMGF_ITN_C1.00_R1.00_V2"
 
     model_dirs <- c("20200418_BMGF_ITN_C1.00_R1.00_V2", "20200418_BMGF_ITN_C1.00_R1.00_V2")
 
   } else {
     plot_dir <- Sys.getenv("plot_dir")
+    func_dir <- getwd()
 
     model_dirs <- sapply(Sys.getenv()[names(Sys.getenv()) %like% "model_dir"], basename)
     base_dir <- sapply(Sys.getenv()[names(Sys.getenv()) %like% "model_dir"], dirname)[[1]]
   }
 
-  source("jags_functions.r")
+  parser <- arg_parser("Plot net crop, distribution, and stock from different stock and flow models")
+  parser <- add_argument(parser, "--base_model_dir", help="Directory containing directories of stock-and-flow model results.", default=base_dir)
+  parser <- add_argument(parser, "--model_dirs", help="Comma-separated list of model directory names. Default values are retrieved from environment variables containing 'model_dir'", default=paste(model_dirs, collapse=','))
+  parser <- add_argument(parser, "--code_dir", help="Directory containing stock-and-flow code.", default=func_dir)
+  parser <- add_argument(parser, "--plot_dir", help="Output directory to save plots.", default=plot_dir)
 
-  compare_stock_and_flow(base_dir, model_dirs, plot_dir)
+  args <- parse_args(parser)
+  model_dirs <- str_split(args$model_dirs, ',')[[1]]
+
+  source(file.path(args$code_dir, "jags_functions.r"))
+
+  compare_stock_and_flow(args$base_model$dir, model_dirs, args$plot_dir)
 }
 
 # dsub --provider google-v2 --project map-special-0001 --boot-disk-size 50 --image eu.gcr.io/map-special-0001/map-geospatial-jags --preemptible --retries 1 --wait --regions europe-west1 --label "type=itn_stockflow" --machine-type n1-standard-4 --logging gs://map_users/amelia/itn/stock_and_flow/logs --input-recursive model_dir_1=gs://map_users/amelia/itn/stock_and_flow/results/20200731_final_for_wmr2020 model_dir_2=gs://map_users/amelia/itn/stock_and_flow/results/20200930_new_2020_dists CODE=gs://map_users/amelia/itn/code/stock_and_flow/ --output-recursive plot_dir=gs://map_users/amelia/itn/stock_and_flow/results/20200930_new_2020_dists --command 'cd ${CODE}; Rscript 04_compare_outputs.r'
-main()
+package_load(c("data.table","rjags", "zoo", "ggplot2", "gridExtra", "rlist", "tryCatchLog", "futile.logger", "argparser", "stringr"))
+
+options(keep.source = TRUE)
+options(keep.source.pkgs = TRUE)
+flog.threshold(ERROR)
+tryCatchLog({
+  main()
+})
 
