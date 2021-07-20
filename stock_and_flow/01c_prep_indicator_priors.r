@@ -26,11 +26,12 @@ emplogit <- function (y, eps = 1e-3){
 } 
 
 prep_indicator_priors <- function(
-  main_dir
+  itn_hh_survey_data_csv,
+  indicator_priors_out_csv
 ) {
   ### Read in all data #####----------------------------------------------------------------------------------------------------------------------------------
 
-  HH<-fread( file.path(main_dir, "itn_hh_survey_data.csv"))
+  HH<-fread(itn_hh_survey_data_csv)
 
   HH <- HH[!SurveyId %in% c('TZ2012AIS')] # todo: why?
   HH[, hh_sample_wt:=hh_sample_wt/1e6] # adjust sample weight according to DHS specs
@@ -252,11 +253,11 @@ prep_indicator_priors <- function(
   mean_net_output[, model_type:="mean_net_count"]
 
   all_outputs <- rbind(no_net_outputs, mean_net_output, fill=T)
-  write.csv(all_outputs, file=file.path(main_dir, "indicator_priors.csv"), row.names = F)
+  write.csv(all_outputs, file=indicator_priors_out_csv, row.names = F)
 
   # Diagnostic plots
 
-  all_outputs <- fread(file.path(main_dir, "indicator_priors.csv"))
+  all_outputs <- fread(indicator_priors_out_csv)
   all_outputs <- all_outputs[, list(value=mean(value)), by=.(model_type, variable)]
 
   no_net_outputs <- dcast.data.table(all_outputs[model_type=="no_net_prob"], model_type ~ variable)
@@ -296,8 +297,17 @@ prep_indicator_priors <- function(
 
 main <- function() {
   main_subdir <- "20200731"
+  main_dir <- file.path("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep", main_subdir)
+
+  parser <- arg_parser("Run a regression to find coefficients for the 'proportion of households with no net' and 'mean nets per household' metrics.")
+  parser <- add_argument(parser, "--itn_hh_survey_data", "Input CSV file. Household-level data ('for_cube' in step 01a)", default=file.path(main_dir, "itn_hh_survey_data.csv"))
+  parser <- add_argument(parser, "--indicator_priors", "Output CSV file. Samples from the posterior distributions of the Stan model, used as priors in step 03.", default=file.path(main_dir, "indicator_priors.csv"))
+
+  argv <- parse_args(parser)
+
   prep_indicator_priors(
-    main_dir = file.path("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep", main_subdir)
+    argv$itn_hh_survey_data,
+    argv$indicator_priors
   )
 }
 
@@ -311,7 +321,3 @@ flog.threshold(ERROR)
 tryCatchLog({
   main()
 })
-
-
-
-
