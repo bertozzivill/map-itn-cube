@@ -16,20 +16,32 @@ library(argparser)
 library(futile.logger)
 
 prep_reportonly_survey_data <- function(
-  input_dir,
-  main_dir
+  mics3_aggregated_csv,
+  other_aggregated_csv,
+  itn_aggregated_survey_csv,
+  summary_tables_csv,
+  summary_tables_intermediate_out_csv,
+  survey_data_out_csv,
+  survey_count_out_csv,
+  batch_sensitivity_out_csv
 ) {
   n.adapt=10000
   update=1000000
   n.iter=50000
   thin=10
 
+  # dirs for output
+  dir.create(dirname(summary_tables_intermediate_out_csv), showWarnings = F, recursive = T)
+  dir.create(dirname(survey_data_out_csv), showWarnings = F, recursive = T)
+  dir.create(dirname(survey_count_out_csv), showWarnings = F, recursive = T)
+  dir.create(dirname(batch_sensitivity_out_csv), showWarnings = F, recursive = T)
+
   # From Bonnie/Sam: pre-aggregated data from older surveys/reports, defer to eLife paper to explain them
-  mics3_data <- fread(file.path(input_dir,"non_household_surveys/mics3_aggregated_08_august_2017.csv"),stringsAsFactors=FALSE)
-  report_only_surveydata <-fread(file.path(input_dir,"non_household_surveys/other_aggregated_08_april_2020.csv"),stringsAsFactors=FALSE)
+  mics3_data <- fread(mics3_aggregated_csv, stringsAsFactors=FALSE)
+  report_only_surveydata <-fread(other_aggregated_csv, stringsAsFactors=FALSE)
 
   # From 01_prep_hh_survey_data: aggregated survey data. keep only needed columns;
-  survey_data <- fread(file.path(main_dir, "itn_aggregated_survey_data.csv"),stringsAsFactors=FALSE)
+  survey_data <- fread(itn_aggregated_survey_csv, stringsAsFactors=FALSE)
   survey_data <- survey_data[, list(surveyid, iso3, country, date,
                                     hh_size_mean=n_defacto_pop_mean,
                                     hh_size_se=n_defacto_pop_se,
@@ -113,7 +125,7 @@ prep_reportonly_survey_data <- function(
 
   all_to_append <- rbind(mics3_estimates, no_report_estimates)
 
-  summary_table <- fread(file.path(main_dir, "summary_tables", "summary_table_raw.csv"))
+  summary_table <- fread(summary_tables_csv)
 
   summary_to_append <- all_to_append[, list(survey_id=surveyid,
                                             country,
@@ -134,7 +146,7 @@ prep_reportonly_survey_data <- function(
   summary_table[, representativeness:= ""]
   summary_table[, notes:=ifelse(source=="TODO: OTHER", "manually modified source", "")]
   summary_table <- summary_table[order(notes, source, country, svy_years)]
-  write.csv(summary_table, file.path(main_dir, "summary_tables", "summary_table_intermediate.csv"), row.names=F)
+  write.csv(summary_table, summary_tables_intermediate_out_csv, row.names=F)
 
 
   ### Combine and process all surveys #####----------------------------------------------------------------------------------------------------------------------------------
@@ -149,11 +161,11 @@ prep_reportonly_survey_data <- function(
   survey_data[, rev_chron_order:=rev(seq_along(date)), by="iso3"]
   survey_data[, random_order:=sample(chron_order), by="iso3"]
 
-  write.csv(survey_data, file.path(main_dir, "itn_aggregated_survey_data_plus_reportonly.csv"), row.names=F)
+  write.csv(survey_data, survey_data_out_csv, row.names=F)
 
   survey_count <- survey_data[, list(surv_count=.N), by=list(iso3, country)]
   survey_count <- survey_count[order(surv_count, iso3)]
-  write.csv(survey_count, file.path(main_dir, "survey_count.csv"), row.names=F)
+  write.csv(survey_count, survey_count_out_csv, row.names=F)
 
   ### Generate a submission tsv for sensitivity analysis (save this to your repo) #####----------------------------------------------------------------------------------------------------------------------------------
 
@@ -165,7 +177,7 @@ prep_reportonly_survey_data <- function(
   # replicate, add order_type
   for_tsv <- rbindlist(list(for_tsv, for_tsv, for_tsv))
   for_tsv[, order_type:=rep(c("chron_order", "rev_chron_order", "random_order"), each=base_count)]
-  write.table(for_tsv, file.path(main_dir, "batch_sensitivity.tsv"), quote=FALSE, sep='\t', row.names=F)
+  write.table(for_tsv, batch_sensitivity_out_csv, quote=FALSE, sep='\t', row.names=F)
 
 }
 
@@ -176,9 +188,27 @@ main <- function() {
   main_dir <- file.path("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep", main_subdir)
   input_dir <- file.path(main_dir, "/Volumes/GoogleDrive/My Drive/stock_and_flow/00_survey_nmcp_manufacturer")
 
+  parser <- arg_parser("Some surveys do not have microdata availabe, so stock and flow-related input variables were extracted from survey reports. this script appends those report-level results to the aggregated dataset calculated in step 1a")
+  parser <- add_argument(parser, "--mics3_aggregated", "Input CSV file. Older pre-aggregated MICS3 surveys", default=file.path(input_dir,"non_household_surveys/mics3_aggregated_08_august_2017.csv"))
+  parser <- add_argument(parser, "--other_aggregated", "Input CSV file. Older other pre-aggregated surveys. See eLife paper for further explanation", default=file.path(input_dir,"non_household_surveys/other_aggregated_08_april_2020.csv"))
+  parser <- add_argument(parser, "--survey_summary", "Input CSV file. Aggregated surveys from step 1a.", default=file.path(main_dir, "itn_aggregated_survey_data.csv"))
+  parser <- add_argument(parser, "--summary_table", "Input CSV file. Survey summaries from step 1a.", default=file.path(main_dir, "summary_tables", "summary_table_raw.csv"))
+  parser <- add_argument(parser, "--summary_table_intermediate", "Output CSV file. Descriptor to track survey summary stats (appended to version from prior step).", default=file.path(main_dir, "summary_tables", "summary_table_intermediate.csv"))
+  parser <- add_argument(parser, "--survey_data", "Output CSV file. Aggregated survey data, including report-only surveys. This is the main file that feeds into the next step.", default=file.path(main_dir, "itn_aggregated_survey_data_plus_reportonly.csv"))
+  parser <- add_argument(parser, "--survey_count", "Output CSV file. Small dataset tracking the number of surveys per country, relevant for sensitivity analysis.", default=file.path(main_dir, "survey_count.csv"))
+  parser <- add_argument(parser, "--batch_sensitivity", "Output TSV file. Dataset used to organize surveys and countries for sensitivity analysis; not important for main model run.", default=file.path(main_dir, "batch_sensitivity.tsv"))
+
+  argv <- parse_args(parser)
+
   prep_reportonly_survey_data(
-    input_dir,
-    main_dir
+    argv$mics3_aggregated,
+    argv$other_aggregated,
+    argv$survey_summary,
+    argv$summary_table,
+    argv$summary_table_intermediate,
+    argv$survey_data,
+    argv$survey_count,
+    argv$batch_sensitivity
   )
 }
 
