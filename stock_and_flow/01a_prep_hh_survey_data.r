@@ -24,19 +24,29 @@ library(argparser)
 library(futile.logger)
 
 prep_hh_survey_data <- function(
-  main_dir,
-  out_dir,
+  national_config_data_csv,
+  old_survey_key_csv,
+  dhs_survey_key_csv,
+  old_dhs_6_oct_csv,
+  old_dhs_cluster_22_oct_csv,
+  mics4_csv,
+  mics5_csv,
+  other_hh_csv,
   dhs_dir,
-  code_dir
+  code_dir,
+  summary_table_raw_out_csv,
+  itn_hh_survey_data_out_csv,
+  hhsize_out_csv,
+  itn_aggregated_survey_data_out_csv,
+  itn_hh_data_all_out_csv
 ) {
-  dir.create(out_dir, showWarnings = F, recursive = T)
-  dir.create(file.path(out_dir, "summary_tables"))
+  dir.create(dirname(summary_table_raw_out_csv), showWarnings = F, recursive = T)
 
   # big table of national name/region/code maps
-  country_codes <-fread(file.path(main_dir, 'National_Config_Data.csv'))
+  country_codes <-fread(national_config_data_csv)
 
   # map of older surveys to modern-style survey ids and country names
-  old_survey_key <- fread(file.path(main_dir, "KEY_080817.csv"))
+  old_survey_key <- fread(old_survey_key_csv)
   setnames(old_survey_key, c("Svy Name", "old_id", "Name"), c("SurveyId", "Survey.hh", "CountryName"))
   old_survey_key <- old_survey_key[SurveyId!="U2011BM"] # remove duplicate survey, see data_checking.r for details
 
@@ -46,7 +56,7 @@ prep_hh_survey_data <- function(
 
   print("reading latest DHS data")
   # dhs key originally from http://api.dhsprogram.com/rest/dhs/surveys?f=html&surveyStatus=all
-  dhs_key <- fread(file.path(main_dir, "dhs_survey_key.csv"))
+  dhs_key <- fread(dhs_survey_key_csv)
   dhs_key <- dhs_key[, list(SurveyId, SurveyNum, CountryName)]
 
   dhs_files <- list.files(dhs_dir)
@@ -93,7 +103,7 @@ prep_hh_survey_data <- function(
   ## DATA SOURCE TWO: OLDER DHS SURVEYS EXTRACTED BY B MAPPIN ----------------------------------------------------------------------------------------------------------------------
 
   # from Z:\Malaria data\Measure DHS\Data and Aggregation\Data from Malaria Indicators.
-  old_dhs_data <-fread(file.path(main_dir, "older_dhs_hh_06_october.csv"),stringsAsFactors=FALSE)
+  old_dhs_data <-fread(old_dhs_6_oct_csv, stringsAsFactors=FALSE)
 
   # keep only surveys that don't overlap with newer DHS data-- see data_checking.r for how we got these survey values specifically
   old_surveys_to_keep <- c("TZ2007AIS", "ML2010OTH", "KE2010BM", "NM2009SPA")
@@ -101,7 +111,7 @@ prep_hh_survey_data <- function(
   old_dhs_data <- old_dhs_data[Survey.hh %in% to_keep_ids]
 
   # also load cluster-level data from this extraction to get lat-longs
-  old_dhs_cluster <- fread(file.path(main_dir, "/older_dhs_cluster_22_october.csv"))
+  old_dhs_cluster <- fread(old_dhs_cluster_22_oct_csv)
   old_dhs_cluster <- old_dhs_cluster[Survey %in% unique(old_dhs_data$Survey.hh),
                                      list(Survey.hh=Survey,
                                           Cluster.hh=Cluster.number,
@@ -114,7 +124,7 @@ prep_hh_survey_data <- function(
 
   ## MICS4 data -- from 2014, extracted by Bonnie
   # originally from Z:\Malaria data\MICS\Indicator data\MICS4\MICS4 Net details aggregated by household 21Jan.csv
-  old_mics_data<-fread(file.path(main_dir, "mics4_hh_21_january.csv"))
+  old_mics_data<-fread(mics4_csv)
 
   # The SLE 2010 survey was conducted prior to the mass distribution in the same year, so for now we need to exclude it.
   old_mics_data <- old_mics_data[Survey.hh!="SierraLeone 2010"]
@@ -126,7 +136,7 @@ prep_hh_survey_data <- function(
 
   ## MICS5 data -- I extracted and cleaned these, see extract_mics.r and clean_new_mics.r
   ## These include some subnational surveys that can't be included in the cube data (no lat/long) or the stock and flow data, drop those.
-  mics5_data<-fread(file.path(main_dir, "mics5_hh_18_june_2020.csv"))
+  mics5_data<-fread(mics5_csv)
 
   setnames(mics5_data, c("surveyid", "country"), c("SurveyId", "CountryName"))
   mics5_data <- mics5_data[subnat==""]
@@ -139,7 +149,7 @@ prep_hh_survey_data <- function(
   # see data_checking.r for more details
 
   # "other" data-- unsure, hunt through Z:\Malaria data\Surveys from other sources
-  old_other_data <-fread(file.path(main_dir, "other_hh.csv"))
+  old_other_data <-fread(other_hh_csv)
 
   # dropping b/c too many nulls, these should be captured as summaries in MIS surveys.
   old_other_data <- old_other_data[!Survey.hh %in% c("Malawi2010", "Zambia 2010", "Zambia 2012")]
@@ -354,7 +364,7 @@ prep_hh_survey_data <- function(
 
   # drops latitude/longitude nulls
   for_cube <- for_cube[complete.cases(for_cube)]
-  write.csv(for_cube, file.path(out_dir, "itn_hh_survey_data.csv"), row.names=F)
+  write.csv(for_cube, itn_hh_survey_data_out_csv, row.names=F)
 
 
   ## Find household size distributions from surveys  ----------------------------------------------------------------------------------------------------------------------
@@ -368,7 +378,7 @@ prep_hh_survey_data <- function(
   hh_size_props <- merge(hh_size_props, full_hh_dist, by=c("iso3", "SurveyId", "hh_size"), all=T)
   hh_size_props[is.na(prop), prop:=0]
 
-  write.csv(hh_size_props, file.path(out_dir, "hhsize_from_surveys.csv"), row.names=F)
+  write.csv(hh_size_props, hhsize_out_csv, row.names=F)
 
   ## Collect summary details on survey for supplement table  ----------------------------------------------------------------------------------------------------------------------
 
@@ -412,7 +422,7 @@ prep_hh_survey_data <- function(
     stop("INCORRECT SUMMARIZATION OF CUBE DATA")
   }
 
-  write.csv(summary_table, file.path(out_dir, "summary_tables", "summary_table_raw.csv"), row.names=F)
+  write.csv(summary_table, summary_table_raw_out_csv, row.names=F)
 
   ## SUMMARIZE DATA FOR STOCK AND FLOW  ----------------------------------------------------------------------------------------------------------------------
 
@@ -504,18 +514,55 @@ prep_hh_survey_data <- function(
   # for each metric, values are means unless col name is "tot", in which case they are sums
   survey_summary <- rbindlist(survey_summary)
 
-  write.csv(survey_summary, file.path(out_dir, "itn_aggregated_survey_data.csv"), row.names=F)
-  write.csv(all_data, file.path(out_dir, "itn_hh_data_all.csv"), row.names=F)
+  write.csv(survey_summary, itn_aggregated_survey_data_out_csv, row.names=F)
+  write.csv(all_data, itn_hh_data_all_out_csv, row.names=F)
 
 }
 
 main <- function() {
   out_subdir <- "20200731"
+  main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/household_surveys"
+  out_dir <- file.path("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep", out_subdir)
+  default_dhs_dir <- "/Volumes/GoogleDrive/Shared drives/dhs-outputs/Standard_MAP_DHS_Outputs/DHS_ITN_Data/Output/2020-07-31/standard_tables"
+  default_code_dir <- "/Users/bertozzivill/repos/map-itn-cube/stock_and_flow"
+
+  # input
+  parser <- arg_parser("Prepare household-level survey data for the stock and flow and itn cube models.")
+  parser <- add_argument(parser, "--national_config", "Path to national config data csv file", default=file.path(main_dir, 'National_Config_Data.csv'))
+  parser <- add_argument(parser, "--old_survey_key", "Path to older survey to modern survey mapping csv file", default=file.path(main_dir, "KEY_080817.csv"))
+  parser <- add_argument(parser, "--dhs_survey_key", "Path to DHS survey key csv file", default=file.path(main_dir, "dhs_survey_key.csv"))
+  parser <- add_argument(parser, "--old_dhs_6_oct", "Path to older DHS survey from 6 October, csv file", default=file.path(main_dir, "older_dhs_hh_06_october.csv"))
+  parser <- add_argument(parser, "--old_dhs_cluster_22_oct", "Path to older DHS survey from 22 October, csv file", default=file.path(main_dir, "older_dhs_cluster_22_october.csv"))
+  parser <- add_argument(parser, "--mics4", "Path to MICS4 survey, csv file", default=file.path(main_dir, "mics4_hh_21_january.csv"))
+  parser <- add_argument(parser, "--mics5", "Path to MICS5 survey, csv file", default=file.path(main_dir, "mics5_hh_18_june_2020.csv"))
+  parser <- add_argument(parser, "--other_hh", "Path to other household survey csv file. See data_checking.r for more details", default=file.path(main_dir, "other_hh.csv"))
+  parser <- add_argument(parser, "--dhs_dir", "Path containing DHS surveys in CSV format", default=default_dhs_dir)
+  parser <- add_argument(parser, "--code_dir", "Path containing stock and flow code", default=default_code_dir)
+
+  # output
+  parser <- add_argument(parser, "--summary_table", "Output CSV file. Descriptor to track survey summary stats.", default=file.path(out_dir, "summary_tables", "summary_table_raw.csv"))
+  parser <- add_argument(parser, "--for_cube", "Output CSV file. Household-level data file INCLUDING non-geolocated points.", default=file.path(out_dir, "itn_hh_survey_data.csv"))
+  parser <- add_argument(parser, "--hh_size_props", "Output CSV file. Household size distribution (1-10+ people) for use in the crop-to-access conversion", default=file.path(out_dir, "hhsize_from_surveys.csv"))
+  parser <- add_argument(parser, "--survey_summary", "Output CSV file. Aggregated survey data. This is the main file that feeds into the next step.", default=file.path(out_dir, "itn_aggregated_survey_data.csv"))
+  parser <- add_argument(parser, "--all_data", "Output CSV file. Aggregated survey data. This is the main file that feeds into the next step.", default=file.path(out_dir, "itn_hh_data_all.csv"))
+  argv <- parse_args(parser)
+
   prep_hh_survey_data(
-    main_dir = "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/household_surveys",
-    out_dir = file.path("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep", out_subdir),
-    dhs_dir = "/Volumes/GoogleDrive/Shared drives/dhs-outputs/Standard_MAP_DHS_Outputs/DHS_ITN_Data/Output/2020-07-31/standard_tables",
-    code_dir = "/Users/bertozzivill/repos/map-itn-cube/stock_and_flow"
+    argv$national_config,
+    argv$old_survey_key,
+    argv$dhs_survey_key,
+    argv$old_dhs_6_oct,
+    argv$old_dhs_cluster_22_oct,
+    argv$mics4,
+    argv$mics5,
+    argv$other_hh,
+    argv$dhs_dir,
+    argv$code_dir,
+    argv$summary_table,
+    argv$for_cube,
+    argv$hh_size_props,
+    argv$survey_summary,
+    argv$all_data
   )
 }
 
