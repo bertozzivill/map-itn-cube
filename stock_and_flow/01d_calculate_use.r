@@ -21,11 +21,10 @@ library(futile.logger)
 
 
 calculate_use <- function(
-  main_dir
+  survey_data_csv,
+  access_use_relationship_out_csv
 ) {
-  survey_data <- fread(file.path(main_dir, "itn_aggregated_survey_data.csv"))
-  all_data <- fread(file.path(main_dir, "itn_hh_data_all.csv"))
-
+  survey_data <- fread(survey_data_csv)
 
   all_traces <- rbindlist(lapply(c("use", "preg_use", "u5_use"), function(this_out_var){
     print(this_out_var)
@@ -76,7 +75,7 @@ calculate_use <- function(
   }))
 
 
-  write.csv(all_traces, file.path(main_dir, "access_use_relationship.csv"), row.names=F)
+  write.csv(all_traces, access_use_relationship_out_csv, row.names=F)
 
 
   # more checking against sam
@@ -96,11 +95,17 @@ calculate_use <- function(
 
 main <- function() {
   subdir <- "20200731"
-
   main_dir <- file.path("/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/01_input_data_prep", subdir)
 
+  parser <- arg_parser("Run a regression to find coefficients for the access-to-use conversion used in the World Malaria Report. Use is calculated overall, among children under 5, and among pregnant people.")
+  parser <- add_argument(parser, "--survey_data", "Input CSV file. Aggregated survey data ('survey_summary' in step 01a).", default=file.path(main_dir, "itn_aggregated_survey_data.csv"))
+  parser <- add_argument(parser, "--access_use_relationship", "Output CSV file. Samples from the posterior distributions of the Stan model, used to calculate use from access for 3 demographic groups in step 03.", default=file.path(main_dir, "access_use_relationship.csv"))
+
+  argv <- parse_args(parser)
+
   calculate_use(
-    main_dir
+    argv$survey_data,
+    argv$access_use_relationship
   )
 }
 
