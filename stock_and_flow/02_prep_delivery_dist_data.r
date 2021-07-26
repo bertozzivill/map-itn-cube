@@ -16,25 +16,34 @@ library(argparser)
 library(futile.logger)
 
 prep_delivery_dist_data <- function(
-  code_dir,
-  main_dir,
-  in_dir,
-  out_dir
+  batch_country_list_tsv,
+  nmcp_2019_csv,
+  base_manufacturer_deliveries_csv,
+  combined_data_2016_2019_csv,
+  updated_dists_2020_csv,
+  tza_2013_2015_csv,
+  nmcp_2019_5yr_mins_out_csv,
+  llin_dist_by_source_out_pdf,
+  prepped_llins_out_csv,
+  itn_distributions_out_csv,
+  manufacturer_deliveries_out_csv
 ) {
-  sf_countries <- fread(file.path(code_dir, "for_gcloud", "batch_country_list.tsv"))
+  sf_countries <- fread(batch_country_list_tsv)
   names(sf_countries) <- "ISO3"
 
-  date <- "20200929"
-
-  dir.create(out_dir, showWarnings = F, recursive = T)
+  dir.create(dirname(nmcp_2019_5yr_mins_out_csv), showWarnings = F, recursive = T)
+  dir.create(dirname(llin_dist_by_source_out_pdf), showWarnings = F, recursive = T)
+  dir.create(dirname(prepped_llins_out_csv), showWarnings = F, recursive = T)
+  dir.create(dirname(itn_distributions_out_csv), showWarnings = F, recursive = T)
+  dir.create(dirname(manufacturer_deliveries_out_csv), showWarnings = F, recursive = T)
 
   # NMCP data: 2000-2018
-  nmcp <- fread(file.path(main_dir, "../data_2019", "NMCP_2019.csv"))
+  nmcp <- fread(nmcp_2019_csv)
   nmcp <- nmcp[ISO3 %in% sf_countries$ISO3]
 
   # use the minimum of 2014-18 to fill in as a proxy for routine distributions when you have no other information
   nmcp_mins <- unique(nmcp[year>=2014, list(MAP_Country_Name, LLIN=min(LLIN, na.rm=T)), by="ISO3"])
-  write.csv(nmcp_mins, file.path(in_dir, "nmcp_2019_5yr_mins.csv"), row.names=F)
+  write.csv(nmcp_mins, nmcp_2019_5yr_mins_out_csv, row.names=F)
   setnames(nmcp_mins, "ISO3", "iso3")
 
   nmcp_fill_nas <- nmcp[, list(iso3=ISO3, year, llin=LLIN, type="NMCP")]
@@ -43,12 +52,12 @@ prep_delivery_dist_data <- function(
 
 
   # data that has manually combined nmcp/alma/pmi for 2016-2020, and routine distributions for 2020
-  combined_2016_2019 <- fread(file.path(in_dir, "combined_data_2016_2019.csv"))
-  dists_2020 <- fread(file.path(in_dir, "updated_dists_2020.csv"))
-  tanzania_special <- fread(file.path(in_dir, "tza_2013_2015.csv"))
+  combined_2016_2019 <- fread(combined_data_2016_2019_csv)
+  dists_2020 <- fread(updated_dists_2020_csv)
+  tanzania_special <- fread(tza_2013_2015_csv)
 
   # pull manufacturer data
-  manu <- fread(file.path(main_dir, "base_manufacturer_deliveries.csv"), header=T)
+  manu <- fread(base_manufacturer_deliveries_csv, header=T)
   manu <- manu[Country!=""]
 
   ## Filling in missingness
@@ -108,9 +117,6 @@ prep_delivery_dist_data <- function(
   # 2020: Append latest data from WHO/PMI/NMCP
   ####
 
-  this_out_dir <- file.path(out_dir, "ready_for_stockflow")
-  dir.create(this_out_dir, showWarnings = F)
-
   to_append_2020 <- dists_2020[, list(ISO3,
                                       year,
                                       llins=LLIN,
@@ -132,11 +138,11 @@ prep_delivery_dist_data <- function(
          y="LLINs Distributed",
          title="")
 
-  pdf(file.path(this_out_dir, "llin_dist_by_source.pdf"), width=14, height=10)
+  pdf(llin_dist_by_source_out_pdf, width=14, height=10)
   print(final_missingness_plot)
   graphics.off()
 
-  write.csv(these_distributions, file=file.path(this_out_dir, paste0("prepped_llins_", date, ".csv")), row.names=F)
+  write.csv(these_distributions, file=prepped_llins_out_csv, row.names=F)
 
   # reformat to look like NMCP data
   new_nmcp <- copy(nmcp)
@@ -146,27 +152,50 @@ prep_delivery_dist_data <- function(
   new_nmcp <- merge(new_nmcp, these_distributions[, list(ISO3, MAP_Country_Name, country, year, LLIN=llins)],
                     by=c("ISO3", "MAP_Country_Name", "country", "year"), all=T)
 
-  write.csv(new_nmcp, file=file.path(this_out_dir, "itn_distributions.csv"), row.names = F)
-
+  write.csv(new_nmcp, file=itn_distributions_out_csv, row.names = F)
 
   # regenerate manufacturer file, setting manu equal to distributions in 2020 and 21
   new_manu <- dcast.data.table(these_distributions[year>=2020], ISO3  ~ year, value.var = "llins")
   new_manu <- merge(manu, new_manu, by="ISO3", all=T)
   new_manu[is.na(new_manu)] <- 0
-  write.csv(new_manu, file=file.path(this_out_dir, "manufacturer_deliveries.csv"), row.names=F)
+  write.csv(new_manu, file=manufacturer_deliveries_out_csv, row.names=F)
 }
 
 main <- function() {
   code_dir <- "/Users/bertozzivill/repos/map-itn-cube/stock_and_flow"
   main_dir <- "/Volumes/GoogleDrive/My Drive/stock_and_flow/input_data/00_survey_nmcp_manufacturer/nmcp_manufacturer_from_who/data_2020"
+  date <- "20200929"
   in_dir <- file.path(main_dir, date, "inputs")
   out_dir <- file.path(main_dir, date)
+  this_out_dir <- file.path(out_dir, "ready_for_stockflow")
+
+  parser <- arg_parser("Clean and format ITN delivery and ITN distribution data.")
+  parser <- add_argument(parser, "--batch_country_list", "Input TSV file. List of countries and their ISO3 codes.", default=file.path(code_dir, "for_gcloud", "batch_country_list.tsv"))
+  parser <- add_argument(parser, "--nmcp_2019", "Input CSV file. NMCP data for 2019.", default=file.path(main_dir, "../data_2019", "NMCP_2019.csv"))
+  parser <- add_argument(parser, "--combined_data_2016_2019", "Input CSV file. Data with manually combined nmcp/alma/pmi data for 2016-2019", default=file.path(in_dir, "combined_data_2016_2019.csv"))
+  parser <- add_argument(parser, "--tza_2013_2015", "Input CSV file. Old NMCP data for TZA", default=file.path(in_dir, "tza_2013_2015.csv"))
+  parser <- add_argument(parser, "--nmcp_5yr_mins", "Output CSV file. Min of NMCP data, as a proxy for routine distribution when there is no other data.", default=file.path(in_dir, "nmcp_2019_5yr_mins.csv"))
+  parser <- add_argument(parser, "--updated_dists_2020", "Input CSV file. Data with combined nmcp data for 2020", default=file.path(in_dir, "updated_dists_2020.csv"))
+  parser <- add_argument(parser, "--base_manufacturer_deliveries", "Input CSV file. Dataset of manufacturer deliveries.", default=file.path(main_dir, "base_manufacturer_deliveries.csv"))
+  parser <- add_argument(parser, "--llin_dist_by_source", "Output PDF file. Plot of LLIN distributions by source", default=file.path(this_out_dir, "llin_dist_by_source.pdf"))
+  parser <- add_argument(parser, "--prepped_llins", "Output CSV file. Dataset of all LLIN distributions", default=file.path(this_out_dir, paste0("prepped_llins_", date, ".csv")))
+  parser <- add_argument(parser, "--itn_distributions", "Output CSV file. All LLIN ditributions, reformatted to resemble the original NMCP data. Used in step 03.", default=file.path(this_out_dir, "itn_distributions.csv"))
+  parser <- add_argument(parser, "--manufacturer_deliveries", "Output CSV file. Dataset of manufacturer deliveries. Used in step 03.", default=file.path(this_out_dir, "manufacturer_deliveries.csv"))
+
+  argv <- parse_args(parser)
 
   prep_delivery_dist_data(
-    code_dir,
-    main_dir,
-    in_dir,
-    out_dir
+    argv$batch_country_list,
+    argv$nmcp_2019,
+    argv$base_manufacturer_deliveries,
+    argv$combined_data_2016_2019,
+    argv$updated_dists_2020,
+    argv$tza_2013_2015,
+    argv$nmcp_5yr_mins,
+    argv$llin_dist_by_source,
+    argv$prepped_llins,
+    argv$itn_distributions,
+    argv$manufacturer_deliveries
   )
 }
 
