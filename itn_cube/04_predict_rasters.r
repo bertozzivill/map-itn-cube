@@ -37,6 +37,7 @@ predict_rasters <- function(
   dynamic_covariates_csv,
   nat_level_out_csv_dir,
   annual_summary_stats_out_tif_dir,
+  annual_realisations_out_tif_dir,
   func_dir,
   testing
 ) {
@@ -54,6 +55,9 @@ predict_rasters <- function(
   # output directory creation
   dir.create(nat_level_out_csv_dir, recursive = T, showWarnings = F)
   dir.create(annual_summary_stats_out_tif_dir, recursive = T, showWarnings = F)
+  if (!is.na(annual_realisations_out_tif_dir)) {
+    dir.create(annual_realisations_out_tif_dir, recursive = T, showWarnings = F)
+  }
 
   # load function script
   source(file.path(func_dir, "03_inla_functions.r")) # for ll_to_xyz and predict_inla
@@ -285,9 +289,22 @@ predict_rasters <- function(
 
   print("Annual means calculated.")
   print(mem_used())
-  rm(annual_predictions)
 
   print("Making maps.")
+  if (!is.na(annual_realisations_out_tif_dir)) {
+    print("saving use realisations")
+    n_realisations <- dim(annual_predictions[["use"]])[2]
+    for (realisation in 1:n_realisations) {
+      use_data <- annual_predictions[["use"]][,realisation]
+      raster_filename <- file.path(annual_realisations_out_tif_dir, paste0("REALISATIONS.", this_year, ".", realisation, ".itn.use", ".tif"))
+      make_raster(use_data, cellnumbers=prediction_cells$cellnumber, raster_template=national_raster, out_fname=raster_filename)
+    }
+  }
+
+
+  rm(annual_predictions)
+  print("saving stats")
+
   all_maps <- lapply(names(annual_summary_stats), function(this_var){
     print(this_var)
     var_maps <- lapply(colnames(annual_summary_stats[[this_var]]), function(this_col){
@@ -343,6 +360,7 @@ main <- function() {
   parser <- add_argument(parser, "--dynamic_covariates", help="Input CSV files directory. Directory containing cleaned extracted dynamic covariates. Default path can be adjusted with env 'cov_dir'", default=dirname(dynamic_cov_dir))
   parser <- add_argument(parser, "--nat_level", help="Output CSV dir. Dataset of monthly national-level time series for all outputs. Default path can be adjusted with env 'main_outdir'", default=file.path(main_outdir, "04_predictions", "aggregated"))
   parser <- add_argument(parser, "--annual_summary_stats", help="Output TIF dir. This dataset of annual pixel-level results gets transformed into annual rasters and saved. Default path can be adjusted with env 'main_outdir'", default=file.path(main_outdir, "04_predictions", "rasters"))
+  parser <- add_argument(parser, "--annual_realisations", help="Output TIF dir. This dataset of annual raster realisations. Rasters aren't get created unless a path is specified.", default=NA)
 
   args <- parse_args(parser)
 
@@ -370,6 +388,7 @@ main <- function() {
     dynamic_covariates_year,
     args$nat_level,
     args$annual_summary_stats,
+    args$annual_realisations,
     args$code_dir,
     args$testing
   )
