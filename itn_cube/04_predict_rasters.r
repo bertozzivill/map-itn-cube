@@ -328,7 +328,7 @@ main <- function() {
     main_outdir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/20200501_BMGF_ITN_C1.00_R1.00_V2_with_uncertainty/"
     static_cov_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/20200401/static_covariates.csv"
     annual_cov_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/20200401/annual_covariates.csv"
-    dynamic_cov_dir <- paste0("/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/20200401/dynamic_covariates/dynamic_", this_year, ".csv")
+    dynamic_cov_dir <- "/Volumes/GoogleDrive/My Drive/itn_cube/results/covariates/20200401/dynamic_covariates/"
     func_dir <- "/Users/bertozzivill/repos/map-itn-cube/itn_cube/"
     testing <- T
   } else {
