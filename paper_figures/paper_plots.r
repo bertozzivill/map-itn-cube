@@ -19,9 +19,12 @@ library(geofacet)
 library(data.table)
 library(INLA)
 library(sf)
+library(RColorBrewer)
 
 
 rm(list=ls())
+
+theme_set(theme_minimal())
 
 ############ ----------------------------------------------------------------------------------------------------------------------
 ## Inputs  ----------------------------------------------------------------------------------------------------------------------
@@ -49,7 +52,7 @@ supp_dir <- file.path(out_dir, "supplementary_plots")
 dir.create(supp_dir, showWarnings = F)
 
 # directory for saving figure data to git repo (paper submission requirement)
-repo_fig_dir <- "~repos/map-itn-cube/paper_figures/figure_data/"
+repo_fig_dir <- "~/repos/map-itn-cube/paper_figures/figure_data/"
 geofacet_fname <- "~/repos/map-itn-cube/paper_figures/geofacet_ssa_malaria.csv"
 
 # supplementary image default sizes
@@ -857,10 +860,10 @@ rel_uncert_maps <- lapply(variables_to_plot, function(this_var){
   
   template_raster <- copy(mean_raster)
   template_raster[!is.na(template_raster)] <- mean_dt$mean
-  writeRaster(template_raster, file.path(fig_3_dir, paste0(this_var, "_", uncert_year, "_mean.tif")))
+  writeRaster(template_raster, file.path(fig_3_dir, paste0(this_var, "_", uncert_year, "_mean.tif")), overwrite=T)
   
   template_raster[!is.na(template_raster)] <- full_dt[order(cellnum)]$comb
-  writeRaster(template_raster, file.path(fig_3_dir, paste0(this_var, "_", uncert_year, "_uncert_quart.tif")))
+  writeRaster(template_raster, file.path(fig_3_dir, paste0(this_var, "_", uncert_year, "_uncert_quart.tif")), overwrite=T)
   
   write.csv(levels, file=file.path(fig_3_dir, "uncert_levels.csv"), row.names = F)
   
@@ -994,11 +997,11 @@ rel_gain_plots <- lapply(years_for_rel_gain, function(this_year){
   
   # save to repo for paper
   if (this_year==uncert_year){
-    writeRaster(this_use, file.path(fig_6_dir, paste0("true_use_", uncert_year, ".tif")))
-    writeRaster(this_access, file.path(fig_6_dir, paste0("use_with_max_use_rate_", uncert_year, ".tif")))
-    writeRaster(this_use_rate, file.path(fig_6_dir, paste0("use_with_max_access_", uncert_year, ".tif")))
-    writeRaster(use_gain, file.path(fig_6_dir, paste0("gain_from__max_use_rate_", uncert_year, ".tif")))
-    writeRaster(access_gain, file.path(fig_6_dir, paste0("gain_from__max_access_", uncert_year, ".tif")))
+    writeRaster(this_use, file.path(fig_6_dir, paste0("true_use_", uncert_year, ".tif")), overwrite=T)
+    writeRaster(this_access, file.path(fig_6_dir, paste0("use_with_max_use_rate_", uncert_year, ".tif")), overwrite=T)
+    writeRaster(this_use_rate, file.path(fig_6_dir, paste0("use_with_max_access_", uncert_year, ".tif")), overwrite=T)
+    writeRaster(use_gain, file.path(fig_6_dir, paste0("gain_from__max_use_rate_", uncert_year, ".tif")), overwrite=T)
+    writeRaster(access_gain, file.path(fig_6_dir, paste0("gain_from__max_access_", uncert_year, ".tif")), overwrite=T)
   }
   
   
