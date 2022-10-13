@@ -13,6 +13,8 @@
 
 ##############################################################################################################
 
+require(VGAMdata)
+
 # lifted from the docs of the empLogit function from the binomTools package
 emplogit <- function (y, eps = 1e-3){
   # 1-variable logit transform
