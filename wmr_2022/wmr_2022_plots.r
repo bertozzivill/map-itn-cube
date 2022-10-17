@@ -16,7 +16,9 @@ rm(list=ls())
 
 cube_output_dir <- "~/Google Drive/My Drive/itn_cube/results/20220908_from_mauricio/04_predictions/aggregated/"
 stockflow_output_dir <- "~/Google Drive/My Drive/stock_and_flow/results/20220908_from_mauricio/abv_for_wmr/"
-effectiveness_output_dir <- "~/Dropbox (IDM)/Malaria Team Folder/projects/map_intervention_impact/intervention_impact/20221010_wmr_effectiveness_v2/"
+emod_subdir <- "20221010_wmr_effectiveness_v2"
+effectiveness_output_dir <- file.path("~/Dropbox (IDM)/Malaria Team Folder/projects/map_intervention_impact/intervention_impact/",
+emod_subdir)
 
 # cube
 cube_outputs <- rbindlist(lapply(list.files(cube_output_dir, full.names = T), fread))
@@ -201,7 +203,8 @@ effectiveness_sketch <- ggplot(effectiveness_for_plotting, aes(x=time, y=value, 
 
 
 ## Effectiveness plot-- full
-effectiveness_raw <- fread(file.path(effectiveness_output_dir, "results/raw/20221010_wmr_effectiveness_v2_Int_combined_metrics.csv"))
+effectiveness_raw <- fread(file.path(effectiveness_output_dir, "results/raw/", 
+                                     paste0(emod_subdir,"_Int_combined_metrics.csv")))
 interventions <- fread(file.path(effectiveness_output_dir, "input/interventions.csv"))
 interventions[, int:=NULL]
 interventions[, cov:=cov/100]
@@ -214,23 +217,36 @@ effect_summary <- effectiveness_raw[, lapply(.SD, mean), by=list(Site_Name, x_Te
                   .SDcols=c("prev", "eir", "inc", "severe_inc", "pop")]
 # effect_summary <- merge(effect_summary, interventions)
 
-effect_summary[, int_name:=factor(int_id, labels=c("Maximum Impact",
-                                                            "Access (87%)",
-                                                            "Retention (1.9 yrs)",
-                                                            "Use Rate (83%)",
-                                                            "Killing: Low Resistance (85% Survival)",
-                                                            "Killing: High Resistance (70% Survival)",
-                                                            "Blocking (1.9 yrs) + Low Resistance",
-                                                            "Blocking (1.9 yrs) + High Resistance",
-                                                            "No Interventions"
-))]
+if (emod_subdir=="20221010_wmr_effectiveness_v2"){
+  effect_summary[, int_name:=factor(int_id, labels=c("Maximum impact under\nidealized conditions",
+                                                     "Reduce access to 87%",
+                                                     "Add net discarding\n(retention half-life 1.9 yrs)",
+                                                     "Add imperfect use (use rate 83%)",
+                                                     "Add waning of killing\n (4-year half-life)\n
+                                                     and reduce killing by 15% (Low Resistance))",
+                                                     "Add waning of killing\n (4-year half-life)\nand reduce killing by 30%)",
+                                                     "Add waning of blocking\n (4-year half-life)\n+ Low Resistance",
+                                                     "Add waning of blocking\n (1.9-year half-life)",
+                                                     "No Interventions"
+  ))]
+}else if (emod_subdir=="20221013_wmr_sens_v1"){
+  effect_summary[, int_name:=factor(int_id, labels=c("Maximum Impact",
+                                                     "Blocking (1.9 yrs)",
+                                                     "Killing: High Resistance (70% Survival)",
+                                                     "Use Rate (83%)",
+                                                     "Retention (1.9 yrs)",
+                                                     "Access (87%)",
+                                                     "No Interventions"
+  ))]
+}
+
 
 effect_summary <- effect_summary[day>364]
 
 
 
 effect_summary_relative <- melt(effect_summary, id.vars = c("int_id", "int_name", "Site_Name", "x_Temporary_Larval_Habitat", "day", "pop"))
-control <- effect_summary_relative[int_id==9, list(Site_Name, x_Temporary_Larval_Habitat, day, variable, control_value=value, control_pop=pop)]
+control <- effect_summary_relative[int_name=="No Interventions", list(Site_Name, x_Temporary_Larval_Habitat, day, variable, control_value=value, control_pop=pop)]
 effect_summary_relative <- merge(effect_summary_relative, control)
 effect_summary_relative[, reduction:= control_value-value]
 
@@ -259,7 +275,7 @@ eirs <- eirs[, list(eir=mean(eir)), by=list(Site_Name, x_Temporary_Larval_Habita
 eirs[, eir:=round(eir, 0)]
 subset_effect_results <- merge(subset_effect_results, eirs, by=c("Site_Name", "x_Temporary_Larval_Habitat"))
 
-ggplot(effect_summary[Site_Name==3], aes(x=day, y=prev, color=int_name)) +
+ggplot(effect_summary[Site_Name==7], aes(x=day, y=prev, color=int_name)) +
   geom_line() +
   geom_text(data= eirs, aes(label=eir), x=900, y=0.7, color="black", size=2) +
   facet_wrap(~x_Temporary_Larval_Habitat) +
@@ -297,54 +313,99 @@ pdf(file=file.path(effectiveness_output_dir, "results/plots", "prop_effect.pdf")
 print(prop_reduction_plot)
 graphics.off()
 
-main_eff_subset <- subset_effect_results[day >420 & Site_Name==7 & x_Temporary_Larval_Habitat==0.375 & !(int_name %like% "Low") & int_name!="No Interventions"]
-main_eff_subset[, diff := prop_of_max - shift(prop_of_max, fill = 0), by = day]
-# main_eff_subset[, plot_perc:= prop_of_max/sum(prop_of_max), by=list(day)]
-main_eff_subset[, year:=(day-min(day))/365]
+
 
 access_val <- interventions[int_id==2]$ITN_Coverage
 ret_lambda <- 1.9
 use_rate <- interventions[int_id==4]$ITN_Use_Rate_Constant
 killing_mult <- 0.70
 killing_lambda <- interventions[int_id==5]$ITN_Killing_Halflife/365
-blocking_lambda <- interventions[int_id==7]$ITN_Blocking_Halflife/365
+blocking_lambda <- ret_lambda
 
+
+main_eff_subset <- subset_effect_results[ !(int_name %like% "Low")]
+main_eff_subset[, diff := prop_of_max - shift(prop_of_max, fill = 0), by = list(Site_Name, x_Temporary_Larval_Habitat, day)]
+# main_eff_subset[, plot_perc:= prop_of_max/sum(prop_of_max), by=list(day)]
+main_eff_subset[, year:=(day-365)/365]
 main_eff_subset[diff<0, diff:=0]
 
-ggplot(main_eff_subset, aes(x=year, y=diff, fill=int_name)) +
-  geom_area(alpha=0.6 , size=1, colour="black") +
+ggplot(main_eff_subset[day >450 & Site_Name==6 & x_Temporary_Larval_Habitat==0.625  & int_name!="No Interventions"]) +
+  # geom_area(alpha=0.6 , size=1, colour="black") +
+  stat_smooth(geom="area",  se=F, aes(x=year, y=diff, fill=int_name), alpha=0.7, position="stack", 
+              #size=1, color="black"
+              ) +
   scale_fill_brewer(palette=3, direction=-1) +
   theme_minimal() +
   theme(legend.position = "none") + 
-  annotate("text", label=paste("Maximum Possible Impact"),
+  annotate("text", label=paste("Maximum impact under idealized conditions"),
            x=1.5, y=1.02) + 
-  annotate("text", label=paste("Access:", access_val*100, "%"),
-           x=1.5, y=0.9) +
-  annotate("text", label=paste("Retention Half Life:", ret_lambda, "Yrs"),
-           x=1.25, y=0.7) +
-  annotate("text", label=paste("Use Rate:", use_rate*100, "%"),
-           x=0.5, y=0.47) +
-  annotate("text", label=paste("Killing, High Resistance:\n", killing_mult*100, "% Survival"),
-           x=0.5, y=0.3) +
-  #annotate("text", label=paste("Killing Half Life:", killing_lambda, "Yrs"),
-           # x=1, y=0.075) +
-  annotate("text", label=paste("Blocking Half Life: \n", effectiveness_block_lambda, "Yrs"),
-           x=0.5, y=0.15) +
-  labs(x="Year",
+  annotate("text", label=paste0("Reduce coverage to ", access_val*100, "% due to imperfect access"),
+           x=0.35, y=0.93, hjust=0) +
+  annotate("text", label=paste("Add waning retention:\n", "50% of nets gone after", ret_lambda, "years"),
+           x=1.2, y=0.6, hjust=0) +
+  annotate("text", label=paste0("Reduce\nuse rate\nto ", use_rate*100, "%"),
+           x=0.35, y=0.72, hjust=0) +
+  annotate("text", label=paste0("Reduce initial\nkilling by ",
+                                100-killing_mult*100, "%"),
+           x=0.35, y=0.51, hjust=0) +
+  annotate("text", label=paste0("Add waning insecticide:\n",
+                                killing_lambda, " year half-life"),
+           x=1, y=0.25, hjust=0 ) +
+  annotate("text", label=paste("Add waning blocking:\n",
+                               blocking_lambda, " year half-life"),
+           x=1.6, y=0.1, hjust=0) +
+  labs(x="Years Since Net Distribution",
        y="Proportion of Maximum Impact",
-       title="Site 3, x_temp 7, EIR 525")
+       title="ITN Effectiveness Breakdown, EIR of  62"
+  )
 
-ggplot(main_eff_subset, aes(x=day, y=prop_of_max, color=int_name)) +
-  geom_line() +
-  # geom_text(data= eirs[Site_Name==7], aes(label=eir), x=900, y=0.7, color="black") +
-  facet_wrap(~eir) +
-  theme_minimal()
-
-
-ggplot(effect_summary[Site_Name==7 & x_Temporary_Larval_Habitat==0.375 ], aes(x=day, y=prev, color=int_name)) +
-  geom_line() +
-  facet_wrap(~x_Temporary_Larval_Habitat) +
+ggplot(main_eff_subset[day >450 & Site_Name==6 & x_Temporary_Larval_Habitat==0.05 & int_name!="No Interventions"], 
+       aes(x=year, y=diff)
+       ) +
+  stat_smooth(geom="area", se=F, aes(fill=int_name), alpha=0.7, position="stack", 
+              #size=1, color="black"
+              ) +
+  scale_fill_brewer(palette=3, direction=-1) +
   theme_minimal() +
-  labs(title="Site 7, x_temp 0.375, EIR 62")
+  theme(legend.position = "none") + 
+  annotate("text", label=paste("Maximum impact under idealized conditions"),
+           x=1.5, y=1.02) + 
+  annotate("text", label=paste0("Reduce coverage to ", access_val*100, "% due to imperfect access"),
+           x=0.35, y=0.985, hjust=0) +
+  annotate("text", label=paste("Add waning retention:\n", "50% of nets gone after", ret_lambda, "years"),
+           x=1.75, y=0.75, hjust=0) +
+  annotate("text", label=paste0("Reduce\nuse rate\nto ", use_rate*100, "%"),
+           x=0.35, y=0.85, hjust=0) +
+  annotate("text", label=paste0("Reduce initial\nkilling by ",
+                                100-killing_mult*100, "%"),
+           x=0.35, y=0.71, hjust=0) +
+  annotate("text", label=paste0("Add waning insecticide:\n",
+                                killing_lambda, " year half-life"),
+           x=1.25, y=0.44, hjust=0 ) +
+  annotate("text", label=paste("Add waning blocking:\n",
+                               blocking_lambda, " year half-life"),
+           x=2.1, y=0.16, hjust=0) +
+  labs(x="Years Since Net Distribution",
+       y="Proportion of Maximum Impact",
+       title="ITN Effectiveness Breakdown, EIR of  9"
+  )
+
+# ggplot(main_eff_subset[day >420 & Site_Name==6 & x_Temporary_Larval_Habitat==0.05], aes(x=day, y=prop_of_max, color=int_name)) +
+#   geom_line() +
+#   # geom_text(data= eirs[Site_Name==7], aes(label=eir), x=900, y=0.7, color="black") +
+#   facet_wrap(~eir) +
+#   theme_minimal()
+
+effect_summary[, year:=(day-365)/365]
+ggplot(main_eff_subset[Site_Name==6 & (x_Temporary_Larval_Habitat==0.05 | x_Temporary_Larval_Habitat==0.625)], 
+       aes(x=year, y=value, color=int_name)) +
+  geom_line() +
+  facet_grid(.~eir) + 
+  theme_minimal() +
+  theme(legend.title = element_blank()) +
+  labs(x="Year",
+       y="PfPR 2-10",
+       title="ITN Prevalence over Time, EIRs of  9 and 62")
+
 
 
