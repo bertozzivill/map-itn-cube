@@ -322,7 +322,8 @@ print(raw_effect_plot)
 graphics.off()
 
 
-ggplot(subset_effect_results[Site_Name==6 & x_Temporary_Larval_Habitat==0.625 & (plot!=3 | is.na(plot) )], aes(x=(day-365)/365, y=reduction, color=int_name)) +
+ggplot(subset_effect_results[Site_Name==6 & x_Temporary_Larval_Habitat==0.625 & (plot!=3 | is.na(plot) )], 
+       aes(x=(day-365)/365, y=reduction, color=int_name)) +
                 geom_line() +
                 # geom_text(data= eirs, aes(label=eir), x=900, y=0.7, color="black", size=2) +
                 # facet_grid(Site_Name~x_Temporary_Larval_Habitat) +

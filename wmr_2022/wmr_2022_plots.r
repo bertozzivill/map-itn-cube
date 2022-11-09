@@ -16,9 +16,11 @@ rm(list=ls())
 
 cube_output_dir <- "~/Google Drive/My Drive/itn_cube/results/20220908_from_mauricio/04_predictions/aggregated/"
 stockflow_output_dir <- "~/Google Drive/My Drive/stock_and_flow/results/20220908_from_mauricio/abv_for_wmr/"
-emod_subdir <- "20221017_wmr_effectiveness_v4"
+emod_subdir <- "20221021_wmr_effectiveness_v5"
 effectiveness_output_dir <- file.path("~/Dropbox (IDM)/Malaria Team Folder/projects/map_intervention_impact/intervention_impact/",
                                       emod_subdir)
+itn_paper_dir <- "~/repos/map-itn-cube/paper_figures/figure_data"
+
 
 # cube
 cube_outputs <- rbindlist(lapply(list.files(cube_output_dir, full.names = T), fread))
@@ -34,6 +36,7 @@ cube_outputs <- dcast.data.table(cube_outputs, iso3 + year +  time ~ variable, v
 
 # optimized stockflow
 optimal_stockflow_outputs <- fread(file.path(stockflow_output_dir, "optimized_access_means.csv"))
+iso3_names <- unique(optimal_stockflow_outputs[, list(iso3, country_name)])
 
 pop <- unique(optimal_stockflow_outputs[, list(iso3, year, total_pop, pop_at_risk_pf, prop_pop_at_risk_pf)])
 
@@ -143,6 +146,57 @@ timeseries_plot_cumulative <- ggplot(for_plot_cumulative, aes(x=year, y=itn_use,
        y="Net Use",
        title="Cumulative Effects of Policy Changes on Net Use")
 
+timeseries_plot_afr_cumulative <- ggplot(for_plot_cumulative[iso3=="AFR"], aes(x=year, y=itn_use, color=scenario)) +
+  geom_hline(yintercept=0.8) +
+  geom_line() +
+  theme_minimal() +
+  labs(x="Year",
+       y="Net Use",
+       title="Cumulative Effects of Policy Changes on Net Use, Sub-Saharan Africa")
+
+ggsave(timeseries_plot_afr_cumulative, file=file.path(stockflow_output_dir, "output/cumulative_plot_afr.eps"), width=7, height=5)
+
+#### LLIN half-lives
+
+gg_color_hue <- function(n) {
+  hues = seq(15, 375, length = n + 1)
+  hcl(h = hues, l = 65, c = 100)[1:n]
+}
+
+llin_lambdas <- fread(file.path(itn_paper_dir, "fig_5_llin_half_lives.csv"))
+llin_lambdas <- merge(llin_lambdas, iso3_names, all.x=T)
+llin_lambdas <- llin_lambdas[order(half_life, decreasing = T)]
+descending_order <- llin_lambdas$iso3
+llin_lambdas[, high_svy:=ifelse(svy_count>=3, 1, 0)]
+llin_lambdas[, iso3:= factor(iso3, levels = descending_order)]
+llin_lambdas[, place_top:= (as.integer(rownames(llin_lambdas))%%2) ==0]
+
+color_red <- gg_color_hue(2)[1]
+half_life_iso_plot <- 
+  ggplot(llin_lambdas, aes(x=iso3, color=factor(high_svy))) +
+  geom_hline(yintercept=3, linetype="dotted") + 
+  geom_linerange(aes(ymin=lower, ymax=upper)) + 
+  geom_point(aes(y=half_life)) +
+  #geom_text(aes(label=iso3, y=half_life)) +
+  geom_text(data=llin_lambdas[iso3!="COG" & iso3!="SSD"], aes(label=country_name, y=upper), angle=45, hjust=0) + # , size=2.5) +
+  geom_text(data=llin_lambdas[iso3=="COG"], aes(label=country_name, y=lower), angle=-45, hjust=0) + #, size=2.5) +
+  geom_text(data=llin_lambdas[iso3=="SSD"], aes(label=country_name, y=lower), angle=15, hjust=1) + #, size=2.5) +
+  scale_color_manual(values=c(color_red, "dimgrey")) +
+  ylim(0.9, 4.1) +
+  # xlim("0", "41") +
+  theme_minimal() +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        legend.position = "none",
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank()) +
+  labs(x="",
+       y="LLIN Median Retention Time (years)")
+ggsave(half_life_iso_plot, file=file.path(stockflow_output_dir, "output/llin_half_lives.eps"), width=9, height=5)
+
+
+
 ## Effectiveness plot-- sketch
 effectiveness_iso <- "AFR"
 effectiveness_retain_lambda <- 1.9
@@ -209,8 +263,12 @@ interventions <- fread(file.path(effectiveness_output_dir, "input/interventions.
 interventions[, int:=NULL]
 interventions[, cov:=cov/100]
 
-names(interventions) <- c("int_id", "ITN_Coverage", "ITN_Retention_Halflife", "ITN_Blocking_Halflife", "ITN_Killing_Halflife",
-                          "ITN_Initial_Block", "ITN_Initial_Kill", "ITN_Start", "ITN_Seasonal_Use", "ITN_Use_Rate_Constant")
+setnames(interventions, c("cov", "discard_halflife", "block_halflife", "kill_halflife", "block_initial", "block_type",
+                          "kill_initial", "start_day", "seasonal_itn_use", "use_rate"),
+         c("ITN_Coverage", "ITN_Retention_Halflife",  "ITN_Blocking_Halflife", "ITN_Killing_Halflife",
+           "ITN_Initial_Block", "ITN_Blocking_Type", "ITN_Initial_Kill", "ITN_Start", "ITN_Seasonal_Use", "ITN_Use_Rate_Constant"),
+         skip_absent=T
+) 
 
 effectiveness_raw <- merge(effectiveness_raw, interventions)
 
@@ -249,12 +307,23 @@ if (emod_subdir=="20221010_wmr_effectiveness_v2"){
                                                      "Add waning of blocking\n (1.9-year half-life)",
                                                      "No Interventions"
   ))]
+}else if (emod_subdir=="20221021_wmr_effectiveness_v5"){
+  effect_summary[, int_name:=factor(int_id, 
+                                    labels=c("Maximum impact under\nidealized conditions",
+                                             "Add waning insecticide\n (3-year half-life)",
+                                             "Insecticide resistance:\nreduce initial killing by 30%",
+                                             "Add waning of blocking\n (WHO parameterization)",
+                                             "Imperfect allocation:\nReduce coverage to 87%",
+                                             "Reduce use rate to 83%",
+                                             "Add waning retention:\n(50% of nets gone in 1.9 yrs)",
+                                             "No Interventions"
+                                             
+                                    ))]
+
 }
 
 
 effect_summary <- effect_summary[day>364]
-
-
 
 effect_summary_relative <- melt(effect_summary, id.vars = c("int_id", "int_name", "Site_Name", "x_Temporary_Larval_Habitat", "day", "pop"))
 control <- effect_summary_relative[int_name=="No Interventions", list(Site_Name, x_Temporary_Larval_Habitat, day, variable, control_value=value, control_pop=pop)]
@@ -286,32 +355,103 @@ eirs <- eirs[, list(eir=mean(eir)), by=list(Site_Name, x_Temporary_Larval_Habita
 eirs[, eir:=round(eir, 0)]
 subset_effect_results <- merge(subset_effect_results, eirs, by=c("Site_Name", "x_Temporary_Larval_Habitat"))
 
-ggplot(effect_summary[Site_Name==6], aes(x=day, y=prev, color=int_name)) +
-  geom_line() +
-  geom_text(data= eirs, aes(label=eir), x=900, y=0.7, color="black", size=2) +
-  facet_wrap(~x_Temporary_Larval_Habitat) +
-  theme_minimal()
 
+subset_effect_results[, year:= (day-365)/365]
+raw_effect_plot <- ggplot(subset_effect_results[Site_Name==6], aes(x=year, y=value, color=int_name)) +
   geom_line() +
-  geom_text(data= eirs, aes(label=eir), x=900, y=0.7, color="black", size=2) +
-  facet_grid(Site_Name~x_Temporary_Larval_Habitat) +
-  theme_minimal()
+  #geom_text(data= eirs, aes(label=eir), x=900, y=0.7, color="black", size=2) +
+  # facet_grid(Site_Name~x_Temporary_Larval_Habitat) +
+  theme_minimal()+
+  theme(legend.title = element_blank()) + 
+  labs(x="Year",
+       y="Prevalence",
+       title="Effect of sequentially reducing ITN effectiveness over time")
 
-pdf(file=file.path(effectiveness_output_dir, "results/plots", "raw_effect.pdf"), width=15, height = 6)
+pdf(file=file.path(effectiveness_output_dir, "results/plots", "raw_effect.pdf"), width=8, height = 6)
 print(raw_effect_plot)
 graphics.off()
 
+# reduction calculations for area plots
+subset_effect_results <- subset_effect_results[order(Site_Name, x_Temporary_Larval_Habitat, day, int_id)]
 
+subset_effect_results[day==600 & Site_Name==6]
+subset_effect_results[, diff := reduction - shift(reduction, fill = 0, type="lead"), by = list(Site_Name, x_Temporary_Larval_Habitat, day)]
+subset_effect_results[diff<0, diff:=0]
 
+for_who_plots <- subset_effect_results[Site_Name==6]
+write.csv(for_who_plots, file=file.path(effectiveness_output_dir, "wmr_effectiveness_sims.csv"), row.names=F)
 
-
-raw_reduction_plot <- ggplot(subset_effect_results, aes(x=day, y=reduction, color=int_name)) +
+raw_reduction_plot <- 
+  ggplot(for_who_plots, aes(x=year, y=reduction, color=int_name)) +
   geom_line() +
-  geom_text(data= eirs, aes(label=eir), x=900, y=0.7, color="black", size=2) +
-  facet_grid(Site_Name~x_Temporary_Larval_Habitat) +
-  theme_minimal()
+  theme_minimal()+
+  theme(legend.title = element_blank()) + 
+  labs(x="Year",
+       y="Absolute Reduction in Prevalence",
+       title="Effect of sequentially reducing ITN effectiveness over time")
 
-# x_Temporary_Larval_Habitat>0.05 &
+pdf(file=file.path(effectiveness_output_dir, "results/plots", "raw_reduction.pdf"), width=8, height = 6)
+print(raw_reduction_plot)
+graphics.off()
+
+ggsave(raw_reduction_plot, file=file.path(effectiveness_output_dir, "raw_reduction.eps"), width=8, height=6)
+
+area_plot_reduction <- 
+  ggplot(for_who_plots, aes(x=year, y=diff,  fill=int_name)) +
+  geom_area(color="black") +
+  scale_fill_brewer(palette="YlGn", direction=-1) +
+  theme_minimal()+
+  theme(legend.title = element_blank()) + 
+  theme(legend.position = "none") +
+  labs(x="Year",
+       y="Absolute Reduction in Prevalence",
+       title="Effect of sequentially reducing ITN effectiveness over time")+ 
+  annotate("text", label=paste("Maximum impact under idealized conditions"),
+           x=1.5, y=0.7) + 
+  annotate("text", label=paste0("Add waning insecticide:\n",
+                                "3-year half-life"),
+           x=1.9, y=0.58, hjust=0 )  +
+  annotate("segment", x = 1.64, xend = 1.9, y = 0.55, yend = 0.58,
+           color = "black") +
+  annotate("text", label=paste0("Insecticide resistance:\n",
+                                "reduce initial killing by 30%"),
+           x=0.75, y=0.5, hjust=0) +
+  annotate("segment", x = 1, xend = 1.05, y = 0.47, yend = 0.42,
+           color = "black") +
+  annotate("text", label=paste("Add waning blocking:\n",
+                               "WHO paramererization"),
+           x=1.6, y=0.23, hjust=0) +
+  annotate("segment", x = 1.57, xend = 1.2, y = 0.24, yend = 0.32,
+           color = "black") +
+  annotate("text", label=paste("Imperfect allocation:\n",
+                               "Reduce coverage to 87%"),
+           x=0.4, y=0.365, hjust=0) + 
+    annotate("segment", x = 0.8, xend = 0.9, y = 0.34, yend = 0.29,
+             color = "black") +
+  annotate("text", label=paste("Reduce use rate to 83%"),
+           x=0.65, y=0.24, hjust=0) + 
+  annotate("segment", x = 1, xend = 1.1, y = 0.23, yend = 0.19,
+           color = "black") +
+  annotate("text", label=paste("Add waning retention:\n", 
+                               "50% of nets gone after 1.9 years"),
+           x=0.25, y=0.1, hjust=0) +
+  annotate("segment", x = 0.85, xend = 1.27, y = 0.11, yend = 0.17,
+           color = "black") +
+  annotate("text", label=paste("Impact of a 'realistic' net today"),
+           x=1, y=0.03, hjust=0) +
+  annotate("segment", x = 1.25, xend = 1.35, y = 0.04, yend = 0.083,
+           color = "black")
+
+ggsave(area_plot_reduction, file=file.path(effectiveness_output_dir, "area_reduction.eps"), width=8, height=6)
+
+
+
+pdf(file=file.path(effectiveness_output_dir, "results/plots", "area_reduction.pdf"), width=8, height = 6)
+  print(area_plot_reduction)
+graphics.off()
+
+####---- effectiveness area plots-- no longer in use 
+
 prop_reduction_plot <- ggplot(subset_effect_results[ !(int_name %like% "Low") & int_name!="No Interventions"], 
                               aes(x=day, y=prop_of_max, color=int_name)) +
   geom_line() +
@@ -322,8 +462,6 @@ prop_reduction_plot <- ggplot(subset_effect_results[ !(int_name %like% "Low") & 
 pdf(file=file.path(effectiveness_output_dir, "results/plots", "prop_effect.pdf"), width=15, height = 6)
 print(prop_reduction_plot)
 graphics.off()
-
-
 
 access_val <- interventions[int_id==2]$ITN_Coverage
 ret_lambda <- 1.9
