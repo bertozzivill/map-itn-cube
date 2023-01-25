@@ -16,7 +16,7 @@ rm(list=ls())
 
 cube_output_dir <- "~/Google Drive/My Drive/itn_cube/results/20220908_from_mauricio/04_predictions/aggregated/"
 stockflow_output_dir <- "~/Google Drive/My Drive/stock_and_flow/results/20220908_from_mauricio/abv_for_wmr/"
-emod_subdir <- "20221021_wmr_effectiveness_v5"
+emod_subdir <- "20221115_wmr_v5_bugfix"
 effectiveness_output_dir <- file.path("~/Dropbox (IDM)/Malaria Team Folder/projects/map_intervention_impact/intervention_impact/",
                                       emod_subdir)
 itn_paper_dir <- "~/repos/map-itn-cube/paper_figures/figure_data"
@@ -307,7 +307,7 @@ if (emod_subdir=="20221010_wmr_effectiveness_v2"){
                                                      "Add waning of blocking\n (1.9-year half-life)",
                                                      "No Interventions"
   ))]
-}else if (emod_subdir=="20221021_wmr_effectiveness_v5"){
+}else if (emod_subdir=="20221021_wmr_effectiveness_v5" | emod_subdir=="20221115_wmr_v5_bugfix"){
   effect_summary[, int_name:=factor(int_id, 
                                     labels=c("Maximum impact under\nidealized conditions",
                                              "Add waning insecticide\n (3-year half-life)",
@@ -322,8 +322,8 @@ if (emod_subdir=="20221010_wmr_effectiveness_v2"){
 
 }
 
-
-effect_summary <- effect_summary[day>364]
+cutoff_day <- ifelse(emod_subdir=="20221115_wmr_v5_bugfix", 3640, 364)
+effect_summary <- effect_summary[day>cutoff_day]
 
 effect_summary_relative <- melt(effect_summary, id.vars = c("int_id", "int_name", "Site_Name", "x_Temporary_Larval_Habitat", "day", "pop"))
 control <- effect_summary_relative[int_name=="No Interventions", list(Site_Name, x_Temporary_Larval_Habitat, day, variable, control_value=value, control_pop=pop)]
@@ -356,20 +356,10 @@ eirs[, eir:=round(eir, 0)]
 subset_effect_results <- merge(subset_effect_results, eirs, by=c("Site_Name", "x_Temporary_Larval_Habitat"))
 
 
-subset_effect_results[, year:= (day-365)/365]
-raw_effect_plot <- ggplot(subset_effect_results[Site_Name==6], aes(x=year, y=value, color=int_name)) +
-  geom_line() +
-  #geom_text(data= eirs, aes(label=eir), x=900, y=0.7, color="black", size=2) +
-  # facet_grid(Site_Name~x_Temporary_Larval_Habitat) +
-  theme_minimal()+
-  theme(legend.title = element_blank()) + 
-  labs(x="Year",
-       y="Prevalence",
-       title="Effect of sequentially reducing ITN effectiveness over time")
+subset_effect_results[, year:= (day-cutoff_day)/365]
 
-pdf(file=file.path(effectiveness_output_dir, "results/plots", "raw_effect.pdf"), width=8, height = 6)
-print(raw_effect_plot)
-graphics.off()
+
+
 
 # reduction calculations for area plots
 subset_effect_results <- subset_effect_results[order(Site_Name, x_Temporary_Larval_Habitat, day, int_id)]
@@ -378,8 +368,26 @@ subset_effect_results[day==600 & Site_Name==6]
 subset_effect_results[, diff := reduction - shift(reduction, fill = 0, type="lead"), by = list(Site_Name, x_Temporary_Larval_Habitat, day)]
 subset_effect_results[diff<0, diff:=0]
 
-for_who_plots <- subset_effect_results[Site_Name==6]
+for_who_plots <- subset_effect_results[Site_Name==6 & day!=max(day)]
 write.csv(for_who_plots, file=file.path(effectiveness_output_dir, "wmr_effectiveness_sims.csv"), row.names=F)
+
+for_who_plots[,value:=value*100]
+raw_effect_plot <- ggplot(for_who_plots, aes(x=year, y=value, color=int_name)) +
+  geom_line() +
+  #geom_text(data= eirs, aes(label=eir), x=900, y=0.7, color="black", size=2) +
+  # facet_grid(Site_Name~x_Temporary_Larval_Habitat) +
+  theme_minimal()+
+  theme(legend.title = element_blank()) + 
+  labs(x="Year",
+       y="Prevalence (%)",
+       title="Effect of sequentially reducing ITN effectiveness over time")
+
+pdf(file=file.path(effectiveness_output_dir, "results/plots", "raw_effect.pdf"), width=8, height = 6)
+print(raw_effect_plot)
+graphics.off()
+
+ggsave(raw_effect_plot, file=file.path(effectiveness_output_dir, "results/plots", "raw_effect.eps"), width=8, height=6)
+
 
 raw_reduction_plot <- 
   ggplot(for_who_plots, aes(x=year, y=reduction, color=int_name)) +
