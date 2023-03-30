@@ -78,6 +78,21 @@ results_for_wmr <- cube_outputs[, list(iso3, year, time,
 ## merge with scenario and compare
 results_individual <- merge(results_for_wmr, optimal_stockflow_outputs, by=c("iso3", "year", "time"), all.x=T)
 
+test_for_gr <- copy(results_individual)
+setnames(test_for_gr, "optimized_retention", "optimized_access")
+test_for_gr[, c("use_rate", "use", "year"):=NULL]
+test_for_gr <- melt(test_for_gr, id.vars = c("iso3", "time"))
+test_for_gr[, type:= ifelse(variable %like% "optimized", "optimized", "true")]
+test_for_gr[, variable:=gsub("optimized_", "", variable)]
+test_for_gr_wide <- dcast.data.table(test_for_gr, iso3 + time + type ~ variable)
+
+ggplot(test_for_gr_wide[iso3=="NGA"], aes(x=access, y=percapita_nets, color=type)) +
+  geom_point() 
+
+ggplot(test_for_gr[iso3=="NGA"], aes(x=time, y=value, color=type)) +
+  geom_line() + 
+  facet_grid(~variable)
+
 results_individual[, optimized_use_rate := pmax(access, use)]
 
 long_ret_iso3s <- c("CMR", "GNQ", "GAB", "ERI", "NER")
@@ -110,7 +125,6 @@ for_plot_cumulative <- melt(results_cumulative_annual[, list(iso3, time, use,
                                                              optimized_use_rate, optimized_retention, optimized_allocation)],
                             id.vars = c("iso3", "time"))
 
-
 timeseries_plot_individual <- ggplot(for_plot_individual, aes(x=time, y=value, color=variable)) +
   geom_hline(yintercept=0.8) +
   geom_line() +
@@ -130,13 +144,20 @@ timeseries_plot_cumulative <- ggplot(for_plot_cumulative, aes(x=time, y=value, c
        title="Cumulative Effects of Policy Changes on Net Use")
 
 setnames(for_plot_cumulative, c("variable", "value", "time"), c("scenario", "itn_use", "year"))
-
-
-
 write.csv(for_plot_cumulative, file=file.path(stockflow_output_dir, "output/itn_use_scenarios_timeseries_cumulative.csv"), row.names = F)
+
+setnames(for_plot_individual, c("variable", "value", "time"), c("scenario", "itn_use", "year"))
+write.csv(for_plot_individual, file=file.path(stockflow_output_dir, "output/itn_use_scenarios_timeseries_individual.csv"), row.names = F)
+
 
 for_plot_cumulative <- fread(file.path(stockflow_output_dir, "output/itn_use_scenarios_timeseries_cumulative.csv"))
 for_plot_cumulative[, scenario:=factor(scenario, levels=c("use", "optimized_use_rate", "optimized_retention", "optimized_allocation"))]
+
+continent_compare <- merge(for_plot_cumulative[iso3!="AFR"], pop[iso3!="AFR", list(iso3, year, pop=total_pop)])
+
+continent_compare <- continent_compare[, list(type="Corrected", itn_use=weighted.mean(itn_use, pop)), by=list(year, scenario)]
+
+
 timeseries_plot_cumulative <- ggplot(for_plot_cumulative, aes(x=year, y=itn_use, color=scenario)) +
   geom_hline(yintercept=0.8) +
   geom_line() +
@@ -148,11 +169,28 @@ timeseries_plot_cumulative <- ggplot(for_plot_cumulative, aes(x=year, y=itn_use,
 
 timeseries_plot_afr_cumulative <- ggplot(for_plot_cumulative[iso3=="AFR"], aes(x=year, y=itn_use, color=scenario)) +
   geom_hline(yintercept=0.8) +
-  geom_line() +
+  geom_line(size=2, alpha=0.5) +
+  geom_line(data=continent_compare) +
   theme_minimal() +
   labs(x="Year",
        y="Net Use",
        title="Cumulative Effects of Policy Changes on Net Use, Sub-Saharan Africa")
+
+
+compare_agg_error <- for_plot_cumulative[iso3=="AFR", list(year, type="WMR", scenario, itn_use)]
+compare_agg_error <- rbind(compare_agg_error, continent_compare)
+compare_agg_error[, type:=factor(type, levels=c("WMR", "Corrected"))]
+
+timeseries_plot_afr_compare <- ggplot(compare_agg_error, aes(x=year, y=itn_use, color=scenario, linetype=type)) +
+  geom_hline(yintercept=0.8) +
+  geom_line(size=1) +
+  theme_minimal() +
+  labs(x="Year",
+       y="Net Use",
+       title="Cumulative Effects of Policy Changes on Net Use, Sub-Saharan Africa")
+
+gridExtra::grid.arrange(timeseries_plot_afr_cumulative, timeseries_plot_afr_compare)
+
 
 ggsave(timeseries_plot_afr_cumulative, file=file.path(stockflow_output_dir, "output/cumulative_plot_afr.eps"), width=7, height=5)
 
